@@ -296,7 +296,7 @@ export default function App() {
 
   const btn = (bg = "#3A86FF", clr = "#fff"): React.CSSProperties => ({ background: bg, color: clr, border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", fontWeight: 600, fontSize: 14, transition: "all .2s", boxShadow: `0 2px 8px ${bg}33` });
   const tabBtn = (t: typeof tab, label: string, icon: string) => (
-    <button key={t} onClick={() => setTab(t)} style={{ padding: "12px 20px", cursor: "pointer", fontWeight: tab === t ? 700 : 500, fontSize: 14, background: tab === t ? "#fff" : "transparent", color: tab === t ? "#1a1a2e" : "#94a3b8", borderRadius: "12px 12px 0 0", border: "none", borderBottom: tab === t ? "3px solid #3A86FF" : "3px solid transparent", marginBottom: -1, display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 16 }}>{icon}</span>{label}</button>
+    <button key={t} onClick={() => setTab(t)} className="font-display" style={{ padding: "14px 22px", cursor: "pointer", fontWeight: 700, fontSize: 13, letterSpacing: 1.5, textTransform: "uppercase", background: "transparent", color: tab === t ? "#00d4ff" : "#64748b", border: "none", borderBottom: tab === t ? "3px solid #00d4ff" : "3px solid transparent", marginBottom: -1, display: "flex", alignItems: "center", gap: 6, transition: "color .15s" }}><span style={{ fontSize: 14 }}>{icon}</span>{label}</button>
   );
   const tLabel = (t: TeamView | null) => t?.p1 && t?.p2 ? `${t.p1.name} & ${t.p2.name}` : "TBD";
   const teamFromId = (id: string | null): TeamView | null => id ? teamById[id] ?? null : null;
@@ -385,48 +385,72 @@ export default function App() {
   if (authLoading) return <div style={{ padding: 40, textAlign: "center", fontFamily: "system-ui" }}>Loading…</div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f0f2f5", color: "#1a1a2e", fontFamily: "'Segoe UI',system-ui,-apple-system,sans-serif" }}>
-      <header style={{ background: "linear-gradient(135deg,#0f172a 0%,#1e293b 40%,#1a1a2e 100%)", color: "#fff", padding: 0, position: "relative", overflow: "hidden" }}>
-        {/* Hero banner image */}
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=1600&q=80)", backgroundSize: "cover", backgroundPosition: "center 40%", opacity: 0.25, filter: "blur(1px)" }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(15,23,42,0.7) 0%, rgba(26,26,46,0.95) 100%)" }} />
-        <div style={{ position: "absolute", top: 10, left: "5%" }}><ShuttleSVG sz={60} opacity={0.06} /></div>
-        <div style={{ position: "absolute", top: 40, right: "10%", transform: "rotate(45deg)" }}><ShuttleSVG sz={80} opacity={0.05} /></div>
-        <div style={{ position: "absolute", bottom: 10, left: "20%", transform: "rotate(-30deg)" }}><ShuttleSVG sz={50} opacity={0.07} /></div>
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 4, background: "linear-gradient(90deg,#3A86FF,#2A9D8F,#E63946,#F4A261,#3A86FF)" }} />
-
-        <div style={{ position: "absolute", top: 14, right: 16, zIndex: 2, display: "flex", gap: 8, alignItems: "center" }}>
-          {isAdmin ? (
-            <>
-              <span style={{ fontSize: 12, color: "#86efac", background: "rgba(34,197,94,0.15)", padding: "5px 12px", borderRadius: 20, border: "1px solid rgba(34,197,94,0.3)" }}>✓ {email}</span>
-              <button onClick={signOut} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 12 }}>Sign out</button>
-            </>
-          ) : (
-            <button onClick={() => setShowLogin(true)} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(58,134,255,0.4)", background: "rgba(58,134,255,0.2)", color: "#93c5fd", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>🔐 Admin Sign In</button>
-          )}
+    <div style={{ minHeight: "100vh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter','Segoe UI',system-ui,-apple-system,sans-serif" }}>
+      <header style={{ background: "linear-gradient(135deg,#050d1a 0%,#0a1628 50%,#0d1f3a 100%)", color: "#fff", padding: 0, position: "relative", overflow: "hidden", borderBottom: "1px solid #1a3050" }}>
+        {/* Athlete photo on the right with diagonal cutout */}
+        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "55%", clipPath: "polygon(20% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden", zIndex: 0 }}>
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B6.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #050d1a 0%, rgba(5,13,26,0.85) 22%, rgba(5,13,26,0.4) 50%, rgba(5,13,26,0.05) 100%)" }} />
         </div>
 
-        <div style={{ position: "relative", zIndex: 1, padding: "36px 20px 28px", textAlign: "center" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "rgba(58,134,255,0.15)", borderRadius: 50, padding: "6px 20px", marginBottom: 16, border: "1px solid rgba(58,134,255,0.2)" }}>
-            <span style={{ fontSize: 22 }}>🏸</span>
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#93c5fd" }}>Doubles Tournament</span>
-            <span style={{ fontSize: 22 }}>🏸</span>
+        {/* Cyan glow accent */}
+        <div style={{ position: "absolute", top: "-30%", left: "-10%", width: 500, height: 500, background: "radial-gradient(circle, rgba(0,184,255,0.18) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "linear-gradient(90deg, transparent, #00b8ff 20%, #00d4ff 50%, #00b8ff 80%, transparent)", zIndex: 1 }} />
+        <div style={{ position: "absolute", bottom: 3, left: 0, right: 0, height: 1, background: "rgba(0,184,255,0.3)", zIndex: 1 }} />
+
+        {/* Top bar: brand + admin chip */}
+        <div style={{ position: "relative", zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 28px", borderBottom: "1px solid rgba(0,184,255,0.12)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,#00b8ff,#0066ff)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, boxShadow: "0 4px 16px rgba(0,184,255,0.4)" }}>🏸</div>
+            <div>
+              <div className="font-display" style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1, color: "#fff", lineHeight: 1 }}>BADMINTON<span style={{ color: "#00b8ff" }}>LIVE</span></div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: "#64748b", textTransform: "uppercase", marginTop: 2 }}>Tournament Center</div>
+            </div>
           </div>
-          <h1 style={{ margin: "0 0 6px", fontSize: 34, fontWeight: 900, letterSpacing: -1, background: "linear-gradient(90deg,#fff,#93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{current?.name ?? "Badminton Championship"}</h1>
-          <p style={{ margin: "0 0 16px", fontSize: 17, color: "#94a3b8", fontWeight: 500 }}>{current?.event_date ? `📅 ${current.event_date}` : "—"}</p>
-          <TournamentPicker tournaments={tournaments} current={current} onSelect={setCurrentId} isAdmin={isAdmin} onChange={reloadTournaments} />
-          <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 20, flexWrap: "wrap" }}>
-            {([[active.length, "Active Players", "#3A86FF", "rgba(58,134,255,0.12)"], [teamsView.length, "Teams", "#2A9D8F", "rgba(42,157,143,0.12)"], [unpaired.length, "Unpaired", "#E63946", "rgba(230,57,70,0.12)"]] as const).map(([v, l, c, bg]) => (
-              <div key={l} style={{ background: bg, borderRadius: 14, padding: "12px 24px", textAlign: "center", border: `1px solid ${c}22`, minWidth: 110 }}>
-                <div style={{ fontSize: 30, fontWeight: 900, color: c }}>{v}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginTop: 2 }}>{l}</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {isAdmin ? (
+              <>
+                <span style={{ fontSize: 11, color: "#00d4ff", background: "rgba(0,184,255,0.1)", padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(0,184,255,0.3)", fontWeight: 600, letterSpacing: 0.5 }}>● {email}</span>
+                <button onClick={signOut} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>SIGN OUT</button>
+              </>
+            ) : (
+              <button onClick={() => setShowLogin(true)} style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: "linear-gradient(135deg,#00b8ff,#0066ff)", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", boxShadow: "0 2px 12px rgba(0,184,255,0.4)" }}>Admin Sign In</button>
+            )}
+          </div>
+        </div>
+
+        {/* Main hero content */}
+        <div className="hero-pad" style={{ position: "relative", zIndex: 2, padding: "44px 28px 36px", maxWidth: 1280, margin: "0 auto" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 12px", borderRadius: 4, background: "rgba(0,184,255,0.12)", border: "1px solid rgba(0,184,255,0.3)", marginBottom: 18 }}>
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#00d4ff", boxShadow: "0 0 8px #00d4ff" }} />
+            <span className="font-display" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, textTransform: "uppercase", color: "#00d4ff" }}>Doubles Tournament</span>
+          </div>
+
+          <h1 className="font-display hero-title" style={{ margin: "0 0 10px", fontSize: 64, fontWeight: 700, letterSpacing: -1, color: "#fff", lineHeight: 0.95, textTransform: "uppercase", maxWidth: "65%" }}>{current?.name ?? "Badminton Championship"}</h1>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+            {current?.event_date && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <span style={{ color: "#00d4ff", fontSize: 13 }}>▸</span>
+                <span className="font-display" style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", letterSpacing: 1 }}>{new Date(current.event_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }).toUpperCase()}</span>
+              </div>
+            )}
+            <TournamentPicker tournaments={tournaments} current={current} onSelect={setCurrentId} isAdmin={isAdmin} onChange={reloadTournaments} />
+          </div>
+
+          {/* Quick stats — broadcast style */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", maxWidth: "65%" }}>
+            {([[active.length, "Active Players", "#00d4ff"], [teamsView.length, "Teams", "#22c55e"], [unpaired.length, "Unpaired", "#f59e0b"]] as const).map(([v, l, c]) => (
+              <div key={l} style={{ flex: "1 1 140px", background: "rgba(15,30,55,0.65)", backdropFilter: "blur(8px)", borderRadius: 6, padding: "12px 16px", border: "1px solid rgba(255,255,255,0.08)", borderLeft: `3px solid ${c}`, minWidth: 110 }}>
+                <div className="font-display" style={{ fontSize: 32, fontWeight: 700, color: c, lineHeight: 1 }}>{String(v).padStart(2, "0")}</div>
+                <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1.5, marginTop: 4, fontWeight: 600 }}>{l}</div>
               </div>
             ))}
           </div>
         </div>
       </header>
 
-      <nav style={{ display: "flex", justifyContent: "center", gap: 4, paddingTop: 14, background: "#f0f2f5", borderBottom: "1px solid #e2e8f0", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100 }}>
+      <nav style={{ display: "flex", justifyContent: "center", gap: 4, paddingTop: 6, background: "#0a1628", borderBottom: "1px solid #1a3050", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}>
         {tabBtn("live", "Live", "🔴")}
         {tabBtn("register", "Players", "📋")}
         {tabBtn("profiles", "Profiles", "👤")}
@@ -436,11 +460,15 @@ export default function App() {
         {tabBtn("scoreboard", "Scoreboard", "🏅")}
       </nav>
 
-      <main style={{ maxWidth: 960, margin: "24px auto", padding: "0 16px" }}>
+      <main style={{ maxWidth: 1280, margin: "24px auto", padding: "0 20px" }}>
         {!current && (
-          <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>
-            <ShuttleSVG sz={80} color="#94a3b8" opacity={0.3} style={{ margin: "0 auto 12px", display: "block" }} />
-            <p style={{ fontSize: 16 }}>{isAdmin ? "Click + New above to create your first tournament." : "No tournaments yet."}</p>
+          <div style={{ position: "relative", textAlign: "center", padding: 80, color: "#64748b", background: "#0a1628", borderRadius: 14, border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
+            <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.7) 0%, rgba(10,22,40,0.95) 100%)" }} />
+            <div style={{ position: "relative", zIndex: 1 }}>
+              <ShuttleSVG sz={80} color="#00b8ff" opacity={0.5} style={{ margin: "0 auto 14px", display: "block" }} />
+              <p className="font-display" style={{ fontSize: 16, fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", color: "#fff", margin: 0 }}>{isAdmin ? "Click + New above to create your first tournament." : "No tournaments yet."}</p>
+            </div>
           </div>
         )}
 
@@ -736,17 +764,25 @@ export default function App() {
 
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes pulse-strong {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.85); }
+        }
+        @keyframes glow {
+          0%, 100% { box-shadow: 0 0 12px rgba(0,184,255,0.4); }
+          50% { box-shadow: 0 0 24px rgba(0,184,255,0.8); }
+        }
         input[type=number]::-webkit-outer-spin-button,
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
-        @media (max-width: 600px) {
-          h1 { font-size: 26px !important; }
-          .hero-pad { padding: 24px 14px 20px !important; }
+        @media (max-width: 700px) {
+          .hero-title { font-size: 36px !important; max-width: 100% !important; }
+          .hero-pad { padding: 28px 18px 24px !important; }
         }
       `}</style>
 
-      <footer style={{ textAlign: "center", padding: "36px 16px", color: "#94a3b8", fontSize: 12, background: "linear-gradient(180deg,#f0f2f5,#e2e8f0)" }}>
-        🏸 Badminton Tournament — May the best team win!
+      <footer style={{ textAlign: "center", padding: "32px 16px", color: "#475569", fontSize: 11, background: "#050d1a", borderTop: "1px solid #1a3050", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 600 }}>
+        <span style={{ color: "#00b8ff" }}>●</span> BADMINTON LIVE · MAY THE BEST TEAM WIN
       </footer>
     </div>
   );
@@ -789,50 +825,106 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
 
   if (teamsView.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: 60, color: "#94a3b8" }}>
-        <div style={{ fontSize: 64, marginBottom: 12 }}>🏸</div>
-        <p style={{ fontSize: 16 }}>The tournament hasn't started yet. Check back soon!</p>
+      <div style={{ position: "relative", background: "#0a1628", borderRadius: 14, padding: 80, color: "#64748b", textAlign: "center", border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.6) 0%, rgba(10,22,40,0.95) 100%)" }} />
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div style={{ fontSize: 64, marginBottom: 12, opacity: 0.6 }}>🏸</div>
+          <p className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>Tournament hasn't started</p>
+          <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 6 }}>Check back soon for live action.</p>
+        </div>
       </div>
     );
   }
 
-  const StatCard = ({ label, value, sub, color, icon }: { label: string; value: string; sub?: string; color: string; icon: string }) => (
-    <div style={{ flex: "1 1 220px", background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e8ecf1", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: color }} />
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{icon} {label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6, color: "#1a1a2e" }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{sub}</div>}
+  // Section header — angular cyan slash bar like SkyBet
+  const SectionHeader = ({ accent, children, badge }: { accent: string; children: React.ReactNode; badge?: React.ReactNode }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ width: 4, height: 22, background: accent, borderRadius: 1 }} />
+      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{children}</h3>
+      {badge}
     </div>
   );
 
+  const StatTile = ({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) => (
+    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 8, padding: "16px 18px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
+      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>{label}</div>
+      <div className="font-display" style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.1, letterSpacing: 0.5 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, fontWeight: 500 }}>{sub}</div>}
+    </div>
+  );
+
+  const stageBadge = (m: Match) => m.stage === "group" ? `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : m.stage === "knockout" ? `ROUND ${(m.round_idx ?? 0) + 1}` : "";
+
   return (
-    <div>
-      {/* Currently live matches */}
-      {live.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-            <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: "#dc2626", animation: "pulse 1.5s ease-in-out infinite" }} />
-            <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#dc2626" }}>LIVE NOW</h2>
-            <span style={{ background: "#fef2f2", color: "#dc2626", padding: "3px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700 }}>{live.length} match{live.length > 1 ? "es" : ""}</span>
+    <div style={{ background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
+
+      {/* Featured tournament spotlight panel — full-width hero card with athlete photo */}
+      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
+        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #0a1628 0%, rgba(10,22,40,0.7) 30%, rgba(10,22,40,0.1) 100%)" }} />
+        </div>
+        <div style={{ position: "absolute", top: -40, left: -40, width: 200, height: 200, background: "radial-gradient(circle, rgba(0,184,255,0.25) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative", zIndex: 1, padding: "26px 28px", maxWidth: "55%" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 4, background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.35)", marginBottom: 12 }}>
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#00d4ff", boxShadow: "0 0 6px #00d4ff" }} />
+            <span className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#00d4ff" }}>{phase === "knockout" ? "KNOCKOUT STAGE" : phase === "group" ? "GROUP STAGE" : "TOURNAMENT"}</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 14 }}>
+          <h2 className="font-display" style={{ margin: "0 0 8px", fontSize: 30, fontWeight: 700, letterSpacing: 0.5, color: "#fff", textTransform: "uppercase", lineHeight: 1.05 }}>
+            {live.length > 0 ? <><span style={{ color: "#ef4444" }}>● LIVE</span> NOW</> : phase === "none" ? "Get Ready" : "Tournament Action"}
+          </h2>
+          <p style={{ margin: "0 0 14px", fontSize: 13, color: "#94a3b8", fontWeight: 500, maxWidth: 420 }}>
+            {live.length > 0
+              ? `${live.length} match${live.length > 1 ? "es" : ""} in progress · scores update in real time`
+              : phase === "none"
+                ? "Teams forming · matches will start soon"
+                : `${matchesPlayed} of ${totalMatches} matches completed${topTeam && topTeam.pts > 0 ? ` · ${topTeam.team.p1.name} & ${topTeam.team.p2.name} leading` : ""}`}
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Teams</span>
+              <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: "#00d4ff" }}>{teamsView.length}</span>
+            </div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Played</span>
+              <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: "#22c55e" }}>{matchesPlayed}/{totalMatches}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* LIVE NOW */}
+      {live.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite", boxShadow: "0 0 6px #ef4444" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
             {live.map(m => {
               const ta = m.team_a_id ? teamById[m.team_a_id] : null;
               const tb = m.team_b_id ? teamById[m.team_b_id] : null;
               const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
               const aLeading = sa > sb, bLeading = sb > sa;
               return (
-                <div key={m.id} style={{ background: "linear-gradient(135deg,#fff,#fef2f2)", borderRadius: 14, padding: 18, border: "2px solid #ef4444", boxShadow: "0 4px 20px rgba(239,68,68,0.2)" }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>{m.stage === "group" ? `Group ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : "Knockout"}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={36} color={ta.p1.color} />}
-                    <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#dc2626" : "#1a1a2e" }}>{tName(m.team_a_id)}</span>
-                    <div style={{ minWidth: 56, padding: "8px 14px", background: aLeading ? "#dc2626" : "#fff", color: aLeading ? "#fff" : "#dc2626", borderRadius: 10, fontSize: 28, fontWeight: 900, textAlign: "center", border: "2px solid #ef4444", boxShadow: aLeading ? "0 2px 8px rgba(239,68,68,0.4)" : "none", transition: "all .2s" }}>{sa}</div>
+                <div key={m.id} style={{ background: "linear-gradient(135deg,#0f1e36 0%,#11243f 100%)", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#ef4444,#f97316)" }} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050" }}>
+                    <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
+                      <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite" }} />LIVE
+                    </span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={36} color={tb.p1.color} />}
-                    <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#dc2626" : "#1a1a2e" }}>{tName(m.team_b_id)}</span>
-                    <div style={{ minWidth: 56, padding: "8px 14px", background: bLeading ? "#dc2626" : "#fff", color: bLeading ? "#fff" : "#dc2626", borderRadius: 10, fontSize: 28, fontWeight: 900, textAlign: "center", border: "2px solid #ef4444", boxShadow: bLeading ? "0 2px 8px rgba(239,68,68,0.4)" : "none", transition: "all .2s" }}>{sb}</div>
+                  <div style={{ padding: "16px 18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
+                      {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={38} color={ta.p1.color} />}
+                      <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#fff" : "#cbd5e1" }}>{tName(m.team_a_id)}</span>
+                      <div className="font-display" style={{ minWidth: 70, padding: "8px 16px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: 32, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sa}</div>
+                    </div>
+                    <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#1a3050,transparent)", margin: "2px 0" }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
+                      {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={38} color={tb.p1.color} />}
+                      <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#fff" : "#cbd5e1" }}>{tName(m.team_b_id)}</span>
+                      <div className="font-display" style={{ minWidth: 70, padding: "8px 16px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: 32, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sb}</div>
+                    </div>
                   </div>
                 </div>
               );
@@ -842,64 +934,110 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
       )}
 
       {/* Tournament stats */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 28 }}>
-        <StatCard label="Tournament" value={phase === "none" ? "Not started" : phase === "group" ? "Group Stage" : "Knockout"} color="#3A86FF" icon="🏸" />
-        <StatCard label="Matches Played" value={`${matchesPlayed} / ${totalMatches}`} color="#2A9D8F" icon="✅" sub={totalMatches > 0 ? `${Math.round(matchesPlayed / totalMatches * 100)}% complete` : undefined} />
-        {topTeam && topTeam.pts > 0 && <StatCard label="Top Team" value={`${topTeam.team.p1.name} & ${topTeam.team.p2.name}`} sub={`${topTeam.pts} points • ${topTeam.w} wins`} color="#f59e0b" icon="🏆" />}
-        {bestDiff && (bestDiff.pf - bestDiff.pa) !== 0 && <StatCard label="Best +/-" value={`${bestDiff.pf - bestDiff.pa > 0 ? "+" : ""}${bestDiff.pf - bestDiff.pa}`} sub={`${bestDiff.team.p1.name} & ${bestDiff.team.p2.name}`} color="#8b5cf6" icon="📈" />}
+      <div style={{ marginBottom: 32 }}>
+        <SectionHeader accent="#00b8ff">Tournament Stats</SectionHeader>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <StatTile label="Stage" value={phase === "none" ? "Not Started" : phase === "group" ? "Group Stage" : "Knockout"} color="#00b8ff" />
+          <StatTile
+            label="Matches Played"
+            value={
+              <div>
+                <span style={{ color: "#00d4ff" }}>{String(matchesPlayed).padStart(2, "0")}</span>
+                <span style={{ color: "#475569", margin: "0 6px" }}>/</span>
+                <span style={{ color: "#cbd5e1" }}>{String(totalMatches).padStart(2, "0")}</span>
+              </div>
+            }
+            color="#22c55e"
+            sub={totalMatches > 0 ? (
+              <span>
+                {Math.round(matchesPlayed / totalMatches * 100)}% complete
+              </span>
+            ) as any : undefined}
+          />
+          {topTeam && topTeam.pts > 0 && <StatTile label="Top Team" value={`${topTeam.team.p1.name} & ${topTeam.team.p2.name}`} sub={`${topTeam.pts} PTS · ${topTeam.w} W`} color="#f59e0b" />}
+          {bestDiff && (bestDiff.pf - bestDiff.pa) !== 0 && <StatTile label="Best Diff" value={<><span style={{ color: bestDiff.pf - bestDiff.pa > 0 ? "#22c55e" : "#ef4444" }}>{bestDiff.pf - bestDiff.pa > 0 ? "+" : ""}{bestDiff.pf - bestDiff.pa}</span></>} sub={`${bestDiff.team.p1.name} & ${bestDiff.team.p2.name}`} color="#a855f7" />}
+        </div>
+        {totalMatches > 0 && (
+          <div style={{ marginTop: 14, height: 4, background: "#0f1e36", borderRadius: 2, overflow: "hidden", border: "1px solid #1a3050" }}>
+            <div style={{ height: "100%", width: `${Math.round(matchesPlayed / totalMatches * 100)}%`, background: "linear-gradient(90deg,#00b8ff,#00d4ff)", boxShadow: "0 0 12px rgba(0,212,255,0.6)", transition: "width .4s" }} />
+          </div>
+        )}
       </div>
 
-      {/* Upcoming matches */}
-      {upcoming.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 8 }}>⏭️ Upcoming Matches</h3>
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8ecf1", overflow: "hidden" }}>
-            {upcoming.map((m, i) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "14px 18px", borderBottom: i < upcoming.length - 1 ? "1px solid #f1f5f9" : "none", gap: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", minWidth: 80 }}>{m.stage === "group" ? `Group ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : `Round ${(m.round_idx ?? 0) + 1}`}</div>
-                <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{tName(m.team_a_id)}</div>
-                <div style={{ fontSize: 11, color: "#cbd5e1", fontWeight: 700, letterSpacing: 2 }}>VS</div>
-                <div style={{ flex: 1, fontWeight: 600, fontSize: 14, textAlign: "right" }}>{tName(m.team_b_id)}</div>
-              </div>
-            ))}
+      {/* Upcoming + Recent — two-column layout on wide screens */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(360px,1fr))", gap: 20, marginBottom: 32 }}>
+        {upcoming.length > 0 && (
+          <div>
+            <SectionHeader accent="#00d4ff">Upcoming</SectionHeader>
+            <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
+              {upcoming.map((m, i) => (
+                <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", gap: 12, position: "relative", background: i === 0 ? "rgba(0,212,255,0.04)" : "transparent" }}>
+                  {i === 0 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: "#00d4ff" }} />}
+                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? "#00d4ff" : "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{i === 0 ? "▸ NEXT" : stageBadge(m)}</div>
+                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: "#cbd5e1" }}>{tName(m.team_a_id)}</div>
+                  <div className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 2 }}>VS</div>
+                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13, textAlign: "right", color: "#cbd5e1" }}>{tName(m.team_b_id)}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Recent results */}
-      {recent.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 8 }}>✅ Recent Results</h3>
-          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8ecf1", overflow: "hidden" }}>
-            {recent.map((m, i) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "14px 18px", borderBottom: i < recent.length - 1 ? "1px solid #f1f5f9" : "none", gap: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase", minWidth: 80 }}>{m.stage === "group" ? `Group ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : `Round ${(m.round_idx ?? 0) + 1}`}</div>
-                <div style={{ flex: 1, fontWeight: m.winner_id === m.team_a_id ? 700 : 500, color: m.winner_id === m.team_a_id ? "#16a34a" : "#475569", fontSize: 14 }}>{tName(m.team_a_id)}</div>
-                <div style={{ fontWeight: 800, fontSize: 16, padding: "4px 12px", background: "#f0fdf4", borderRadius: 8, color: "#16a34a" }}>{m.score_a} – {m.score_b}</div>
-                <div style={{ flex: 1, fontWeight: m.winner_id === m.team_b_id ? 700 : 500, color: m.winner_id === m.team_b_id ? "#16a34a" : "#475569", textAlign: "right", fontSize: 14 }}>{tName(m.team_b_id)}</div>
-              </div>
-            ))}
+        {recent.length > 0 && (
+          <div>
+            <SectionHeader accent="#22c55e">Recent Results</SectionHeader>
+            <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
+              {recent.map((m, i) => (
+                <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < recent.length - 1 ? "1px solid #1a3050" : "none", gap: 12 }}>
+                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{stageBadge(m)}</div>
+                  <div style={{ flex: 1, fontWeight: m.winner_id === m.team_a_id ? 700 : 500, color: m.winner_id === m.team_a_id ? "#22c55e" : "#94a3b8", fontSize: 13 }}>{tName(m.team_a_id)}</div>
+                  <div className="font-display" style={{ fontWeight: 700, fontSize: 14, padding: "4px 10px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, color: "#22c55e", letterSpacing: 1 }}>{m.score_a}–{m.score_b}</div>
+                  <div style={{ flex: 1, fontWeight: m.winner_id === m.team_b_id ? 700 : 500, color: m.winner_id === m.team_b_id ? "#22c55e" : "#94a3b8", textAlign: "right", fontSize: 13 }}>{tName(m.team_b_id)}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Group standings preview */}
+      {/* Group standings */}
       {phase !== "none" && groups.length > 0 && (
         <div>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 8 }}>📊 Standings</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 14 }}>
+          <SectionHeader accent="#a855f7">Standings</SectionHeader>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
             {groups.map((g, gi) => {
               const st = getStandings(g, gi);
+              const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];
+              const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
+              const accent = groupAccents[gi % groupAccents.length];
               return (
-                <div key={gi} style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8ecf1", padding: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#3A86FF", marginBottom: 10 }}>Group {String.fromCharCode(65 + gi)}</div>
-                  {st.map((s, si) => (
-                    <div key={s.team.id} style={{ display: "flex", alignItems: "center", padding: "8px 4px", borderTop: si === 0 ? "none" : "1px solid #f1f5f9" }}>
-                      <div style={{ width: 22, fontSize: 12, fontWeight: 800, color: si < 2 ? "#16a34a" : "#94a3b8" }}>{si + 1}</div>
-                      <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{s.team.p1.name} & {s.team.p2.name}</div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: "#3A86FF", minWidth: 28, textAlign: "right" }}>{s.pts}</div>
+                <div key={gi} style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
+                  <div style={{ position: "relative", padding: "16px 16px 14px", borderBottom: "1px solid #1a3050", overflow: "hidden", minHeight: 76 }}>
+                    <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${groupBgs[gi % groupBgs.length]})`, backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.55 }} />
+                    <div style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, rgba(15,30,55,0.95) 0%, rgba(15,30,55,0.6) 60%, rgba(15,30,55,0.3) 100%)` }} />
+                    <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accent }} />
+                    <div style={{ position: "relative", zIndex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>Group {String.fromCharCode(65 + gi)}</span>
+                        <span className="font-display" style={{ fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 1.5, padding: "3px 8px", background: "rgba(0,0,0,0.4)", borderRadius: 3, border: `1px solid ${accent}66` }}>TOP 2 ADVANCE</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4, fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{g.length} TEAMS · {st.reduce((acc, s) => acc + s.w + s.l, 0)} matches played</div>
                     </div>
-                  ))}
+                  </div>
+                  <div>
+                    {st.map((s, si) => (
+                      <div key={s.team.id} style={{ display: "flex", alignItems: "center", padding: "10px 14px", borderTop: si === 0 ? "none" : "1px solid #1a3050", background: si < 2 ? "rgba(34,197,94,0.04)" : "transparent", position: "relative" }}>
+                        {si < 2 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2, background: "#22c55e" }} />}
+                        <div className="font-display" style={{ width: 24, fontSize: 14, fontWeight: 700, color: si === 0 ? "#fbbf24" : si === 1 ? "#22c55e" : "#475569" }}>{si + 1}</div>
+                        <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#cbd5e1" }}>{s.team.p1.name} & {s.team.p2.name}</div>
+                        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{s.w}-{s.l}</span>
+                          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: s.pf - s.pa > 0 ? "#22c55e" : s.pf - s.pa < 0 ? "#ef4444" : "#64748b", minWidth: 30, textAlign: "right" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</span>
+                          <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: si < 2 ? "#00d4ff" : "#cbd5e1", minWidth: 24, textAlign: "right", letterSpacing: 0.5 }}>{s.pts}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}
@@ -908,9 +1046,14 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
       )}
 
       {live.length === 0 && upcoming.length === 0 && recent.length === 0 && (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8", background: "#fff", borderRadius: 14, border: "1px solid #e8ecf1" }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>🏸</div>
-          <p style={{ margin: 0 }}>No matches scheduled yet. The tournament will begin shortly.</p>
+        <div style={{ position: "relative", textAlign: "center", padding: 60, color: "#64748b", background: "#0f1e36", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", minHeight: 220 }}>
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(15,30,55,0.6) 0%, rgba(15,30,55,0.95) 100%)" }} />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ fontSize: 48, marginBottom: 10, opacity: 0.5 }}>🏸</div>
+            <p className="font-display" style={{ margin: 0, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "#fff" }}>No matches scheduled</p>
+            <p style={{ margin: "4px 0 0", fontSize: 13 }}>The tournament will begin shortly.</p>
+          </div>
         </div>
       )}
     </div>
