@@ -111,10 +111,11 @@ export async function setCategoryRoundsPerPair(id: string, rounds: number) {
 
 // PLAYERS ----------------------------------------------------------------
 
-export async function addPlayer(tournament_id: string, name: string, sort_order: number) {
+export async function addPlayer(tournament_id: string, name: string, sort_order: number): Promise<Player> {
   const color = PAL[Math.floor(Math.random() * PAL.length)];
-  const { error } = await supabase.from("players").insert({ tournament_id, name, color, active: true, sort_order });
+  const { data, error } = await supabase.from("players").insert({ tournament_id, name, color, active: true, sort_order }).select().single();
   if (error) throw error;
+  return data as Player;
 }
 
 export async function deletePlayer(id: string) {
@@ -148,13 +149,22 @@ export async function listPlayerCategories(tournament_id: string): Promise<Playe
 }
 
 export async function setPlayerCategories(player_id: string, category_ids: string[]) {
-  // Remove all existing assignments for this player, then insert new ones
-  const { error: delErr } = await supabase.from("player_categories").delete().eq("player_id", player_id);
-  if (delErr) throw delErr;
-  if (category_ids.length === 0) return;
-  const rows = category_ids.map(category_id => ({ player_id, category_id }));
-  const { error: insErr } = await supabase.from("player_categories").insert(rows);
-  if (insErr) throw insErr;
+  const { data: existing, error: fetchErr } = await supabase
+    .from("player_categories").select("category_id").eq("player_id", player_id);
+  if (fetchErr) throw fetchErr;
+  const current = new Set((existing ?? []).map((r: any) => r.category_id));
+  const desired = new Set(category_ids);
+  const toRemove = [...current].filter(id => !desired.has(id));
+  const toAdd = [...desired].filter(id => !current.has(id));
+  const ops: Promise<any>[] = [];
+  if (toRemove.length > 0) {
+    ops.push(supabase.from("player_categories").delete().eq("player_id", player_id).in("category_id", toRemove).then(({ error }) => { if (error) throw error; }));
+  }
+  if (toAdd.length > 0) {
+    const rows = toAdd.map(category_id => ({ player_id, category_id }));
+    ops.push(supabase.from("player_categories").upsert(rows, { onConflict: "player_id,category_id" }).then(({ error }) => { if (error) throw error; }));
+  }
+  await Promise.all(ops);
 }
 
 export async function addPlayerToCategory(player_id: string, category_id: string) {
@@ -237,10 +247,12 @@ export async function setMatchQueuePosition(id: string, queue_position: number) 
 }
 
 export async function swapMatchQueuePositions(id1: string, pos1: number, id2: string, pos2: number) {
-  await Promise.all([
+  const [r1, r2] = await Promise.all([
     supabase.from("matches").update({ queue_position: pos2 }).eq("id", id1),
     supabase.from("matches").update({ queue_position: pos1 }).eq("id", id2),
   ]);
+  if (r1.error) throw r1.error;
+  if (r2.error) throw r2.error;
 }
 
 export async function reassignCourt(id: string, court_number: number) {
@@ -264,7 +276,8 @@ export async function selectMatchWinner(id: string, winner_id: string) {
 
 export async function rescheduleMatch(id: string) {
   const { error } = await supabase.from("matches").update({
-    status: "pending", started_at: null, court_number: null, score_a: null, score_b: null, extended_minutes: 0,
+    status: "pending", started_at: null, court_number: null, score_a: null, score_b: null,
+    extended_minutes: 0, confirmed: false, winner_id: null, is_walkover: false, confirmed_at: null,
   }).eq("id", id);
   if (error) throw error;
 }
@@ -272,7 +285,7 @@ export async function rescheduleMatch(id: string) {
 export async function cancelMatch(id: string) {
   const { error } = await supabase.from("matches").update({
     status: "completed", confirmed: true, score_a: 0, score_b: 0, winner_id: null,
-    confirmed_at: new Date().toISOString(),
+    is_walkover: true, confirmed_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) throw error;
 }

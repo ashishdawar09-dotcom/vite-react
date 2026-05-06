@@ -146,10 +146,18 @@ export function MatchesTab({
   const propagateKnockout = async (m: ProjectedMatch, winner_id: string | null) => {
     if (m.stage !== "knockout" || m.round_idx == null || !winner_id) return;
     const next = matches.find(x => x.category_id === m.category_id && x.stage === "knockout" && x.round_idx === (m.round_idx! + 1) && x.slot_idx === Math.floor(m.slot_idx / 2));
-    if (next) {
-      const patch = m.slot_idx % 2 === 0 ? { team_a_id: winner_id } : { team_b_id: winner_id };
-      await db.updateMatch(next.id, patch);
+    if (!next) return;
+    const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
+    const patch: any = { [side]: winner_id };
+    if (next.winner_id && (next.team_a_id === m.winner_id || next.team_b_id === m.winner_id)) {
+      patch.winner_id = null;
+      patch.confirmed = false;
+      patch.score_a = null;
+      patch.score_b = null;
+      patch.status = "pending";
+      patch.confirmed_at = null;
     }
+    await db.updateMatch(next.id, patch);
   };
 
   const markWalkover = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
@@ -183,6 +191,9 @@ export function MatchesTab({
   };
 
   const handleReassignCourt = async (m: ProjectedMatch, court: number) => {
+    if (liveByCourt[court] && liveByCourt[court]!.id !== m.id) {
+      if (!confirm(`Court ${court} already has a live match. Reassign anyway?`)) return;
+    }
     await db.reassignCourt(m.id, court);
     setReassigningCourtFor(null);
   };

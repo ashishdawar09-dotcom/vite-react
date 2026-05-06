@@ -159,14 +159,9 @@ export default function App() {
   const addPlayer = async () => {
     if (!guard() || !current) return;
     const n = newName.trim(); if (!n) return;
-    await db.addPlayer(current.id, n, players.length);
-    // Assign to selected categories
+    const created = await db.addPlayer(current.id, n, players.length);
     if (addPlayerCats.size > 0) {
-      // Need to get the newly created player's id — fetch latest
-      const { data } = await supabase.from("players").select("id").eq("tournament_id", current.id).eq("name", n).order("created_at", { ascending: false }).limit(1);
-      if (data?.[0]) {
-        await db.setPlayerCategories(data[0].id, [...addPlayerCats]);
-      }
+      await db.setPlayerCategories(created.id, [...addPlayerCats]);
     }
     setNewName("");
   };
@@ -177,15 +172,21 @@ export default function App() {
     await db.updatePlayer(id, { name: n });
     setEditingId(null); setEditName("");
   };
+  const isPlayerInLiveMatch = (playerId: string) => {
+    const playerTeamIds = teams.filter(t => t.p1_id === playerId || t.p2_id === playerId).map(t => t.id);
+    return matches.some(m => m.status === "live" && (playerTeamIds.includes(m.team_a_id!) || playerTeamIds.includes(m.team_b_id!)));
+  };
   const toggleActive = async (id: string) => {
     if (!guard()) return;
     const p = playerById[id]; if (!p) return;
+    if (p.active && isPlayerInLiveMatch(id)) { alert(`"${p.name}" is in a live match and cannot be deactivated right now.`); return; }
     await db.updatePlayer(id, { active: !p.active });
     if (p.active) await db.deleteTeamsContainingPlayer(id);
   };
   const handleDeletePlayer = async (id: string) => {
     if (!guard()) return;
     const p = playerById[id]; if (!p) return;
+    if (isPlayerInLiveMatch(id)) { alert(`"${p.name}" is in a live match and cannot be deleted right now.`); return; }
     const teamCount = teams.filter(t => t.p1_id === id || t.p2_id === id).length;
     const msg = teamCount > 0
       ? `Delete "${p.name}"? This will remove them from ${teamCount} team(s) and affect related matches. Cannot be undone.`
@@ -390,13 +391,22 @@ export default function App() {
   };
   const propagateWinner = async (m: Match, winner_id: string | null) => {
     if (m.stage !== "knockout" || m.round_idx == null || !winner_id) return;
-    const next = knockout[m.round_idx + 1];
-    if (!next) return;
+    const nextRound = knockout[m.round_idx + 1];
+    if (!nextRound) return;
     const ni = Math.floor(m.slot_idx / 2);
-    const nm = next[ni];
+    const nm = nextRound[ni];
     if (!nm) return;
-    if (m.slot_idx % 2 === 0) await db.updateMatch(nm.id, { team_a_id: winner_id });
-    else await db.updateMatch(nm.id, { team_b_id: winner_id });
+    const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
+    const patch: Partial<Match> = { [side]: winner_id };
+    if (nm.winner_id && (nm.team_a_id === m.winner_id || nm.team_b_id === m.winner_id)) {
+      patch.winner_id = null;
+      patch.confirmed = false;
+      patch.score_a = null;
+      patch.score_b = null;
+      patch.status = "pending";
+      patch.confirmed_at = null;
+    }
+    await db.updateMatch(nm.id, patch);
   };
   const confirmInline = async (m: Match) => {
     if (!guard()) return;
@@ -413,7 +423,7 @@ export default function App() {
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
     if (sa === sb) { alert("No ties allowed."); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
-    await db.updateMatch(m.id, { winner_id });
+    await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
     await propagateWinner(m, winner_id);
     setEditingMatchId(null);
   };
