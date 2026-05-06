@@ -2,19 +2,23 @@ import { useState } from "react";
 import * as db from "../lib/db";
 import { CategoryEditor } from "./CategoryEditor";
 import { fmtClock } from "../hooks/useScheduling";
-import type { Category, Match, Team, Tournament } from "../types";
+import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
 
 export function CategoriesTab({
   tournament,
   categories,
   teams,
   matches,
+  players,
+  playerCategories,
   isAdmin,
 }: {
   tournament: Tournament;
   categories: Category[];
   teams: Team[];
   matches: Match[];
+  players: Player[];
+  playerCategories: PlayerCategory[];
   isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState<Category | null | "new">(null);
@@ -106,7 +110,7 @@ export function CategoriesTab({
         </div>
       )}
 
-      {editing && <CategoryEditor tournamentId={tournament.id} category={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
+      {editing && <CategoryEditor tournamentId={tournament.id} category={editing === "new" ? undefined : editing} players={players} playerCategories={playerCategories} onClose={() => setEditing(null)} />}
       {/* fmtClock referenced for tree-shake guard */}
       <span style={{ display: "none" }}>{fmtClock(null)}</span>
     </div>

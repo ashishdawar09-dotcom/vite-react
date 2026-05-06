@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Category, Match, Player, Tournament } from "../types";
+import type { Category, Match, Player, PlayerCategory, Tournament } from "../types";
 
 const PAL = ["#E63946","#457B9D","#2A9D8F","#E9C46A","#F4A261","#264653","#6A4C93","#1982C4","#FF595E","#8AC926","#FFCA3A","#6A0572","#3A86FF","#FB5607","#FF006E","#8338EC"];
 
@@ -134,6 +134,37 @@ export async function uploadPlayerPhoto(playerId: string, file: File): Promise<s
   if (error) throw error;
   const { data } = supabase.storage.from("player-photos").getPublicUrl(path);
   return data.publicUrl;
+}
+
+// PLAYER-CATEGORY ASSIGNMENTS --------------------------------------------
+
+export async function listPlayerCategories(tournament_id: string): Promise<PlayerCategory[]> {
+  const { data, error } = await supabase
+    .from("player_categories")
+    .select("*, players!inner(tournament_id)")
+    .eq("players.tournament_id", tournament_id);
+  if (error) throw error;
+  return (data ?? []).map((d: any) => ({ id: d.id, player_id: d.player_id, category_id: d.category_id }));
+}
+
+export async function setPlayerCategories(player_id: string, category_ids: string[]) {
+  // Remove all existing assignments for this player, then insert new ones
+  const { error: delErr } = await supabase.from("player_categories").delete().eq("player_id", player_id);
+  if (delErr) throw delErr;
+  if (category_ids.length === 0) return;
+  const rows = category_ids.map(category_id => ({ player_id, category_id }));
+  const { error: insErr } = await supabase.from("player_categories").insert(rows);
+  if (insErr) throw insErr;
+}
+
+export async function addPlayerToCategory(player_id: string, category_id: string) {
+  const { error } = await supabase.from("player_categories").upsert({ player_id, category_id }, { onConflict: "player_id,category_id" });
+  if (error) throw error;
+}
+
+export async function removePlayerFromCategory(player_id: string, category_id: string) {
+  const { error } = await supabase.from("player_categories").delete().eq("player_id", player_id).eq("category_id", category_id);
+  if (error) throw error;
 }
 
 // TEAMS ------------------------------------------------------------------

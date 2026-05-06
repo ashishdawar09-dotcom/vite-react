@@ -67,6 +67,12 @@ export type Match = {
   extended_minutes: number;
 };
 
+export type PlayerCategory = {
+  id: string;
+  player_id: string;
+  category_id: string;
+};
+
 export type TeamWithPlayers = Team & { p1: Player; p2: Player | null };
 
 // Computed at runtime per match by useScheduling

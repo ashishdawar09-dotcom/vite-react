@@ -1,14 +1,18 @@
 import { useState } from "react";
 import * as db from "../lib/db";
-import type { Category } from "../types";
+import type { Category, Player, PlayerCategory } from "../types";
 
 export function CategoryEditor({
   tournamentId,
   category,
+  players,
+  playerCategories,
   onClose,
 }: {
   tournamentId: string;
   category?: Category;
+  players: Player[];
+  playerCategories: PlayerCategory[];
   onClose: () => void;
 }) {
   const [name, setName] = useState(category?.name ?? "");
@@ -64,6 +68,33 @@ export function CategoryEditor({
         <Field label="Start time (optional)">
           <input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={inputStyle} />
         </Field>
+
+        {category && (() => {
+          const assignedIds = new Set(playerCategories.filter(pc => pc.category_id === category.id).map(pc => pc.player_id));
+          const sorted = [...players].sort((a, b) => {
+            if (a.active !== b.active) return a.active ? -1 : 1;
+            return a.sort_order - b.sort_order;
+          });
+          return (
+            <Field label={`Players in this category (${assignedIds.size})`}>
+              <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #1a3050", borderRadius: 6, background: "#0a1628" }}>
+                {sorted.map(p => {
+                  const has = assignedIds.has(p.id);
+                  return (
+                    <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #1a3050", opacity: p.active ? 1 : 0.5 }}>
+                      <input type="checkbox" checked={has} onChange={async () => {
+                        if (has) await db.removePlayerFromCategory(p.id, category.id);
+                        else await db.addPlayerToCategory(p.id, category.id);
+                      }} style={{ accentColor: "#00d4ff", width: 16, height: 16 }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: has ? "#00d4ff" : "#94a3b8" }}>{p.name}</span>
+                      {!p.active && <span style={{ fontSize: 10, color: "#64748b" }}>(inactive)</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </Field>
+          );
+        })()}
 
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
           {category && <button disabled={busy} onClick={remove} style={{ padding: "10px 16px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontWeight: 700, cursor: "pointer", fontSize: 12, letterSpacing: 1 }}>DELETE</button>}

@@ -7,6 +7,7 @@ import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
 import { TournamentPicker } from "./components/TournamentPicker";
 import { CategoryPicker } from "./components/CategoryPicker";
+import { CategoryFilter } from "./components/CategoryFilter";
 import { CategoriesTab } from "./components/CategoriesTab";
 import { MatchesTab } from "./components/MatchesTab";
 import { CourtPicker } from "./components/CourtPicker";
@@ -49,6 +50,8 @@ export default function App() {
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null); // confirmed match being re-edited
   const [currentCategoryId, setCurrentCategoryId] = useState<string | null>(null);
   const [pickingCourtFor, setPickingCourtFor] = useState<Match | null>(null);
+  const [addPlayerCats, setAddPlayerCats] = useState<Set<string>>(new Set()); // categories for new player
+  const [editingPlayerCats, setEditingPlayerCats] = useState<string | null>(null); // player whose categories are being edited
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const reloadTournaments = async () => {
@@ -70,19 +73,22 @@ export default function App() {
   }, []);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
-  const { players, teams, matches, categories } = useTournamentData(currentId);
+  const { players, teams, matches, categories, playerCategories } = useTournamentData(currentId);
 
-  // Auto-select first category when switching tournaments / on load
+  // Default to "All" (null). Only auto-select first category if none exists yet and we need one for team operations.
   useEffect(() => {
     if (categories.length === 0) { setCurrentCategoryId(null); return; }
+    // Keep current selection if valid, otherwise stay on "All"
     setCurrentCategoryId(curr => {
+      if (curr === null) return null; // "All" is valid
       if (curr && categories.find(c => c.id === curr)) return curr;
-      return categories[0].id;
+      return null;
     });
   }, [categories, currentId]);
 
   const currentCategory = categories.find(c => c.id === currentCategoryId) ?? null;
-  const phase: "none" | "group" | "knockout" = currentCategory?.phase ?? "none";
+  const phase: "none" | "group" | "knockout" = currentCategory?.phase
+    ?? (categories.find(c => c.phase !== "none")?.phase ?? "none");
 
   // ALL teams including singles (p2 may be null)
   const playerById = useMemo(() => Object.fromEntries(players.map(p => [p.id, p])), [players]);
@@ -96,14 +102,14 @@ export default function App() {
   );
   const allTeamById = useMemo(() => Object.fromEntries(allTeamsView.map(t => [t.id, t])), [allTeamsView]);
 
-  // Scoped to currentCategory
+  // Scoped to currentCategory (or all when null)
   const teamsView: TeamView[] = useMemo(
-    () => currentCategoryId ? allTeamsView.filter(t => t.category_id === currentCategoryId) : [],
+    () => currentCategoryId ? allTeamsView.filter(t => t.category_id === currentCategoryId) : allTeamsView,
     [allTeamsView, currentCategoryId]
   );
   const teamById = useMemo(() => Object.fromEntries(teamsView.map(t => [t.id, t])), [teamsView]);
 
-  const categoryMatches = useMemo(() => currentCategoryId ? matches.filter(m => m.category_id === currentCategoryId) : [], [matches, currentCategoryId]);
+  const categoryMatches = useMemo(() => currentCategoryId ? matches.filter(m => m.category_id === currentCategoryId) : matches, [matches, currentCategoryId]);
   const groupMatches = useMemo(() => categoryMatches.filter(m => m.stage === "group").sort((a, b) => (a.group_idx! - b.group_idx!) || (a.slot_idx - b.slot_idx)), [categoryMatches]);
   const knockoutMatches = useMemo(() => categoryMatches.filter(m => m.stage === "knockout").sort((a, b) => (a.round_idx! - b.round_idx!) || (a.slot_idx - b.slot_idx)), [categoryMatches]);
 
@@ -137,18 +143,15 @@ export default function App() {
   const paired = new Set(teamsView.flatMap(t => [t.p1_id, t.p2_id]));
   const unpaired = active.filter(p => !paired.has(p.id));
 
-  // Map each player to the set of categories they belong to (via teams)
+  // Map each player to the set of categories they're assigned to (via junction table)
   const playerCategoryMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    for (const t of teams) {
-      for (const pid of [t.p1_id, t.p2_id]) {
-        if (!pid) continue;
-        if (!map.has(pid)) map.set(pid, new Set());
-        map.get(pid)!.add(t.category_id);
-      }
+    for (const pc of playerCategories) {
+      if (!map.has(pc.player_id)) map.set(pc.player_id, new Set());
+      map.get(pc.player_id)!.add(pc.category_id);
     }
     return map;
-  }, [teams]);
+  }, [playerCategories]);
   const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
 
   const guard = () => { if (!isAdmin) { setShowLogin(true); return false; } return true; };
@@ -157,6 +160,14 @@ export default function App() {
     if (!guard() || !current) return;
     const n = newName.trim(); if (!n) return;
     await db.addPlayer(current.id, n, players.length);
+    // Assign to selected categories
+    if (addPlayerCats.size > 0) {
+      // Need to get the newly created player's id — fetch latest
+      const { data } = await supabase.from("players").select("id").eq("tournament_id", current.id).eq("name", n).order("created_at", { ascending: false }).limit(1);
+      if (data?.[0]) {
+        await db.setPlayerCategories(data[0].id, [...addPlayerCats]);
+      }
+    }
     setNewName("");
   };
   const startEdit = (p: Player) => { if (!guard()) return; setEditingId(p.id); setEditName(p.name); };
@@ -190,7 +201,7 @@ export default function App() {
   };
   const openPartnerPicker = (pid: string) => {
     if (!guard()) return;
-    if (!currentCategory) { alert("Select a category first."); return; }
+    if (!currentCategoryId || !currentCategory) { alert("Select a specific category first (not 'All') to pair teams."); return; }
     if (currentCategory.team_size === 1) {
       // For singles, just create a 1-player team
       void createSoloTeam(pid);
@@ -665,31 +676,51 @@ export default function App() {
             categories={categories}
             teams={teams}
             matches={matches}
+            players={players}
+            playerCategories={playerCategories}
             isAdmin={isAdmin}
           />
         )}
 
-        {current && tab === "register" && (
+        {current && tab === "register" && (() => {
+          const filteredPlayers = currentCategoryId
+            ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId!))
+            : players;
+          return (
           <div>
             {/* Category filter */}
-            {categories.length > 1 && (
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", letterSpacing: 1 }}>FILTER:</span>
-                <button onClick={() => setCurrentCategoryId(null)} style={{ padding: "6px 14px", borderRadius: 8, border: currentCategoryId === null ? "2px solid #3A86FF" : "1px solid #e2e8f0", background: currentCategoryId === null ? "#eff6ff" : "#fff", color: currentCategoryId === null ? "#3A86FF" : "#475569", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>All</button>
-                {categories.map(c => (
-                  <button key={c.id} onClick={() => setCurrentCategoryId(c.id)} style={{ padding: "6px 14px", borderRadius: 8, border: currentCategoryId === c.id ? "2px solid #3A86FF" : "1px solid #e2e8f0", background: currentCategoryId === c.id ? "#eff6ff" : "#fff", color: currentCategoryId === c.id ? "#3A86FF" : "#475569", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{c.team_size === 1 ? "👤" : "👥"} {c.name}</button>
-                ))}
-              </div>
-            )}
+            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
+
+            {/* Add player with category checkboxes */}
             {isAdmin && (
-              <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
-                <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addPlayer()} placeholder="Enter new player name..." style={{ flex: 1, minWidth: 220, padding: "12px 16px", borderRadius: 12, border: "2px solid #e2e8f0", background: "#fff", fontSize: 15, outline: "none" }} />
-                <button onClick={addPlayer} style={{ ...btn(), padding: "12px 24px", fontSize: 15 }}>+ Add Player</button>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+                  <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addPlayer()} placeholder="Enter new player name..." style={{ flex: 1, minWidth: 220, padding: "12px 16px", borderRadius: 12, border: "2px solid #e2e8f0", background: "#fff", fontSize: 15, outline: "none" }} />
+                  <button onClick={addPlayer} style={{ ...btn(), padding: "12px 24px", fontSize: 15 }}>+ Add Player</button>
+                </div>
+                {categories.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: 1 }}>ASSIGN TO:</span>
+                    {categories.map(c => (
+                      <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 6, border: addPlayerCats.has(c.id) ? "2px solid #3A86FF" : "1px solid #e2e8f0", background: addPlayerCats.has(c.id) ? "#eff6ff" : "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, color: addPlayerCats.has(c.id) ? "#3A86FF" : "#475569" }}>
+                        <input type="checkbox" checked={addPlayerCats.has(c.id)} onChange={e => {
+                          const next = new Set(addPlayerCats);
+                          e.target.checked ? next.add(c.id) : next.delete(c.id);
+                          setAddPlayerCats(next);
+                        }} style={{ accentColor: "#3A86FF" }} />
+                        {c.team_size === 1 ? "👤" : "👥"} {c.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Player list */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
-              {players.map((p, i) => {
+              {filteredPlayers.map((p, i) => {
                 const pCats = playerCategoryMap.get(p.id);
+                const isEditingCats = editingPlayerCats === p.id;
                 return (
                 <div key={p.id} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14, border: "1px solid #e8ecf1", opacity: p.active ? 1 : 0.4, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 4, background: p.color, borderRadius: "0 4px 4px 0" }} />
@@ -707,12 +738,30 @@ export default function App() {
                       </div>
                     )}
                     {p.note && <div style={{ fontSize: 12, color: "#E63946", marginTop: 3 }}>⚠️ {p.note}</div>}
-                    {pCats && pCats.size > 0 && (
-                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                        {[...pCats].map(cid => {
+                    {/* Category badges — clickable for admin to edit */}
+                    {isEditingCats ? (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+                        {categories.map(c => {
+                          const has = pCats?.has(c.id) ?? false;
+                          return (
+                            <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: has ? "#eff6ff" : "#f8fafc", color: has ? "#3A86FF" : "#94a3b8", border: has ? "1px solid #bfdbfe" : "1px solid #e2e8f0", cursor: "pointer" }}>
+                              <input type="checkbox" checked={has} onChange={async () => {
+                                if (has) await db.removePlayerFromCategory(p.id, c.id);
+                                else await db.addPlayerToCategory(p.id, c.id);
+                              }} style={{ accentColor: "#3A86FF", width: 12, height: 12 }} />
+                              {c.name}
+                            </label>
+                          );
+                        })}
+                        <button onClick={() => setEditingPlayerCats(null)} style={{ fontSize: 10, padding: "2px 6px", border: "none", background: "transparent", color: "#3A86FF", cursor: "pointer", fontWeight: 700 }}>Done</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+                        {pCats && pCats.size > 0 ? [...pCats].map(cid => {
                           const c = catById[cid];
                           return c ? <span key={cid} style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "#eff6ff", color: "#3A86FF", border: "1px solid #bfdbfe" }}>{c.name}</span> : null;
-                        })}
+                        }) : <span style={{ fontSize: 10, color: "#94a3b8" }}>No category</span>}
+                        {isAdmin && <button onClick={() => setEditingPlayerCats(p.id)} style={{ fontSize: 10, padding: "2px 6px", border: "none", background: "transparent", color: "#3A86FF", cursor: "pointer", fontWeight: 700 }}>Edit</button>}
                       </div>
                     )}
                     {paired.has(p.id) && <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3, fontWeight: 600 }}>✓ Team assigned</div>}
@@ -730,20 +779,26 @@ export default function App() {
                 );
               })}
             </div>
-            {isAdmin && unpaired.length >= 2 && <div style={{ textAlign: "center", marginTop: 28 }}><button onClick={autoGen} style={{ ...btn("#2A9D8F"), padding: "14px 36px", fontSize: 16, borderRadius: 14 }}>🎲 Auto-Pair All Players</button></div>}
-            {unpaired.length === 1 && <div style={{ textAlign: "center", marginTop: 16, padding: 14, background: "#fef3c7", borderRadius: 12, border: "1px solid #fde68a", color: "#92400e", fontSize: 14 }}>⚠️ Odd player out: <strong>{unpaired[0].name}</strong></div>}
+            {isAdmin && unpaired.length >= 2 && currentCategoryId && <div style={{ textAlign: "center", marginTop: 28 }}><button onClick={autoGen} style={{ ...btn("#2A9D8F"), padding: "14px 36px", fontSize: 16, borderRadius: 14 }}>🎲 Auto-Pair All Players</button></div>}
+            {unpaired.length === 1 && currentCategoryId && <div style={{ textAlign: "center", marginTop: 16, padding: 14, background: "#fef3c7", borderRadius: 12, border: "1px solid #fde68a", color: "#92400e", fontSize: 14 }}>⚠️ Odd player out: <strong>{unpaired[0].name}</strong></div>}
           </div>
-        )}
+          );
+        })()}
 
-        {current && tab === "profiles" && (
+        {current && tab === "profiles" && (() => {
+          const filteredProfiles = currentCategoryId
+            ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId!))
+            : players;
+          return (
           <div>
+            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
               <span style={{ fontSize: 28 }}>👤</span>
               <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Player Profiles</h2>
               <span style={{ marginLeft: "auto", fontSize: 13, color: "#94a3b8" }}>{isAdmin ? "Click photo to upload, click name to edit" : "View only"}</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 18 }}>
-              {players.map((p, i) => (
+              {filteredProfiles.map((p, i) => (
                 <div key={p.id} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", border: "1px solid #e8ecf1", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", opacity: p.active ? 1 : 0.55, position: "relative" }}>
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: p.color }} />
                   <div style={{ padding: "26px 16px 18px", textAlign: "center" }}>
@@ -760,16 +815,24 @@ export default function App() {
                       </div>
                     )}
                     {p.note && <div style={{ fontSize: 12, color: "#E63946", marginTop: 6, padding: "3px 10px", background: "#fef2f2", borderRadius: 12, display: "inline-block" }}>⚠️ {p.note}</div>}
+                    {/* Category badges */}
+                    {(() => { const pCats = playerCategoryMap.get(p.id); return pCats && pCats.size > 0 ? (
+                      <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap", justifyContent: "center" }}>
+                        {[...pCats].map(cid => { const c = catById[cid]; return c ? <span key={cid} style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "#eff6ff", color: "#3A86FF", border: "1px solid #bfdbfe" }}>{c.name}</span> : null; })}
+                      </div>
+                    ) : null; })()}
                     <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>{p.active ? (paired.has(p.id) ? "✓ On a team" : "Available") : "Inactive"}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {current && tab === "teams" && (
           <div>
+            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
             {teamsView.length === 0 ? (
               <div style={{ textAlign: "center", padding: 50, color: "#94a3b8" }}><p>No teams yet.</p></div>
             ) : (
@@ -781,7 +844,10 @@ export default function App() {
                       {isAdmin && phase === "none" && (
                         <button onClick={() => removeTeam(t.id)} title="Remove team" style={{ position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: "50%", border: "none", background: "#fef2f2", color: "#dc2626", cursor: "pointer", fontSize: 16, fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
                       )}
-                      <div style={{ fontWeight: 800, fontSize: 12, color: "#3A86FF", marginBottom: 14, textTransform: "uppercase", letterSpacing: 2 }}>{currentCategory?.team_size === 1 ? `Player ${i + 1}` : `Team ${i + 1}`}</div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                        <span style={{ fontWeight: 800, fontSize: 12, color: "#3A86FF", textTransform: "uppercase", letterSpacing: 2 }}>{currentCategory?.team_size === 1 ? `Player ${i + 1}` : `Team ${i + 1}`}</span>
+                        {!currentCategoryId && (() => { const c = catById[t.category_id]; return c ? <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "#eff6ff", color: "#3A86FF", border: "1px solid #bfdbfe" }}>{c.name}</span> : null; })()}
+                      </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
                         <Av name={t.p1.name} photo={t.p1.photo_url} sz={40} color={t.p1.color} />
                         <span style={{ fontWeight: 700, fontSize: 16 }}>{t.p1.name}</span>
@@ -825,6 +891,7 @@ export default function App() {
 
         {current && tab === "groups" && (
           <div>
+            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
             {groups.map((g, gi) => {
               const st = getStandings(g, gi);
               const ms = groupMatches.filter(m => m.group_idx === gi);
@@ -869,6 +936,7 @@ export default function App() {
 
         {current && tab === "knockout" && (
           <div>
+            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
             {champion && (
               <div style={{ textAlign: "center", padding: 32, background: "linear-gradient(135deg,#fef3c7,#fde68a,#fef3c7)", borderRadius: 20, border: "3px solid #f59e0b", marginBottom: 28 }}>
                 <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
@@ -895,6 +963,7 @@ export default function App() {
 
         {current && tab === "scoreboard" && (
           <div>
+            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
               <span style={{ fontSize: 28 }}>🏅</span>
               <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Scoreboard</h2>
