@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { useTournamentData } from "./hooks/useTournamentData";
+import { useScheduling, fmtClock } from "./hooks/useScheduling";
 import * as db from "./lib/db";
 import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
 import { TournamentPicker } from "./components/TournamentPicker";
-import type { Match, Player, Team, Tournament } from "./types";
+import { CategoryPicker } from "./components/CategoryPicker";
+import { CategoriesTab } from "./components/CategoriesTab";
+import { MatchesTab } from "./components/MatchesTab";
+import { CourtPicker } from "./components/CourtPicker";
+import { CourtStatus } from "./components/CourtStatus";
+import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "./types";
 
 const ShuttleSVG = ({ sz = 40, color = "#fff", opacity = 0.12, style = {} as React.CSSProperties }) => (
   <svg width={sz} height={sz} viewBox="0 0 100 100" style={{ opacity, ...style }}>
@@ -27,20 +33,22 @@ function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 
 
 const rName = (n: number, i: number) => { if (i === n - 1) return "🏆 Final"; if (i === n - 2) return "Semi-Final"; if (i === n - 3) return "Quarter-Final"; return `Round ${i + 1}`; };
 
-type TeamView = Team & { p1: Player; p2: Player };
+type TeamView = Team & { p1: Player; p2: Player | null };
 
 export default function App() {
   const { isAdmin, email, loading: authLoading } = useAuth();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
-  const [tab, setTab] = useState<"live" | "register" | "profiles" | "teams" | "groups" | "knockout" | "scoreboard">("live");
+  const [tab, setTab] = useState<"live" | "matches" | "register" | "profiles" | "teams" | "groups" | "knockout" | "scoreboard" | "categories">("live");
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [partnerPicker, setPartnerPicker] = useState<string | null>(null); // playerId whose partner we're choosing
   const [pendingRounds, setPendingRounds] = useState(1);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null); // confirmed match being re-edited
+  const [currentCategoryId, setCurrentCategoryId] = useState<string | null>(null);
+  const [pickingCourtFor, setPickingCourtFor] = useState<Match | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const reloadTournaments = async () => {
@@ -62,18 +70,46 @@ export default function App() {
   }, []);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
-  const phase = current?.phase ?? "none";
-  const { players, teams, matches } = useTournamentData(currentId);
+  const { players, teams, matches, categories } = useTournamentData(currentId);
 
+  // Auto-select first category when switching tournaments / on load
+  useEffect(() => {
+    if (categories.length === 0) { setCurrentCategoryId(null); return; }
+    setCurrentCategoryId(curr => {
+      if (curr && categories.find(c => c.id === curr)) return curr;
+      return categories[0].id;
+    });
+  }, [categories, currentId]);
+
+  const currentCategory = categories.find(c => c.id === currentCategoryId) ?? null;
+  const phase: "none" | "group" | "knockout" = currentCategory?.phase ?? "none";
+
+  // ALL teams including singles (p2 may be null)
   const playerById = useMemo(() => Object.fromEntries(players.map(p => [p.id, p])), [players]);
-  const teamsView: TeamView[] = useMemo(
-    () => teams.map(t => ({ ...t, p1: playerById[t.p1_id], p2: playerById[t.p2_id] })).filter(t => t.p1 && t.p2) as TeamView[],
+  const allTeamsView: TeamView[] = useMemo(
+    () => teams.map(t => {
+      const p1 = playerById[t.p1_id];
+      const p2 = t.p2_id ? playerById[t.p2_id] : null;
+      return { ...t, p1, p2 } as TeamView;
+    }).filter(t => t.p1) as TeamView[],
     [teams, playerById]
+  );
+  const allTeamById = useMemo(() => Object.fromEntries(allTeamsView.map(t => [t.id, t])), [allTeamsView]);
+
+  // Scoped to currentCategory
+  const teamsView: TeamView[] = useMemo(
+    () => currentCategoryId ? allTeamsView.filter(t => t.category_id === currentCategoryId) : [],
+    [allTeamsView, currentCategoryId]
   );
   const teamById = useMemo(() => Object.fromEntries(teamsView.map(t => [t.id, t])), [teamsView]);
 
-  const groupMatches = useMemo(() => matches.filter(m => m.stage === "group").sort((a, b) => (a.group_idx! - b.group_idx!) || (a.slot_idx - b.slot_idx)), [matches]);
-  const knockoutMatches = useMemo(() => matches.filter(m => m.stage === "knockout").sort((a, b) => (a.round_idx! - b.round_idx!) || (a.slot_idx - b.slot_idx)), [matches]);
+  const categoryMatches = useMemo(() => currentCategoryId ? matches.filter(m => m.category_id === currentCategoryId) : [], [matches, currentCategoryId]);
+  const groupMatches = useMemo(() => categoryMatches.filter(m => m.stage === "group").sort((a, b) => (a.group_idx! - b.group_idx!) || (a.slot_idx - b.slot_idx)), [categoryMatches]);
+  const knockoutMatches = useMemo(() => categoryMatches.filter(m => m.stage === "knockout").sort((a, b) => (a.round_idx! - b.round_idx!) || (a.slot_idx - b.slot_idx)), [categoryMatches]);
+
+  // Schedule projection across all categories (for Live + Matches tabs)
+  const numCourts = current?.num_courts ?? 2;
+  const { projected: projectedMatches, byId: projectedById, tournamentDeltaMin, tournamentDeltaLabel, liveByCourt } = useScheduling(matches, categories, numCourts);
 
   const groups: TeamView[][] = useMemo(() => {
     const map = new Map<number, Set<string>>();
@@ -101,6 +137,20 @@ export default function App() {
   const paired = new Set(teamsView.flatMap(t => [t.p1_id, t.p2_id]));
   const unpaired = active.filter(p => !paired.has(p.id));
 
+  // Map each player to the set of categories they belong to (via teams)
+  const playerCategoryMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const t of teams) {
+      for (const pid of [t.p1_id, t.p2_id]) {
+        if (!pid) continue;
+        if (!map.has(pid)) map.set(pid, new Set());
+        map.get(pid)!.add(t.category_id);
+      }
+    }
+    return map;
+  }, [teams]);
+  const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
+
   const guard = () => { if (!isAdmin) { setShowLogin(true); return false; } return true; };
 
   const addPlayer = async () => {
@@ -122,51 +172,80 @@ export default function App() {
     await db.updatePlayer(id, { active: !p.active });
     if (p.active) await db.deleteTeamsContainingPlayer(id);
   };
+  const handleDeletePlayer = async (id: string) => {
+    if (!guard()) return;
+    const p = playerById[id]; if (!p) return;
+    const teamCount = teams.filter(t => t.p1_id === id || t.p2_id === id).length;
+    const msg = teamCount > 0
+      ? `Delete "${p.name}"? This will remove them from ${teamCount} team(s) and affect related matches. Cannot be undone.`
+      : `Delete "${p.name}"? This cannot be undone.`;
+    if (!confirm(msg)) return;
+    await db.deletePlayer(id);
+  };
   const handlePhoto = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!guard()) return;
     const f = e.target.files?.[0]; if (!f) return;
     const url = await db.uploadPlayerPhoto(id, f);
     await db.updatePlayer(id, { photo_url: url });
   };
-  const openPartnerPicker = (pid: string) => { if (!guard()) return; setPartnerPicker(pid); };
+  const openPartnerPicker = (pid: string) => {
+    if (!guard()) return;
+    if (!currentCategory) { alert("Select a category first."); return; }
+    if (currentCategory.team_size === 1) {
+      // For singles, just create a 1-player team
+      void createSoloTeam(pid);
+      return;
+    }
+    setPartnerPicker(pid);
+  };
+  const createSoloTeam = async (pid: string) => {
+    if (!current || !currentCategoryId) return;
+    await db.createTeam(current.id, currentCategoryId, pid, null, teamsView.length);
+  };
   const assignPartner = async (p1Id: string, p2Id: string) => {
-    if (!current) return;
-    await db.createTeam(current.id, p1Id, p2Id, teamsView.length);
+    if (!current || !currentCategoryId) return;
+    await db.createTeam(current.id, currentCategoryId, p1Id, p2Id, teamsView.length);
     setPartnerPicker(null);
   };
   const autoGen = async () => {
-    if (!guard() || !current) return;
+    if (!guard() || !current || !currentCategory || !currentCategoryId) return;
     const sh = shuffle(unpaired);
     let order = teamsView.length;
-    for (let i = 0; i + 1 < sh.length; i += 2) {
-      await db.createTeam(current.id, sh[i].id, sh[i + 1].id, order++);
+    if (currentCategory.team_size === 1) {
+      for (const p of sh) {
+        await db.createTeam(current.id, currentCategoryId, p.id, null, order++);
+      }
+    } else {
+      for (let i = 0; i + 1 < sh.length; i += 2) {
+        await db.createTeam(current.id, currentCategoryId, sh[i].id, sh[i + 1].id, order++);
+      }
     }
   };
 
   const startGroupStage = async () => {
-    if (!guard() || !current) return;
-    await db.setRoundsPerPair(current.id, pendingRounds);
+    if (!guard() || !current || !currentCategoryId) return;
+    await db.setCategoryRoundsPerPair(currentCategoryId, pendingRounds);
     const size = teamsView.length <= 6 ? 3 : 4;
     const sh = shuffle(teamsView);
     const nG = Math.ceil(sh.length / size);
     const gs: TeamView[][] = Array.from({ length: nG }, () => []);
     sh.forEach((t, i) => gs[i % nG].push(t));
-    const rows: Omit<Match, "id">[] = [];
+    const rows: any[] = [];
     let slot = 0;
     gs.forEach((g, gi) => {
       for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
         for (let r = 0; r < pendingRounds; r++) {
           rows.push({
-            tournament_id: current.id, stage: "group", group_idx: gi, round_idx: null, slot_idx: slot++,
+            tournament_id: current.id, category_id: currentCategoryId, stage: "group", group_idx: gi, round_idx: null, slot_idx: slot++,
             team_a_id: g[i].id, team_b_id: g[j].id,
             score_a: null, score_b: null, winner_id: null, confirmed: false, is_bye: false,
-            status: "pending", started_at: null,
+            status: "pending", started_at: null, is_walkover: false,
           });
         }
       }
     });
     await db.insertMatches(rows);
-    await db.setPhase(current.id, "group");
+    await db.setCategoryPhase(currentCategoryId, "group");
     setTab("groups");
   };
 
@@ -192,28 +271,30 @@ export default function App() {
   });
 
   const startKnockout = async () => {
-    if (!guard() || !current) return;
+    if (!guard() || !current || !currentCategoryId) return;
     const q: TeamView[] = [];
     groups.forEach((g, gi) => {
       const st = getStandings(g, gi);
       for (let i = 0; i < Math.min(2, st.length); i++) q.push(st[i].team);
     });
     if (q.length < 2) return;
-    const rds = Math.ceil(Math.log2(q.length));
+    // Cap at 8 to keep format = QF + SF + F (no "Round of 16")
+    const cappedQ = q.slice(0, 8);
+    const rds = Math.ceil(Math.log2(cappedQ.length));
     const slots = Math.pow(2, rds);
-    const seeded: (TeamView | null)[] = [...q];
+    const seeded: (TeamView | null)[] = [...cappedQ];
     while (seeded.length < slots) seeded.push(null);
-    const rows: Omit<Match, "id">[] = [];
+    const rows: any[] = [];
     for (let i = 0; i < slots / 2; i++) {
       const a = seeded[i * 2], b = seeded[i * 2 + 1];
       const bye = !a || !b;
       rows.push({
-        tournament_id: current.id, stage: "knockout", group_idx: null, round_idx: 0, slot_idx: i,
+        tournament_id: current.id, category_id: currentCategoryId, stage: "knockout", group_idx: null, round_idx: 0, slot_idx: i,
         team_a_id: a?.id ?? null, team_b_id: b?.id ?? null,
         score_a: null, score_b: null,
         winner_id: bye ? (a?.id ?? b?.id ?? null) : null,
         confirmed: bye, is_bye: bye,
-        status: bye ? "completed" : "pending", started_at: null,
+        status: bye ? "completed" : "pending", started_at: null, is_walkover: false,
       });
     }
     let prevCount = slots / 2;
@@ -221,15 +302,15 @@ export default function App() {
       const cnt = prevCount / 2;
       for (let i = 0; i < cnt; i++) {
         rows.push({
-          tournament_id: current.id, stage: "knockout", group_idx: null, round_idx: r, slot_idx: i,
+          tournament_id: current.id, category_id: currentCategoryId, stage: "knockout", group_idx: null, round_idx: r, slot_idx: i,
           team_a_id: null, team_b_id: null, score_a: null, score_b: null, winner_id: null, confirmed: false, is_bye: false,
-          status: "pending", started_at: null,
+          status: "pending", started_at: null, is_walkover: false,
         });
       }
       prevCount = cnt;
     }
     await db.insertMatches(rows);
-    await db.setPhase(current.id, "knockout");
+    await db.setCategoryPhase(currentCategoryId, "knockout");
     setTab("knockout");
   };
 
@@ -240,14 +321,48 @@ export default function App() {
   })();
 
   const resetAll = async () => {
-    if (!guard() || !current) return;
-    if (!confirm("Wipe teams and all matches for this tournament?")) return;
-    await db.deleteMatchesForTournament(current.id);
-    await db.deleteTeamsForTournament(current.id);
-    await db.setPhase(current.id, "none");
+    if (!guard() || !currentCategoryId) return;
+    if (!confirm(`Wipe teams and matches for "${currentCategory?.name}" category?`)) return;
+    await db.deleteMatchesForCategory(currentCategoryId);
+    await db.deleteTeamsForCategory(currentCategoryId);
+    await db.setCategoryPhase(currentCategoryId, "none");
   };
 
-  const startMatchHandler = async (id: string) => { if (!guard()) return; await db.startMatch(id); };
+  // Open the court picker for a pending match (must have both teams)
+  const startMatchHandler = (id: string) => {
+    if (!guard()) return;
+    const m = matches.find(x => x.id === id);
+    if (!m) return;
+    setPickingCourtFor(m);
+  };
+  const startMatchOnCourt = async (m: Match, court: number) => {
+    // Player conflict check
+    const ta = m.team_a_id ? allTeamById[m.team_a_id] : null;
+    const tb = m.team_b_id ? allTeamById[m.team_b_id] : null;
+    const playerIds = new Set<string>();
+    if (ta) { playerIds.add(ta.p1_id); if (ta.p2_id) playerIds.add(ta.p2_id); }
+    if (tb) { playerIds.add(tb.p1_id); if (tb.p2_id) playerIds.add(tb.p2_id); }
+    const conflicts: string[] = [];
+    for (const live of Object.values(liveByCourt)) {
+      if (!live || live.id === m.id) continue;
+      const lA = live.team_a_id ? allTeamById[live.team_a_id] : null;
+      const lB = live.team_b_id ? allTeamById[live.team_b_id] : null;
+      const liveIds = new Set<string>();
+      if (lA) { liveIds.add(lA.p1_id); if (lA.p2_id) liveIds.add(lA.p2_id); }
+      if (lB) { liveIds.add(lB.p1_id); if (lB.p2_id) liveIds.add(lB.p2_id); }
+      for (const pid of playerIds) {
+        if (liveIds.has(pid)) {
+          const name = playerById[pid]?.name ?? "?";
+          conflicts.push(`${name} on Court ${live.court_number}`);
+        }
+      }
+    }
+    if (conflicts.length) {
+      if (!confirm(`Player conflict — ${conflicts.join(", ")}.\n\nStart anyway?`)) return;
+    }
+    await db.startMatchOnCourt(m.id, court);
+    setPickingCourtFor(null);
+  };
   const removeTeam = async (id: string) => { if (!guard()) return; if (!confirm("Remove this team?")) return; await db.deleteTeam(id); };
 
   const adjustScore = async (m: Match, side: "a" | "b", delta: number) => {
@@ -278,7 +393,7 @@ export default function App() {
     if (sa === 0 && sb === 0) { alert("Enter a score before confirming."); return; }
     if (sa === sb) { alert("No ties allowed — set a winner."); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
-    await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed" });
+    await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
     await propagateWinner(m, winner_id);
     setEditingMatchId(null);
   };
@@ -292,16 +407,16 @@ export default function App() {
     setEditingMatchId(null);
   };
 
-  useEffect(() => { if (current) setPendingRounds(current.rounds_per_pair || 1); }, [current?.id, current?.rounds_per_pair]);
+  useEffect(() => { if (currentCategory) setPendingRounds(currentCategory.rounds_per_pair || 1); }, [currentCategory?.id, currentCategory?.rounds_per_pair]);
 
   const btn = (bg = "#3A86FF", clr = "#fff"): React.CSSProperties => ({ background: bg, color: clr, border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", fontWeight: 600, fontSize: 14, transition: "all .2s", boxShadow: `0 2px 8px ${bg}33` });
   const tabBtn = (t: typeof tab, label: string, icon: string) => (
     <button key={t} onClick={() => setTab(t)} className="font-display" style={{ padding: "14px 22px", cursor: "pointer", fontWeight: 700, fontSize: 13, letterSpacing: 1.5, textTransform: "uppercase", background: "transparent", color: tab === t ? "#00d4ff" : "#64748b", border: "none", borderBottom: tab === t ? "3px solid #00d4ff" : "3px solid transparent", marginBottom: -1, display: "flex", alignItems: "center", gap: 6, transition: "color .15s" }}><span style={{ fontSize: 14 }}>{icon}</span>{label}</button>
   );
-  const tLabel = (t: TeamView | null) => t?.p1 && t?.p2 ? `${t.p1.name} & ${t.p2.name}` : "TBD";
+  const tLabel = (t: TeamView | null) => t?.p1 ? (t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name) : "TBD";
   const teamFromId = (id: string | null): TeamView | null => id ? teamById[id] ?? null : null;
 
-  const MatchCard = ({ match: m, editable = true }: { match: Match; editable?: boolean }) => {
+  const MatchCard = ({ match: m, editable = true, matchMinutes }: { match: Match; editable?: boolean; matchMinutes?: number }) => {
     const ta = teamFromId(m.team_a_id);
     const tb = teamFromId(m.team_b_id);
     const isEditing = m.confirmed && editingMatchId === m.id;
@@ -309,6 +424,16 @@ export default function App() {
     const showStaticScore = m.confirmed || (m.score_a != null || m.score_b != null);
     const winA = m.confirmed && m.winner_id === ta?.id;
     const winB = m.confirmed && m.winner_id === tb?.id;
+
+    const [cardNow, setCardNow] = useState(Date.now());
+    const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
+    useEffect(() => {
+      if (m.status !== "live") return;
+      const id = setInterval(() => setCardNow(Date.now()), 1000);
+      return () => clearInterval(id);
+    }, [m.status]);
+    const totalMin = (matchMinutes ?? 12) + (m.extended_minutes ?? 0);
+    const cardTimeOver = m.status === "live" && m.started_at ? (cardNow - new Date(m.started_at).getTime()) / 60_000 > totalMin : false;
 
     const teamRow = (team: typeof ta, side: "a" | "b", scoreVal: number, isWin: boolean) => {
       const stepBtn = (delta: number, label: string) => (
@@ -343,11 +468,29 @@ export default function App() {
       );
     };
 
+    const handleCardWalkover = async (side: "a" | "b") => {
+      const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
+      if (!winnerId) return;
+      if (!confirm("Mark this match as a walkover? The other team forfeits.")) return;
+      await db.markWalkover(m.id, winnerId);
+      await propagateWinner(m, winnerId);
+      setTimeOverPick(null);
+    };
+
+    const handleCardSelectWinner = async (side: "a" | "b") => {
+      const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
+      if (!winnerId) return;
+      await db.selectMatchWinner(m.id, winnerId);
+      await propagateWinner(m, winnerId);
+      setTimeOverPick(null);
+    };
+
     return (
-      <div style={{ background: "#fff", borderRadius: 14, border: m.status === "live" ? "2px solid #ef4444" : "1px solid #e8ecf1", overflow: "hidden", boxShadow: m.status === "live" ? "0 4px 20px rgba(239,68,68,0.25)" : "0 2px 12px rgba(0,0,0,0.04)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: m.status === "live" ? "linear-gradient(90deg,#fef2f2,#fee2e2)" : m.confirmed ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#f8fafc,#f1f5f9)", fontSize: 12, fontWeight: 600 }}>
+      <div style={{ background: "#fff", borderRadius: 14, border: cardTimeOver ? "2px solid #f59e0b" : m.status === "live" ? "2px solid #ef4444" : "1px solid #e8ecf1", overflow: "hidden", boxShadow: m.status === "live" ? (cardTimeOver ? "0 4px 20px rgba(245,158,11,0.3)" : "0 4px 20px rgba(239,68,68,0.25)") : "0 2px 12px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: cardTimeOver ? "linear-gradient(90deg,#fffbeb,#fef3c7)" : m.status === "live" ? "linear-gradient(90deg,#fef2f2,#fee2e2)" : m.confirmed ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#f8fafc,#f1f5f9)", fontSize: 12, fontWeight: 600 }}>
           <span style={{ color: "#64748b" }}>Match</span>
-          {m.status === "live" && <span style={{ color: "#dc2626", display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#dc2626", animation: "pulse 1.5s ease-in-out infinite" }} />LIVE</span>}
+          {cardTimeOver && <span style={{ color: "#d97706", fontWeight: 800, display: "flex", alignItems: "center", gap: 4 }}>⏰ TIME OVER</span>}
+          {m.status === "live" && !cardTimeOver && <span style={{ color: "#dc2626", display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#dc2626", animation: "pulse 1.5s ease-in-out infinite" }} />LIVE</span>}
           {m.confirmed && !isEditing && <span style={{ color: "#16a34a" }}>✓ Confirmed</span>}
           {isEditing && <span style={{ color: "#f59e0b" }}>✏️ Editing</span>}
         </div>
@@ -361,8 +504,28 @@ export default function App() {
               {m.status === "pending" && !m.confirmed && (
                 <button onClick={() => startMatchHandler(m.id)} style={{ ...btn("#dc2626"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}>▶ Start Match</button>
               )}
-              {m.status === "live" && !m.confirmed && (
+              {m.status === "live" && !m.confirmed && !cardTimeOver && (
                 <button onClick={() => confirmInline(m)} style={{ ...btn("#16a34a"), flex: "1 1 100%", padding: "14px", fontSize: 15, borderRadius: 10, fontWeight: 800 }}>✓ Confirm Final Score</button>
+              )}
+              {/* Time-over actions */}
+              {m.status === "live" && !m.confirmed && cardTimeOver && (
+                <>
+                  <button onClick={() => db.extendMatch(m.id, 5)} style={{ ...btn("#3b82f6"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}>+5 Min</button>
+                  <button onClick={() => confirmInline(m)} style={{ ...btn("#16a34a"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}>✓ Confirm</button>
+                  <button onClick={() => setTimeOverPick("walkover")} style={{ ...btn("#f59e0b"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}>Walkover</button>
+                  <button onClick={() => setTimeOverPick("winner")} style={{ ...btn("#22c55e"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}>Select Winner</button>
+                  <button onClick={async () => { if (confirm("Reschedule? Match goes back to pending.")) await db.rescheduleMatch(m.id); }} style={{ ...btn("#e2e8f0", "#475569"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10, boxShadow: "none" }}>Reschedule</button>
+                  <button onClick={async () => { if (confirm("Cancel match? No winner will be recorded.")) await db.cancelMatch(m.id); }} style={{ ...btn("#dc2626"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}>Cancel</button>
+                </>
+              )}
+              {/* Team picker for walkover/winner in time-over */}
+              {timeOverPick && (
+                <div style={{ display: "flex", gap: 8, width: "100%", flexWrap: "wrap", padding: "8px 0 0", borderTop: "1px solid #e2e8f0" }}>
+                  <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, width: "100%" }}>{timeOverPick === "walkover" ? "Pick walkover winner:" : "Pick winner:"}</span>
+                  <button onClick={() => timeOverPick === "walkover" ? handleCardWalkover("a") : handleCardSelectWinner("a")} style={{ ...btn("#16a34a"), flex: 1, padding: "10px", fontSize: 13, borderRadius: 10 }}>{tLabel(ta)}</button>
+                  <button onClick={() => timeOverPick === "walkover" ? handleCardWalkover("b") : handleCardSelectWinner("b")} style={{ ...btn("#16a34a"), flex: 1, padding: "10px", fontSize: 13, borderRadius: 10 }}>{tLabel(tb)}</button>
+                  <button onClick={() => setTimeOverPick(null)} style={{ ...btn("#e2e8f0", "#475569"), padding: "10px 16px", fontSize: 12, borderRadius: 10, boxShadow: "none" }}>Cancel</button>
+                </div>
               )}
               {m.confirmed && !isEditing && (
                 <button onClick={() => setEditingMatchId(m.id)} style={{ ...btn("#f59e0b"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}>✏️ Edit Score</button>
@@ -428,7 +591,7 @@ export default function App() {
 
           <h1 className="font-display hero-title" style={{ margin: "0 0 10px", fontSize: 64, fontWeight: 700, letterSpacing: -1, color: "#fff", lineHeight: 0.95, textTransform: "uppercase", maxWidth: "65%" }}>{current?.name ?? "Badminton Championship"}</h1>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
             {current?.event_date && (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
                 <span style={{ color: "#00d4ff", fontSize: 13 }}>▸</span>
@@ -436,6 +599,14 @@ export default function App() {
               </div>
             )}
             <TournamentPicker tournaments={tournaments} current={current} onSelect={setCurrentId} isAdmin={isAdmin} onChange={reloadTournaments} />
+            <CategoryPicker categories={categories} currentId={currentCategoryId} onSelect={setCurrentCategoryId} />
+            {/* Tournament-wide pace pill */}
+            {matches.some(m => m.confirmed) && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 4, background: tournamentDeltaMin > 1 ? "rgba(239,68,68,0.12)" : tournamentDeltaMin < -1 ? "rgba(34,197,94,0.12)" : "rgba(0,184,255,0.12)", border: `1px solid ${tournamentDeltaMin > 1 ? "rgba(239,68,68,0.4)" : tournamentDeltaMin < -1 ? "rgba(34,197,94,0.4)" : "rgba(0,184,255,0.4)"}` }}>
+                <span style={{ fontSize: 11 }}>{tournamentDeltaMin > 1 ? "▲" : tournamentDeltaMin < -1 ? "▼" : "●"}</span>
+                <span className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: tournamentDeltaMin > 1 ? "#fca5a5" : tournamentDeltaMin < -1 ? "#86efac" : "#7dd3fc" }}>{tournamentDeltaLabel}</span>
+              </div>
+            )}
           </div>
 
           {/* Quick stats — broadcast style */}
@@ -452,12 +623,14 @@ export default function App() {
 
       <nav style={{ display: "flex", justifyContent: "center", gap: 4, paddingTop: 6, background: "#0a1628", borderBottom: "1px solid #1a3050", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}>
         {tabBtn("live", "Live", "🔴")}
+        {tabBtn("matches", "Matches", "🗓️")}
         {tabBtn("register", "Players", "📋")}
         {tabBtn("profiles", "Profiles", "👤")}
         {tabBtn("teams", "Teams", "🤝")}
         {phase !== "none" && tabBtn("groups", "Groups", "📊")}
         {phase === "knockout" && tabBtn("knockout", "Knockout", "⚔️")}
         {tabBtn("scoreboard", "Scoreboard", "🏅")}
+        {isAdmin && tabBtn("categories", "Categories", "🏷️")}
       </nav>
 
       <main style={{ maxWidth: 1280, margin: "24px auto", padding: "0 20px" }}>
@@ -472,10 +645,42 @@ export default function App() {
           </div>
         )}
 
-        {current && tab === "live" && <LiveTab teamsView={teamsView} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} />}
+        {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} />}
+
+        {current && tab === "matches" && (
+          <MatchesTab
+            tournament={current}
+            categories={categories}
+            matches={projectedMatches}
+            teamById={allTeamById}
+            playerById={playerById}
+            liveByCourt={liveByCourt}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        {current && tab === "categories" && isAdmin && (
+          <CategoriesTab
+            tournament={current}
+            categories={categories}
+            teams={teams}
+            matches={matches}
+            isAdmin={isAdmin}
+          />
+        )}
 
         {current && tab === "register" && (
           <div>
+            {/* Category filter */}
+            {categories.length > 1 && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", letterSpacing: 1 }}>FILTER:</span>
+                <button onClick={() => setCurrentCategoryId(null)} style={{ padding: "6px 14px", borderRadius: 8, border: currentCategoryId === null ? "2px solid #3A86FF" : "1px solid #e2e8f0", background: currentCategoryId === null ? "#eff6ff" : "#fff", color: currentCategoryId === null ? "#3A86FF" : "#475569", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>All</button>
+                {categories.map(c => (
+                  <button key={c.id} onClick={() => setCurrentCategoryId(c.id)} style={{ padding: "6px 14px", borderRadius: 8, border: currentCategoryId === c.id ? "2px solid #3A86FF" : "1px solid #e2e8f0", background: currentCategoryId === c.id ? "#eff6ff" : "#fff", color: currentCategoryId === c.id ? "#3A86FF" : "#475569", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{c.team_size === 1 ? "👤" : "👥"} {c.name}</button>
+                ))}
+              </div>
+            )}
             {isAdmin && (
               <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
                 <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && addPlayer()} placeholder="Enter new player name..." style={{ flex: 1, minWidth: 220, padding: "12px 16px", borderRadius: 12, border: "2px solid #e2e8f0", background: "#fff", fontSize: 15, outline: "none" }} />
@@ -483,7 +688,9 @@ export default function App() {
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
-              {players.map((p, i) => (
+              {players.map((p, i) => {
+                const pCats = playerCategoryMap.get(p.id);
+                return (
                 <div key={p.id} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14, border: "1px solid #e8ecf1", opacity: p.active ? 1 : 0.4, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 4, background: p.color, borderRadius: "0 4px 4px 0" }} />
                   <div style={{ position: "relative", cursor: isAdmin ? "pointer" : "default", marginLeft: 4 }} onClick={() => isAdmin && fileRefs.current[p.id]?.click()}>
@@ -500,6 +707,14 @@ export default function App() {
                       </div>
                     )}
                     {p.note && <div style={{ fontSize: 12, color: "#E63946", marginTop: 3 }}>⚠️ {p.note}</div>}
+                    {pCats && pCats.size > 0 && (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                        {[...pCats].map(cid => {
+                          const c = catById[cid];
+                          return c ? <span key={cid} style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: "#eff6ff", color: "#3A86FF", border: "1px solid #bfdbfe" }}>{c.name}</span> : null;
+                        })}
+                      </div>
+                    )}
                     {paired.has(p.id) && <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3, fontWeight: 600 }}>✓ Team assigned</div>}
                   </div>
                   {isAdmin && (
@@ -508,10 +723,12 @@ export default function App() {
                       {p.active && !paired.has(p.id) && unpaired.length >= 2 && (
                         <button onClick={() => openPartnerPicker(p.id)} style={{ ...btn("#3A86FF"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Choose Partner</button>
                       )}
+                      <button onClick={() => handleDeletePlayer(p.id)} style={{ ...btn("#dc2626"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Delete</button>
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
             {isAdmin && unpaired.length >= 2 && <div style={{ textAlign: "center", marginTop: 28 }}><button onClick={autoGen} style={{ ...btn("#2A9D8F"), padding: "14px 36px", fontSize: 16, borderRadius: 14 }}>🎲 Auto-Pair All Players</button></div>}
             {unpaired.length === 1 && <div style={{ textAlign: "center", marginTop: 16, padding: 14, background: "#fef3c7", borderRadius: 12, border: "1px solid #fde68a", color: "#92400e", fontSize: 14 }}>⚠️ Odd player out: <strong>{unpaired[0].name}</strong></div>}
@@ -560,20 +777,22 @@ export default function App() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
                   {teamsView.map((t, i) => (
                     <div key={t.id} style={{ background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e8ecf1", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden" }}>
-                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, background: `linear-gradient(90deg,${t.p1.color},${t.p2.color})` }} />
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, background: `linear-gradient(90deg,${t.p1.color},${t.p2?.color ?? t.p1.color})` }} />
                       {isAdmin && phase === "none" && (
                         <button onClick={() => removeTeam(t.id)} title="Remove team" style={{ position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: "50%", border: "none", background: "#fef2f2", color: "#dc2626", cursor: "pointer", fontSize: 16, fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
                       )}
-                      <div style={{ fontWeight: 800, fontSize: 12, color: "#3A86FF", marginBottom: 14, textTransform: "uppercase", letterSpacing: 2 }}>Team {i + 1}</div>
+                      <div style={{ fontWeight: 800, fontSize: 12, color: "#3A86FF", marginBottom: 14, textTransform: "uppercase", letterSpacing: 2 }}>{currentCategory?.team_size === 1 ? `Player ${i + 1}` : `Team ${i + 1}`}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
                         <Av name={t.p1.name} photo={t.p1.photo_url} sz={40} color={t.p1.color} />
                         <span style={{ fontWeight: 700, fontSize: 16 }}>{t.p1.name}</span>
                       </div>
-                      <div style={{ textAlign: "center", color: "#3A86FF", fontWeight: 900, fontSize: 14, margin: "4px 0", letterSpacing: 2 }}>&amp;</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
-                        <Av name={t.p2.name} photo={t.p2.photo_url} sz={40} color={t.p2.color} />
-                        <span style={{ fontWeight: 700, fontSize: 16 }}>{t.p2.name}</span>
-                      </div>
+                      {t.p2 && (<>
+                        <div style={{ textAlign: "center", color: "#3A86FF", fontWeight: 900, fontSize: 14, margin: "4px 0", letterSpacing: 2 }}>&amp;</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                          <Av name={t.p2.name} photo={t.p2.photo_url} sz={40} color={t.p2.color} />
+                          <span style={{ fontWeight: 700, fontSize: 16 }}>{t.p2.name}</span>
+                        </div>
+                      </>)}
                     </div>
                   ))}
                 </div>
@@ -622,7 +841,7 @@ export default function App() {
                         <tbody>{st.map((s, si) => (
                           <tr key={s.team.id} style={{ background: si < 2 ? "#f0fdf4" : "#f8fafc" }}>
                             <td style={{ padding: "10px 12px", fontWeight: 800, color: si < 2 ? "#16a34a" : "#94a3b8" }}>{si + 1}</td>
-                            <td style={{ padding: "10px 12px", fontWeight: 600 }}>{s.team.p1.name} & {s.team.p2.name}</td>
+                            <td style={{ padding: "10px 12px", fontWeight: 600 }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</td>
                             <td style={{ padding: "10px 12px", fontWeight: 700, color: "#16a34a" }}>{s.w}</td>
                             <td style={{ padding: "10px 12px", color: "#E63946" }}>{s.l}</td>
                             <td style={{ padding: "10px 12px" }}>{s.pf}</td>
@@ -634,7 +853,7 @@ export default function App() {
                       </table>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 12 }}>
-                      {ms.map(m => <MatchCard key={m.id} match={m} />)}
+                      {ms.map(m => <MatchCard key={m.id} match={m} matchMinutes={currentCategory?.match_minutes} />)}
                     </div>
                   </div>
                 </div>
@@ -654,7 +873,7 @@ export default function App() {
               <div style={{ textAlign: "center", padding: 32, background: "linear-gradient(135deg,#fef3c7,#fde68a,#fef3c7)", borderRadius: 20, border: "3px solid #f59e0b", marginBottom: 28 }}>
                 <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
                 <div style={{ fontWeight: 900, fontSize: 14, color: "#b45309", textTransform: "uppercase", letterSpacing: 3 }}>Champions</div>
-                <div style={{ fontWeight: 900, fontSize: 22, color: "#78350f", marginTop: 10 }}>{champion.p1.name} & {champion.p2.name}</div>
+                <div style={{ fontWeight: 900, fontSize: 22, color: "#78350f", marginTop: 10 }}>{champion.p2 ? `${champion.p1.name} & ${champion.p2.name}` : champion.p1.name}</div>
               </div>
             )}
             <div style={{ overflowX: "auto", paddingBottom: 20 }}>
@@ -665,7 +884,7 @@ export default function App() {
                       {rName(knockout.length, ri)}
                     </div>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", gap: 14, padding: "0 8px" }}>
-                      {round.map(m => <MatchCard key={m.id} match={m} editable={!m.is_bye} />)}
+                      {round.map(m => <MatchCard key={m.id} match={m} editable={!m.is_bye} matchMinutes={currentCategory?.match_minutes} />)}
                     </div>
                   </div>
                 ))}
@@ -717,7 +936,7 @@ export default function App() {
                     }).map((s, i) => (
                       <tr key={s.team.id} style={{ borderBottom: "1px solid #f1f5f9", background: champion && champion.id === s.team.id ? "#fefce8" : i % 2 === 0 ? "#fff" : "#f8fafc" }}>
                         <td style={{ padding: "12px 16px", fontWeight: 900, color: i === 0 && champion ? "#f59e0b" : "#3A86FF" }}>{i + 1}</td>
-                        <td style={{ padding: "12px 16px", fontWeight: 600 }}>{s.team.p1.name} & {s.team.p2.name}</td>
+                        <td style={{ padding: "12px 16px", fontWeight: 600 }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</td>
                         <td style={{ padding: "12px 16px", fontWeight: 700, color: "#16a34a" }}>{s.gw}</td>
                         <td style={{ padding: "12px 16px", color: "#E63946" }}>{s.gl}</td>
                         <td style={{ padding: "12px 16px" }}>{s.pf}</td>
@@ -762,6 +981,15 @@ export default function App() {
         );
       })()}
 
+      {pickingCourtFor && (
+        <CourtPicker
+          numCourts={numCourts}
+          busyCourts={new Set(Object.keys(liveByCourt).map(Number))}
+          onPick={c => startMatchOnCourt(pickingCourtFor, c)}
+          onCancel={() => setPickingCourtFor(null)}
+        />
+      )}
+
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         @keyframes pulse-strong {
@@ -779,6 +1007,13 @@ export default function App() {
           .hero-title { font-size: 36px !important; max-width: 100% !important; }
           .hero-pad { padding: 28px 18px 24px !important; }
         }
+        @media print {
+          body { background: #fff !important; color: #000 !important; }
+          header, nav, footer, button { display: none !important; }
+          main { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+          [data-print-hide] { display: none !important; }
+          * { background: #fff !important; color: #000 !important; box-shadow: none !important; border-color: #ccc !important; }
+        }
       `}</style>
 
       <footer style={{ textAlign: "center", padding: "32px 16px", color: "#475569", fontSize: 11, background: "#050d1a", borderTop: "1px solid #1a3050", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 600 }}>
@@ -791,24 +1026,40 @@ export default function App() {
 // =================================================================
 // Live tab — guest-friendly view of currently playing matches, upcoming, and stats
 // =================================================================
-function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings }: {
-  teamsView: (Team & { p1: Player; p2: Player })[];
+function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches }: {
+  teamsView: (Team & { p1: Player; p2: Player | null })[];
+  allTeamById: Record<string, (Team & { p1: Player; p2: Player | null }) | undefined>;
   matches: Match[];
   groupMatches: Match[];
   knockoutMatches: Match[];
   phase: "none" | "group" | "knockout";
-  groups: (Team & { p1: Player; p2: Player })[][];
-  getStandings: (g: (Team & { p1: Player; p2: Player })[], gi: number) => { team: Team & { p1: Player; p2: Player }; w: number; l: number; pts: number; pf: number; pa: number }[];
+  groups: (Team & { p1: Player; p2: Player | null })[][];
+  getStandings: (g: (Team & { p1: Player; p2: Player | null })[], gi: number) => { team: Team & { p1: Player; p2: Player | null }; w: number; l: number; pts: number; pf: number; pa: number }[];
+  categories: Category[];
+  numCourts: number;
+  liveByCourt: Record<number, ProjectedMatch | undefined>;
+  projectedById: Record<string, ProjectedMatch>;
+  projectedMatches: ProjectedMatch[];
 }) {
   const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
-  const tName = (id: string | null) => id ? `${teamById[id]?.p1.name ?? "?"} & ${teamById[id]?.p2.name ?? "?"}` : "TBD";
+  const catById = Object.fromEntries(categories.map(c => [c.id, c]));
+  const tName = (id: string | null) => {
+    if (!id) return "TBD";
+    const t = allTeamById[id];
+    if (!t?.p1) return "TBD";
+    return t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name;
+  };
 
-  const live = matches.filter(m => m.status === "live");
-  const upcoming = matches.filter(m => m.status === "pending" && !m.confirmed && m.team_a_id && m.team_b_id).slice(0, 5);
-  const recent = [...matches.filter(m => m.confirmed && !m.is_bye)].sort((a, b) => (b.started_at ?? "").localeCompare(a.started_at ?? "")).slice(0, 5);
+  // Cross-category live + upcoming + recent (uses projected scheduling)
+  const live = projectedMatches.filter(m => m.status === "live");
+  const upcoming = projectedMatches
+    .filter(m => m.status === "pending" && !m.confirmed && m.team_a_id && m.team_b_id && !m.is_bye)
+    .sort((a, b) => new Date(a.projected_start_at ?? 0).getTime() - new Date(b.projected_start_at ?? 0).getTime())
+    .slice(0, 5);
+  const recent = [...projectedMatches.filter(m => m.confirmed && !m.is_bye)].sort((a, b) => (b.confirmed_at ?? b.started_at ?? "").localeCompare(a.confirmed_at ?? a.started_at ?? "")).slice(0, 5);
 
   // Stats: top team by points, biggest +/-
-  const stats: Record<string, { team: Team & { p1: Player; p2: Player }; w: number; pts: number; pf: number; pa: number }> = {};
+  const stats: Record<string, { team: Team & { p1: Player; p2: Player | null }; w: number; pts: number; pf: number; pa: number }> = {};
   teamsView.forEach(t => { stats[t.id] = { team: t, w: 0, pts: 0, pf: 0, pa: 0 }; });
   groupMatches.filter(m => m.confirmed).forEach(m => {
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
@@ -859,6 +1110,25 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
   return (
     <div style={{ background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
 
+      {/* Court Status — at-a-glance "what's on each court" */}
+      <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} categories={categories} teamById={allTeamById} />
+
+      {/* Next Up banner — top 3 upcoming matches across all categories */}
+      {upcoming.length > 0 && live.length === 0 && upcoming.slice(0, 3).some(m => {
+        const start = m.projected_start_at ? new Date(m.projected_start_at).getTime() : 0;
+        return start - Date.now() < 5 * 60_000;
+      }) && (
+        <div style={{ background: "linear-gradient(90deg,#1a0c2a 0%,#0a1628 60%)", borderRadius: 10, padding: "12px 18px", marginBottom: 20, border: "1px solid #a855f7", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <span className="font-display" style={{ fontSize: 11, fontWeight: 800, color: "#a855f7", letterSpacing: 2 }}>▶ NEXT UP</span>
+          {upcoming.slice(0, 3).map((m, i) => (
+            <span key={m.id} style={{ fontSize: 12, color: i === 0 ? "#fff" : "#94a3b8", fontWeight: i === 0 ? 700 : 500 }}>
+              {catById[m.category_id]?.name?.toUpperCase() ?? ""} · {tName(m.team_a_id)} vs {tName(m.team_b_id)} · {fmtClock(m.projected_start_at)}
+              {i < 2 && i < upcoming.length - 1 && <span style={{ color: "#475569", marginLeft: 12 }}>•</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Featured tournament spotlight panel — full-width hero card with athlete photo */}
       <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
@@ -879,7 +1149,7 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
               ? `${live.length} match${live.length > 1 ? "es" : ""} in progress · scores update in real time`
               : phase === "none"
                 ? "Teams forming · matches will start soon"
-                : `${matchesPlayed} of ${totalMatches} matches completed${topTeam && topTeam.pts > 0 ? ` · ${topTeam.team.p1.name} & ${topTeam.team.p2.name} leading` : ""}`}
+                : `${matchesPlayed} of ${totalMatches} matches completed${topTeam && topTeam.pts > 0 ? ` · ${topTeam.team.p2 ? `${topTeam.team.p1.name} & ${topTeam.team.p2.name}` : topTeam.team.p1.name} leading` : ""}`}
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -954,8 +1224,8 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
               </span>
             ) as any : undefined}
           />
-          {topTeam && topTeam.pts > 0 && <StatTile label="Top Team" value={`${topTeam.team.p1.name} & ${topTeam.team.p2.name}`} sub={`${topTeam.pts} PTS · ${topTeam.w} W`} color="#f59e0b" />}
-          {bestDiff && (bestDiff.pf - bestDiff.pa) !== 0 && <StatTile label="Best Diff" value={<><span style={{ color: bestDiff.pf - bestDiff.pa > 0 ? "#22c55e" : "#ef4444" }}>{bestDiff.pf - bestDiff.pa > 0 ? "+" : ""}{bestDiff.pf - bestDiff.pa}</span></>} sub={`${bestDiff.team.p1.name} & ${bestDiff.team.p2.name}`} color="#a855f7" />}
+          {topTeam && topTeam.pts > 0 && <StatTile label="Top Team" value={topTeam.team.p2 ? `${topTeam.team.p1.name} & ${topTeam.team.p2.name}` : topTeam.team.p1.name} sub={`${topTeam.pts} PTS · ${topTeam.w} W`} color="#f59e0b" />}
+          {bestDiff && (bestDiff.pf - bestDiff.pa) !== 0 && <StatTile label="Best Diff" value={<><span style={{ color: bestDiff.pf - bestDiff.pa > 0 ? "#22c55e" : "#ef4444" }}>{bestDiff.pf - bestDiff.pa > 0 ? "+" : ""}{bestDiff.pf - bestDiff.pa}</span></>} sub={bestDiff.team.p2 ? `${bestDiff.team.p1.name} & ${bestDiff.team.p2.name}` : bestDiff.team.p1.name} color="#a855f7" />}
         </div>
         {totalMatches > 0 && (
           <div style={{ marginTop: 14, height: 4, background: "#0f1e36", borderRadius: 2, overflow: "hidden", border: "1px solid #1a3050" }}>
@@ -1029,7 +1299,7 @@ function LiveTab({ teamsView, matches, groupMatches, phase, groups, getStandings
                       <div key={s.team.id} style={{ display: "flex", alignItems: "center", padding: "10px 14px", borderTop: si === 0 ? "none" : "1px solid #1a3050", background: si < 2 ? "rgba(34,197,94,0.04)" : "transparent", position: "relative" }}>
                         {si < 2 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2, background: "#22c55e" }} />}
                         <div className="font-display" style={{ width: 24, fontSize: 14, fontWeight: 700, color: si === 0 ? "#fbbf24" : si === 1 ? "#22c55e" : "#475569" }}>{si + 1}</div>
-                        <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#cbd5e1" }}>{s.team.p1.name} & {s.team.p2.name}</div>
+                        <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#cbd5e1" }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</div>
                         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                           <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{s.w}-{s.l}</span>
                           <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: s.pf - s.pa > 0 ? "#22c55e" : s.pf - s.pa < 0 ? "#ef4444" : "#64748b", minWidth: 30, textAlign: "right" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</span>
