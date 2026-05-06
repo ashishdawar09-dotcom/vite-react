@@ -156,15 +156,15 @@ export async function setPlayerCategories(player_id: string, category_ids: strin
   const desired = new Set(category_ids);
   const toRemove = [...current].filter(id => !desired.has(id));
   const toAdd = [...desired].filter(id => !current.has(id));
-  const ops: Promise<any>[] = [];
   if (toRemove.length > 0) {
-    ops.push(supabase.from("player_categories").delete().eq("player_id", player_id).in("category_id", toRemove).then(({ error }) => { if (error) throw error; }));
+    const { error } = await supabase.from("player_categories").delete().eq("player_id", player_id).in("category_id", toRemove);
+    if (error) throw error;
   }
   if (toAdd.length > 0) {
     const rows = toAdd.map(category_id => ({ player_id, category_id }));
-    ops.push(supabase.from("player_categories").upsert(rows, { onConflict: "player_id,category_id" }).then(({ error }) => { if (error) throw error; }));
+    const { error } = await supabase.from("player_categories").upsert(rows, { onConflict: "player_id,category_id" });
+    if (error) throw error;
   }
-  await Promise.all(ops);
 }
 
 export async function addPlayerToCategory(player_id: string, category_id: string) {
