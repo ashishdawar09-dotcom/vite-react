@@ -12,6 +12,7 @@ import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { toast } from "./components/Toast";
+import { AdminManager } from "./components/AdminManager";
 import type { Match, Player, Team, Tournament } from "./types";
 
 const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
@@ -67,6 +68,7 @@ export default function App() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [showAdminManager, setShowAdminManager] = useState(false);
   const [tab, setTab] = useState<"live" | "matches" | "register" | "profiles" | "teams" | "groups" | "knockout" | "scoreboard" | "categories">("live");
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -634,6 +636,7 @@ export default function App() {
             {isAdmin ? (
               <>
                 <span style={{ fontSize: 11, color: "#00d4ff", background: "rgba(0,184,255,0.1)", padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(0,184,255,0.3)", fontWeight: 600, letterSpacing: 0.5 }}>● {email}</span>
+                <button onClick={() => setShowAdminManager(true)} title="Manage admins" style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>👥 ADMINS</button>
                 <button onClick={signOut} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>SIGN OUT</button>
               </>
             ) : (
@@ -1076,6 +1079,7 @@ export default function App() {
       </main>
 
       {showLogin && <Login onClose={() => setShowLogin(false)} />}
+      {showAdminManager && isAdmin && <AdminManager currentEmail={email} onClose={() => setShowAdminManager(false)} />}
 
       {partnerPicker && (() => {
         const me = playerById[partnerPicker];

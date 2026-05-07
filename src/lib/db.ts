@@ -409,6 +409,69 @@ export async function liveSnapshot(tournament_id: string): Promise<LiveSnapshot 
   return data as LiveSnapshot;
 }
 
+// TOURNAMENT ADMINS ------------------------------------------------------------
+
+export type TournamentAdmin = {
+  id: string;
+  email: string;
+  added_at: string;
+};
+
+export async function listTournamentAdmins(): Promise<TournamentAdmin[]> {
+  const { data, error } = await supabase
+    .from("tournament_admins")
+    .select("id, email, added_at")
+    .order("added_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as TournamentAdmin[];
+}
+
+export async function addTournamentAdmin(email: string): Promise<void> {
+  const clean = email.trim().toLowerCase();
+  if (!clean || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+    throw new Error("Enter a valid email address");
+  }
+  const { error } = await supabase
+    .from("tournament_admins")
+    .insert({ email: clean });
+  if (error) {
+    if (error.code === "23505" || /duplicate/i.test(error.message ?? "")) {
+      throw new Error("That email is already an admin");
+    }
+    throw error;
+  }
+}
+
+export async function removeTournamentAdmin(email: string): Promise<void> {
+  const { error } = await supabase
+    .from("tournament_admins")
+    .delete()
+    .eq("email", email.toLowerCase());
+  if (error) throw error;
+}
+
+/**
+ * Check whether the given email is currently an admin. Returns false if
+ * email is null/empty or the row is not visible (RLS may hide it for
+ * non-admin users; this is fine — the lookup-self policy still lets a
+ * user see their own row).
+ */
+export async function isEmailAdmin(email: string | null): Promise<boolean> {
+  if (!email) return false;
+  const { data, error } = await supabase
+    .from("tournament_admins")
+    .select("email")
+    .eq("email", email.toLowerCase())
+    .maybeSingle();
+  if (error) {
+    // If the table doesn't exist yet (pre-v6), treat as not-admin so we
+    // don't break the app during migrations.
+    if (/relation .* does not exist/i.test(error.message ?? "")) return false;
+    throw error;
+  }
+  return !!data;
+}
+
 // AUDIT LOG --------------------------------------------------------------------
 
 export type MatchAuditEntry = {
