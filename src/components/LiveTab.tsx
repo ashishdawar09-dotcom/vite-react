@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { CourtStatus } from "./CourtStatus";
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
+import { useIsMobile } from "../hooks/useIsMobile";
 import type { Category, Match, Player, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -21,6 +22,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   projectedById: Record<string, ProjectedMatch>;
   projectedMatches: ProjectedMatch[];
 }) {
+  const isMobile = useIsMobile();
   const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
   const catById = Object.fromEntries(categories.map(c => [c.id, c]));
   const tName = (id: string | null) => {
@@ -201,7 +203,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       {live.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite", boxShadow: "0 0 6px #ef4444" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
             {live.map(m => {
               const ta = m.team_a_id ? teamById[m.team_a_id] : null;
               const tb = m.team_b_id ? teamById[m.team_b_id] : null;
@@ -216,17 +218,17 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                       <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite" }} />LIVE
                     </span>
                   </div>
-                  <div style={{ padding: "16px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
-                      {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={38} color={ta.p1.color} />}
-                      <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#fff" : "#cbd5e1" }}>{tName(m.team_a_id)}</span>
-                      <div className="font-display" style={{ minWidth: 70, padding: "8px 16px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: 32, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sa}</div>
+                  <div style={{ padding: isMobile ? "12px 14px" : "16px 18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, padding: "8px 0" }}>
+                      {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={isMobile ? 32 : 38} color={ta.p1.color} />}
+                      <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#fff" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tName(m.team_a_id)}</span>
+                      <div className="font-display" style={{ minWidth: isMobile ? 56 : 70, padding: isMobile ? "6px 10px" : "8px 16px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: isMobile ? 26 : 32, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sa}</div>
                     </div>
                     <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#1a3050,transparent)", margin: "2px 0" }} />
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
-                      {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={38} color={tb.p1.color} />}
-                      <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#fff" : "#cbd5e1" }}>{tName(m.team_b_id)}</span>
-                      <div className="font-display" style={{ minWidth: 70, padding: "8px 16px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: 32, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sb}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, padding: "8px 0" }}>
+                      {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={isMobile ? 32 : 38} color={tb.p1.color} />}
+                      <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#fff" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tName(m.team_b_id)}</span>
+                      <div className="font-display" style={{ minWidth: isMobile ? 56 : 70, padding: isMobile ? "6px 10px" : "8px 16px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: isMobile ? 26 : 32, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sb}</div>
                     </div>
                   </div>
                 </div>
@@ -266,7 +268,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(360px,1fr))", gap: 20, marginBottom: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(360px,1fr))", gap: 20, marginBottom: 32 }}>
         {upcoming.length > 0 && (
           <div>
             <SectionHeader accent="#00d4ff">Upcoming</SectionHeader>
@@ -304,7 +306,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       {phase !== "none" && groups.length > 0 && (
         <div>
           <SectionHeader accent="#a855f7">Standings</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
             {groups.map((g, gi) => {
               const st = getStandings(g, gi);
               const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];

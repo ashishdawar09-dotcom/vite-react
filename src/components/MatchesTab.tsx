@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import * as db from "../lib/db";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
+import { MatchHistoryModal } from "./MatchHistoryModal";
 import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
+import { useIsMobile } from "../hooks/useIsMobile";
 import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -32,7 +34,9 @@ export function MatchesTab({
   const [reassigningCourtFor, setReassigningCourtFor] = useState<ProjectedMatch | null>(null);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [timeOverPicking, setTimeOverPicking] = useState<{ matchId: string; action: "walkover" | "winner" } | null>(null);
+  const [historyFor, setHistoryFor] = useState<ProjectedMatch | null>(null);
   const [now, setNow] = useState(Date.now());
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 15_000);
@@ -266,17 +270,17 @@ export function MatchesTab({
             const pickingTeamForThis = timeOverPicking && timeOverPicking.matchId === m.id;
 
             return (
-              <div key={m.id} style={{ background: isLive ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)") : "#0f1e36", border: isLive ? (timeOver ? "1px solid #f59e0b" : "1px solid #ef4444") : "1px solid #1a3050", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", position: "relative" }}>
+              <div key={m.id} style={{ background: isLive ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)") : "#0f1e36", border: isLive ? (timeOver ? "1px solid #f59e0b" : "1px solid #ef4444") : "1px solid #1a3050", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
                 {isLive && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: timeOver ? "#f59e0b" : "#ef4444" }} />}
                 {/* Category + stage */}
-                <div style={{ minWidth: 130 }}>
+                <div style={{ minWidth: isMobile ? 0 : 130 }}>
                   <div className="font-display" style={{ fontSize: 11, color: "#00d4ff", fontWeight: 700, letterSpacing: 1.2 }}>{cat?.name?.toUpperCase() ?? "—"}</div>
                   <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1, marginTop: 2 }}>{stageLabel(m)}</div>
                   {timeOver && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", marginTop: 4, letterSpacing: 1.2 }}>⏰ TIME OVER</div>}
                 </div>
 
                 {/* Teams */}
-                <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ flex: 1, minWidth: isMobile ? 160 : 220 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winA ? 800 : 600, color: winA ? "#22c55e" : "#fff" }}>
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(ta)}</span>
                     {(isLive || isCompleted) && (
@@ -293,7 +297,7 @@ export function MatchesTab({
                 </div>
 
                 {/* Time / court / status */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, minWidth: 130 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, minWidth: isMobile ? 0 : 130 }}>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     {m.court_number != null && (
                       isAdmin && isLive ? (
@@ -311,6 +315,7 @@ export function MatchesTab({
                 {/* Admin actions */}
                 {isAdmin && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
+                    <button onClick={() => setHistoryFor(m)} className="font-display" style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="View change history">📜 LOG</button>
                     {m.status === "pending" && !m.is_bye && m.team_a_id && m.team_b_id && (
                       <>
                         <button onClick={() => setPickingCourtFor(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</button>
@@ -370,6 +375,15 @@ export function MatchesTab({
           warning={null}
           onPick={c => handleReassignCourt(reassigningCourtFor, c)}
           onCancel={() => setReassigningCourtFor(null)}
+        />
+      )}
+
+      {historyFor && (
+        <MatchHistoryModal
+          match={historyFor}
+          teamAName={tName(historyFor.team_a_id ? teamById[historyFor.team_a_id] : null)}
+          teamBName={tName(historyFor.team_b_id ? teamById[historyFor.team_b_id] : null)}
+          onClose={() => setHistoryFor(null)}
         />
       )}
     </div>
