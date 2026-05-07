@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as db from "../lib/db";
 import { CategoryEditor } from "./CategoryEditor";
+import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
 import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
 
@@ -29,7 +30,7 @@ export function CategoriesTab({
     if (n < 1 || n > 12) return;
     setBusy(true);
     try { await db.setNumCourts(tournament.id, n); }
-    catch (e: any) { alert(e?.message ?? "Failed"); }
+    catch (e: any) { toast(e?.message ?? "Failed", "error"); }
     finally { setBusy(false); }
   };
 

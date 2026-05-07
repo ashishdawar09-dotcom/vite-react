@@ -149,21 +149,33 @@ export async function listPlayerCategories(tournament_id: string): Promise<Playe
 }
 
 export async function setPlayerCategories(player_id: string, category_ids: string[]) {
-  const { data: existing, error: fetchErr } = await supabase
-    .from("player_categories").select("category_id").eq("player_id", player_id);
-  if (fetchErr) throw fetchErr;
-  const current = new Set((existing ?? []).map((r: any) => r.category_id));
-  const desired = new Set(category_ids);
-  const toRemove = [...current].filter(id => !desired.has(id));
-  const toAdd = [...desired].filter(id => !current.has(id));
-  if (toRemove.length > 0) {
-    const { error } = await supabase.from("player_categories").delete().eq("player_id", player_id).in("category_id", toRemove);
-    if (error) throw error;
-  }
-  if (toAdd.length > 0) {
-    const rows = toAdd.map(category_id => ({ player_id, category_id }));
-    const { error } = await supabase.from("player_categories").upsert(rows, { onConflict: "player_id,category_id" });
-    if (error) throw error;
+  // Atomic RPC: delete-stale + insert-new in one transaction (schema_v6).
+  const { error } = await supabase.rpc("set_player_categories", {
+    p_player_id: player_id,
+    p_category_ids: category_ids,
+  });
+  if (error) {
+    // Fallback for environments where RPC isn't deployed yet.
+    if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+      const { data: existing, error: fetchErr } = await supabase
+        .from("player_categories").select("category_id").eq("player_id", player_id);
+      if (fetchErr) throw fetchErr;
+      const current = new Set((existing ?? []).map((r: any) => r.category_id));
+      const desired = new Set(category_ids);
+      const toRemove = [...current].filter(id => !desired.has(id));
+      const toAdd = [...desired].filter(id => !current.has(id));
+      if (toRemove.length > 0) {
+        const { error: e1 } = await supabase.from("player_categories").delete().eq("player_id", player_id).in("category_id", toRemove);
+        if (e1) throw e1;
+      }
+      if (toAdd.length > 0) {
+        const rows = toAdd.map(category_id => ({ player_id, category_id }));
+        const { error: e2 } = await supabase.from("player_categories").upsert(rows, { onConflict: "player_id,category_id" });
+        if (e2) throw e2;
+      }
+      return;
+    }
+    throw error;
   }
 }
 
@@ -228,12 +240,30 @@ export async function deleteMatchesForCategory(category_id: string) {
   if (error) throw error;
 }
 
-export async function startMatchOnCourt(id: string, court_number: number) {
-  const { error } = await supabase
-    .from("matches")
-    .update({ status: "live", started_at: new Date().toISOString(), court_number })
-    .eq("id", id);
-  if (error) throw error;
+/**
+ * Atomically start a match on a court. Uses an RPC that locks the court row
+ * before checking occupancy, so two admins can't double-book.
+ * Returns true on success, false if court is already occupied (caller should
+ * show a toast / pick another court).
+ */
+export async function startMatchOnCourt(id: string, court_number: number): Promise<boolean> {
+  const { data, error } = await supabase.rpc("start_match_on_court", {
+    p_match_id: id,
+    p_court: court_number,
+  });
+  if (error) {
+    if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+      // Fallback to legacy non-atomic update if RPC not deployed.
+      const { error: e } = await supabase
+        .from("matches")
+        .update({ status: "live", started_at: new Date().toISOString(), court_number })
+        .eq("id", id);
+      if (e) throw e;
+      return true;
+    }
+    throw error;
+  }
+  return data === true;
 }
 
 export async function setMatchScheduledAt(id: string, scheduled_at: string | null) {
@@ -247,12 +277,22 @@ export async function setMatchQueuePosition(id: string, queue_position: number) 
 }
 
 export async function swapMatchQueuePositions(id1: string, pos1: number, id2: string, pos2: number) {
-  const [r1, r2] = await Promise.all([
-    supabase.from("matches").update({ queue_position: pos2 }).eq("id", id1),
-    supabase.from("matches").update({ queue_position: pos1 }).eq("id", id2),
-  ]);
-  if (r1.error) throw r1.error;
-  if (r2.error) throw r2.error;
+  // Atomic via RPC. Falls back to non-atomic dual update if RPC missing.
+  const { error } = await supabase.rpc("swap_match_queue_positions", {
+    p_id1: id1, p_pos1: pos1, p_id2: id2, p_pos2: pos2,
+  });
+  if (error) {
+    if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+      const [r1, r2] = await Promise.all([
+        supabase.from("matches").update({ queue_position: pos2 }).eq("id", id1),
+        supabase.from("matches").update({ queue_position: pos1 }).eq("id", id2),
+      ]);
+      if (r1.error) throw r1.error;
+      if (r2.error) throw r2.error;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function reassignCourt(id: string, court_number: number) {
@@ -261,10 +301,22 @@ export async function reassignCourt(id: string, court_number: number) {
 }
 
 export async function extendMatch(id: string, extraMinutes: number) {
-  const { data } = await supabase.from("matches").select("extended_minutes").eq("id", id).single();
-  const current = (data as any)?.extended_minutes ?? 0;
-  const { error } = await supabase.from("matches").update({ extended_minutes: current + extraMinutes }).eq("id", id);
-  if (error) throw error;
+  // Atomic increment via RPC — eliminates lost-update race when two admins
+  // tap "+5 min" concurrently. Falls back to read-modify-write if RPC missing.
+  const { error } = await supabase.rpc("extend_match", {
+    p_match_id: id,
+    p_extra_minutes: extraMinutes,
+  });
+  if (error) {
+    if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+      const { data } = await supabase.from("matches").select("extended_minutes").eq("id", id).single();
+      const current = (data as any)?.extended_minutes ?? 0;
+      const { error: e } = await supabase.from("matches").update({ extended_minutes: current + extraMinutes }).eq("id", id);
+      if (e) throw e;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function selectMatchWinner(id: string, winner_id: string) {
@@ -330,4 +382,57 @@ export async function deleteTeamsForTournament(tournament_id: string) {
 export async function deleteMatchesForTournament(tournament_id: string) {
   const { error } = await supabase.from("matches").delete().eq("tournament_id", tournament_id);
   if (error) throw error;
+}
+
+// LIVE SNAPSHOT (single round-trip for spectators) -----------------------------
+
+export type LiveSnapshot = {
+  tournament: any;
+  players: Player[];
+  teams: any[];
+  matches: Match[];
+  categories: Category[];
+  player_categories: PlayerCategory[];
+  generated_at: number;
+};
+
+export async function liveSnapshot(tournament_id: string): Promise<LiveSnapshot | null> {
+  const { data, error } = await supabase.rpc("live_snapshot", { p_tournament_id: tournament_id });
+  if (error) {
+    // Falls back to multi-fetch path if RPC not deployed; caller will use the
+    // legacy loadAll() in useTournamentData.
+    if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+      return null;
+    }
+    throw error;
+  }
+  return data as LiveSnapshot;
+}
+
+// AUDIT LOG --------------------------------------------------------------------
+
+export type MatchAuditEntry = {
+  id: number;
+  match_id: string;
+  tournament_id: string | null;
+  changed_at: string;
+  changed_by: string | null;
+  action: "insert" | "update" | "delete";
+  before_data: any | null;
+  after_data: any | null;
+  changed_fields: string[] | null;
+};
+
+export async function listMatchAudit(match_id: string, limit = 50): Promise<MatchAuditEntry[]> {
+  const { data, error } = await supabase
+    .from("match_audit_log")
+    .select("*")
+    .eq("match_id", match_id)
+    .order("changed_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (/relation .* does not exist/i.test(error.message ?? "")) return [];
+    throw error;
+  }
+  return (data ?? []) as MatchAuditEntry[];
 }

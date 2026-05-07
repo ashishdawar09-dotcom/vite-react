@@ -1,6 +1,7 @@
+import React from "react";
 import type { Category } from "../types";
 
-export function CategoryFilter({
+export const CategoryFilter = React.memo(function CategoryFilter({
   categories,
   currentCategoryId,
   onSelect,
@@ -36,4 +37,4 @@ export function CategoryFilter({
       ))}
     </div>
   );
-}
+});

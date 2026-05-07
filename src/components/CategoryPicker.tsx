@@ -1,6 +1,7 @@
+import React from "react";
 import type { Category } from "../types";
 
-export function CategoryPicker({
+export const CategoryPicker = React.memo(function CategoryPicker({
   categories,
   currentId,
   onSelect,
@@ -28,4 +29,4 @@ export function CategoryPicker({
       </select>
     </div>
   );
-}
+});

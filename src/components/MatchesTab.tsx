@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as db from "../lib/db";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
+import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
 import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
 
@@ -34,7 +35,7 @@ export function MatchesTab({
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
   }, []);
 
@@ -119,11 +120,15 @@ export function MatchesTab({
     }
 
     try {
-      await db.startMatchOnCourt(m.id, court);
+      const ok = await db.startMatchOnCourt(m.id, court);
+      if (!ok) {
+        toast(`Court ${court} is already in use — pick another court.`, "warn");
+        return;
+      }
       setPickingCourtFor(null);
       setConflictWarning(null);
     } catch (e: any) {
-      alert(e?.message ?? "Failed to start match");
+      toast(e?.message ?? "Failed to start match", "error");
     }
   };
 
@@ -136,8 +141,8 @@ export function MatchesTab({
 
   const confirmMatch = async (m: ProjectedMatch) => {
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (sa === 0 && sb === 0) { alert("Enter a score before confirming"); return; }
-    if (sa === sb) { alert("No ties allowed"); return; }
+    if (sa === 0 && sb === 0) { toast("Enter a score before confirming", "warn"); return; }
+    if (sa === sb) { toast("No ties allowed", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
     propagateKnockout(m, winner_id);

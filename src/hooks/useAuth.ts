@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabase, ADMIN_EMAIL } from "../lib/supabase";
+import { supabase, ADMIN_EMAILS } from "../lib/supabase";
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -16,7 +16,7 @@ export function useAuth() {
   }, []);
 
   const email = session?.user?.email?.toLowerCase() ?? null;
-  const isAdmin = !!email && email === ADMIN_EMAIL;
+  const isAdmin = !!email && ADMIN_EMAILS.includes(email);
 
   return { session, loading, email, isAdmin };
 }

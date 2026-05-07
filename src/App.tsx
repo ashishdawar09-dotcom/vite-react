@@ -1,34 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { useTournamentData } from "./hooks/useTournamentData";
-import { useScheduling, fmtClock } from "./hooks/useScheduling";
+import { useScheduling } from "./hooks/useScheduling";
 import * as db from "./lib/db";
 import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
 import { TournamentPicker } from "./components/TournamentPicker";
 import { CategoryPicker } from "./components/CategoryPicker";
 import { CategoryFilter } from "./components/CategoryFilter";
-import { CategoriesTab } from "./components/CategoriesTab";
-import { MatchesTab } from "./components/MatchesTab";
+import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
-import { CourtStatus } from "./components/CourtStatus";
+import { ShuttleSVG, Av } from "./components/ui";
+import { toast } from "./components/Toast";
 import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "./types";
 
-const ShuttleSVG = ({ sz = 40, color = "#fff", opacity = 0.12, style = {} as React.CSSProperties }) => (
-  <svg width={sz} height={sz} viewBox="0 0 100 100" style={{ opacity, ...style }}>
-    <ellipse cx="50" cy="75" rx="12" ry="12" fill={color} />
-    <path d="M38 72 Q30 40 25 10 L35 15 Q40 45 42 70Z" fill={color} opacity="0.7" />
-    <path d="M44 68 Q42 35 44 5 L50 10 Q50 40 48 66Z" fill={color} opacity="0.8" />
-    <path d="M52 66 Q55 35 56 5 L50 10 Q52 40 52 66Z" fill={color} opacity="0.8" />
-    <path d="M56 68 Q60 40 65 15 L75 10 Q70 40 62 70Z" fill={color} opacity="0.7" />
-  </svg>
-);
-
-function Av({ name, photo, sz = 40, color }: { name: string; photo?: string | null; sz?: number; color?: string }) {
-  if (photo) return <img src={photo} alt={name} style={{ width: sz, height: sz, borderRadius: "50%", objectFit: "cover", border: `2px solid ${color || "#457B9D"}` }} />;
-  const ini = name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
-  return <div style={{ width: sz, height: sz, borderRadius: "50%", background: `linear-gradient(135deg, ${color || "#457B9D"}, ${color || "#457B9D"}dd)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: sz * 0.38, flexShrink: 0, boxShadow: `0 2px 8px ${color || "#457B9D"}44` }}>{ini}</div>;
-}
+const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
+const CategoriesTab = React.lazy(() => import("./components/CategoriesTab").then(m => ({ default: m.CategoriesTab })));
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
 
@@ -73,7 +60,7 @@ export default function App() {
   }, []);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
-  const { players, teams, matches, categories, playerCategories } = useTournamentData(currentId);
+  const { players, teams, matches, categories, playerCategories } = useTournamentData(currentId, isAdmin);
 
   // Default to "All" (null). Only auto-select first category if none exists yet and we need one for team operations.
   useEffect(() => {
@@ -179,14 +166,14 @@ export default function App() {
   const toggleActive = async (id: string) => {
     if (!guard()) return;
     const p = playerById[id]; if (!p) return;
-    if (p.active && isPlayerInLiveMatch(id)) { alert(`"${p.name}" is in a live match and cannot be deactivated right now.`); return; }
+    if (p.active && isPlayerInLiveMatch(id)) { toast(`"${p.name}" is in a live match and cannot be deactivated right now.`, "warn"); return; }
     await db.updatePlayer(id, { active: !p.active });
     if (p.active) await db.deleteTeamsContainingPlayer(id);
   };
   const handleDeletePlayer = async (id: string) => {
     if (!guard()) return;
     const p = playerById[id]; if (!p) return;
-    if (isPlayerInLiveMatch(id)) { alert(`"${p.name}" is in a live match and cannot be deleted right now.`); return; }
+    if (isPlayerInLiveMatch(id)) { toast(`"${p.name}" is in a live match and cannot be deleted right now.`, "warn"); return; }
     const teamCount = teams.filter(t => t.p1_id === id || t.p2_id === id).length;
     const msg = teamCount > 0
       ? `Delete "${p.name}"? This will remove them from ${teamCount} team(s) and affect related matches. Cannot be undone.`
@@ -202,7 +189,7 @@ export default function App() {
   };
   const openPartnerPicker = (pid: string) => {
     if (!guard()) return;
-    if (!currentCategoryId || !currentCategory) { alert("Select a specific category first (not 'All') to pair teams."); return; }
+    if (!currentCategoryId || !currentCategory) { toast("Select a specific category first (not 'All') to pair teams.", "warn"); return; }
     if (currentCategory.team_size === 1) {
       // For singles, just create a 1-player team
       void createSoloTeam(pid);
@@ -372,7 +359,11 @@ export default function App() {
     if (conflicts.length) {
       if (!confirm(`Player conflict — ${conflicts.join(", ")}.\n\nStart anyway?`)) return;
     }
-    await db.startMatchOnCourt(m.id, court);
+    const ok = await db.startMatchOnCourt(m.id, court);
+    if (!ok) {
+      toast(`Court ${court} is already in use — pick another court.`, "warn");
+      return;
+    }
     setPickingCourtFor(null);
   };
   const removeTeam = async (id: string) => { if (!guard()) return; if (!confirm("Remove this team?")) return; await db.deleteTeam(id); };
@@ -411,8 +402,8 @@ export default function App() {
   const confirmInline = async (m: Match) => {
     if (!guard()) return;
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (sa === 0 && sb === 0) { alert("Enter a score before confirming."); return; }
-    if (sa === sb) { alert("No ties allowed — set a winner."); return; }
+    if (sa === 0 && sb === 0) { toast("Enter a score before confirming.", "warn"); return; }
+    if (sa === sb) { toast("No ties allowed — set a winner.", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
     await propagateWinner(m, winner_id);
@@ -421,7 +412,7 @@ export default function App() {
   const saveEditedMatch = async (m: Match) => {
     if (!guard()) return;
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (sa === sb) { alert("No ties allowed."); return; }
+    if (sa === sb) { toast("No ties allowed.", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
     await propagateWinner(m, winner_id);
@@ -450,7 +441,7 @@ export default function App() {
     const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
     useEffect(() => {
       if (m.status !== "live") return;
-      const id = setInterval(() => setCardNow(Date.now()), 1000);
+      const id = setInterval(() => setCardNow(Date.now()), 15_000);
       return () => clearInterval(id);
     }, [m.status]);
     const totalMin = (matchMinutes ?? 12) + (m.extended_minutes ?? 0);
@@ -669,27 +660,31 @@ export default function App() {
         {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} />}
 
         {current && tab === "matches" && (
-          <MatchesTab
-            tournament={current}
-            categories={categories}
-            matches={projectedMatches}
-            teamById={allTeamById}
-            playerById={playerById}
-            liveByCourt={liveByCourt}
-            isAdmin={isAdmin}
-          />
+          <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading...</div>}>
+            <MatchesTab
+              tournament={current}
+              categories={categories}
+              matches={projectedMatches}
+              teamById={allTeamById}
+              playerById={playerById}
+              liveByCourt={liveByCourt}
+              isAdmin={isAdmin}
+            />
+          </Suspense>
         )}
 
         {current && tab === "categories" && isAdmin && (
-          <CategoriesTab
-            tournament={current}
-            categories={categories}
-            teams={teams}
-            matches={matches}
-            players={players}
-            playerCategories={playerCategories}
-            isAdmin={isAdmin}
-          />
+          <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading...</div>}>
+            <CategoriesTab
+              tournament={current}
+              categories={categories}
+              teams={teams}
+              matches={matches}
+              players={players}
+              playerCategories={playerCategories}
+              isAdmin={isAdmin}
+            />
+          </Suspense>
         )}
 
         {current && tab === "register" && (() => {
@@ -1101,310 +1096,4 @@ export default function App() {
     </div>
   );
 }
-
-// =================================================================
-// Live tab — guest-friendly view of currently playing matches, upcoming, and stats
-// =================================================================
-function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches }: {
-  teamsView: (Team & { p1: Player; p2: Player | null })[];
-  allTeamById: Record<string, (Team & { p1: Player; p2: Player | null }) | undefined>;
-  matches: Match[];
-  groupMatches: Match[];
-  knockoutMatches: Match[];
-  phase: "none" | "group" | "knockout";
-  groups: (Team & { p1: Player; p2: Player | null })[][];
-  getStandings: (g: (Team & { p1: Player; p2: Player | null })[], gi: number) => { team: Team & { p1: Player; p2: Player | null }; w: number; l: number; pts: number; pf: number; pa: number }[];
-  categories: Category[];
-  numCourts: number;
-  liveByCourt: Record<number, ProjectedMatch | undefined>;
-  projectedById: Record<string, ProjectedMatch>;
-  projectedMatches: ProjectedMatch[];
-}) {
-  const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
-  const catById = Object.fromEntries(categories.map(c => [c.id, c]));
-  const tName = (id: string | null) => {
-    if (!id) return "TBD";
-    const t = allTeamById[id];
-    if (!t?.p1) return "TBD";
-    return t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name;
-  };
-
-  // Cross-category live + upcoming + recent (uses projected scheduling)
-  const live = projectedMatches.filter(m => m.status === "live");
-  const upcoming = projectedMatches
-    .filter(m => m.status === "pending" && !m.confirmed && m.team_a_id && m.team_b_id && !m.is_bye)
-    .sort((a, b) => new Date(a.projected_start_at ?? 0).getTime() - new Date(b.projected_start_at ?? 0).getTime())
-    .slice(0, 5);
-  const recent = [...projectedMatches.filter(m => m.confirmed && !m.is_bye)].sort((a, b) => (b.confirmed_at ?? b.started_at ?? "").localeCompare(a.confirmed_at ?? a.started_at ?? "")).slice(0, 5);
-
-  // Stats: top team by points, biggest +/-
-  const stats: Record<string, { team: Team & { p1: Player; p2: Player | null }; w: number; pts: number; pf: number; pa: number }> = {};
-  teamsView.forEach(t => { stats[t.id] = { team: t, w: 0, pts: 0, pf: 0, pa: 0 }; });
-  groupMatches.filter(m => m.confirmed).forEach(m => {
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (m.team_a_id && stats[m.team_a_id]) { stats[m.team_a_id].pf += sa; stats[m.team_a_id].pa += sb; }
-    if (m.team_b_id && stats[m.team_b_id]) { stats[m.team_b_id].pf += sb; stats[m.team_b_id].pa += sa; }
-    if (m.winner_id && stats[m.winner_id]) { stats[m.winner_id].w++; stats[m.winner_id].pts += 3; }
-  });
-  const ranked = Object.values(stats).sort((a, b) => b.pts - a.pts || (b.pf - b.pa) - (a.pf - a.pa));
-  const topTeam = ranked[0];
-  const bestDiff = [...ranked].sort((a, b) => (b.pf - b.pa) - (a.pf - a.pa))[0];
-
-  const matchesPlayed = matches.filter(m => m.confirmed).length;
-  const totalMatches = matches.filter(m => m.team_a_id && m.team_b_id && !m.is_bye).length;
-
-  if (teamsView.length === 0) {
-    return (
-      <div style={{ position: "relative", background: "#0a1628", borderRadius: 14, padding: 80, color: "#64748b", textAlign: "center", border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.6) 0%, rgba(10,22,40,0.95) 100%)" }} />
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{ fontSize: 64, marginBottom: 12, opacity: 0.6 }}>🏸</div>
-          <p className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>Tournament hasn't started</p>
-          <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 6 }}>Check back soon for live action.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Section header — angular cyan slash bar like SkyBet
-  const SectionHeader = ({ accent, children, badge }: { accent: string; children: React.ReactNode; badge?: React.ReactNode }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-      <div style={{ width: 4, height: 22, background: accent, borderRadius: 1 }} />
-      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{children}</h3>
-      {badge}
-    </div>
-  );
-
-  const StatTile = ({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) => (
-    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 8, padding: "16px 18px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>{label}</div>
-      <div className="font-display" style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.1, letterSpacing: 0.5 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, fontWeight: 500 }}>{sub}</div>}
-    </div>
-  );
-
-  const stageBadge = (m: Match) => m.stage === "group" ? `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : m.stage === "knockout" ? `ROUND ${(m.round_idx ?? 0) + 1}` : "";
-
-  return (
-    <div style={{ background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
-
-      {/* Court Status — at-a-glance "what's on each court" */}
-      <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} categories={categories} teamById={allTeamById} />
-
-      {/* Next Up banner — top 3 upcoming matches across all categories */}
-      {upcoming.length > 0 && live.length === 0 && upcoming.slice(0, 3).some(m => {
-        const start = m.projected_start_at ? new Date(m.projected_start_at).getTime() : 0;
-        return start - Date.now() < 5 * 60_000;
-      }) && (
-        <div style={{ background: "linear-gradient(90deg,#1a0c2a 0%,#0a1628 60%)", borderRadius: 10, padding: "12px 18px", marginBottom: 20, border: "1px solid #a855f7", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <span className="font-display" style={{ fontSize: 11, fontWeight: 800, color: "#a855f7", letterSpacing: 2 }}>▶ NEXT UP</span>
-          {upcoming.slice(0, 3).map((m, i) => (
-            <span key={m.id} style={{ fontSize: 12, color: i === 0 ? "#fff" : "#94a3b8", fontWeight: i === 0 ? 700 : 500 }}>
-              {catById[m.category_id]?.name?.toUpperCase() ?? ""} · {tName(m.team_a_id)} vs {tName(m.team_b_id)} · {fmtClock(m.projected_start_at)}
-              {i < 2 && i < upcoming.length - 1 && <span style={{ color: "#475569", marginLeft: 12 }}>•</span>}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Featured tournament spotlight panel — full-width hero card with athlete photo */}
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
-        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #0a1628 0%, rgba(10,22,40,0.7) 30%, rgba(10,22,40,0.1) 100%)" }} />
-        </div>
-        <div style={{ position: "absolute", top: -40, left: -40, width: 200, height: 200, background: "radial-gradient(circle, rgba(0,184,255,0.25) 0%, transparent 70%)", pointerEvents: "none" }} />
-        <div style={{ position: "relative", zIndex: 1, padding: "26px 28px", maxWidth: "55%" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 4, background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.35)", marginBottom: 12 }}>
-            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#00d4ff", boxShadow: "0 0 6px #00d4ff" }} />
-            <span className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#00d4ff" }}>{phase === "knockout" ? "KNOCKOUT STAGE" : phase === "group" ? "GROUP STAGE" : "TOURNAMENT"}</span>
-          </div>
-          <h2 className="font-display" style={{ margin: "0 0 8px", fontSize: 30, fontWeight: 700, letterSpacing: 0.5, color: "#fff", textTransform: "uppercase", lineHeight: 1.05 }}>
-            {live.length > 0 ? <><span style={{ color: "#ef4444" }}>● LIVE</span> NOW</> : phase === "none" ? "Get Ready" : "Tournament Action"}
-          </h2>
-          <p style={{ margin: "0 0 14px", fontSize: 13, color: "#94a3b8", fontWeight: 500, maxWidth: 420 }}>
-            {live.length > 0
-              ? `${live.length} match${live.length > 1 ? "es" : ""} in progress · scores update in real time`
-              : phase === "none"
-                ? "Teams forming · matches will start soon"
-                : `${matchesPlayed} of ${totalMatches} matches completed${topTeam && topTeam.pts > 0 ? ` · ${topTeam.team.p2 ? `${topTeam.team.p1.name} & ${topTeam.team.p2.name}` : topTeam.team.p1.name} leading` : ""}`}
-          </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Teams</span>
-              <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: "#00d4ff" }}>{teamsView.length}</span>
-            </div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Played</span>
-              <span className="font-display" style={{ fontSize: 16, fontWeight: 700, color: "#22c55e" }}>{matchesPlayed}/{totalMatches}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* LIVE NOW */}
-      {live.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite", boxShadow: "0 0 6px #ef4444" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
-            {live.map(m => {
-              const ta = m.team_a_id ? teamById[m.team_a_id] : null;
-              const tb = m.team_b_id ? teamById[m.team_b_id] : null;
-              const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-              const aLeading = sa > sb, bLeading = sb > sa;
-              return (
-                <div key={m.id} style={{ background: "linear-gradient(135deg,#0f1e36 0%,#11243f 100%)", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#ef4444,#f97316)" }} />
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050" }}>
-                    <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
-                      <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite" }} />LIVE
-                    </span>
-                  </div>
-                  <div style={{ padding: "16px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
-                      {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={38} color={ta.p1.color} />}
-                      <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#fff" : "#cbd5e1" }}>{tName(m.team_a_id)}</span>
-                      <div className="font-display" style={{ minWidth: 70, padding: "8px 16px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: 32, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sa}</div>
-                    </div>
-                    <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#1a3050,transparent)", margin: "2px 0" }} />
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
-                      {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={38} color={tb.p1.color} />}
-                      <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#fff" : "#cbd5e1" }}>{tName(m.team_b_id)}</span>
-                      <div className="font-display" style={{ minWidth: 70, padding: "8px 16px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: 32, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sb}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Tournament stats */}
-      <div style={{ marginBottom: 32 }}>
-        <SectionHeader accent="#00b8ff">Tournament Stats</SectionHeader>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          <StatTile label="Stage" value={phase === "none" ? "Not Started" : phase === "group" ? "Group Stage" : "Knockout"} color="#00b8ff" />
-          <StatTile
-            label="Matches Played"
-            value={
-              <div>
-                <span style={{ color: "#00d4ff" }}>{String(matchesPlayed).padStart(2, "0")}</span>
-                <span style={{ color: "#475569", margin: "0 6px" }}>/</span>
-                <span style={{ color: "#cbd5e1" }}>{String(totalMatches).padStart(2, "0")}</span>
-              </div>
-            }
-            color="#22c55e"
-            sub={totalMatches > 0 ? (
-              <span>
-                {Math.round(matchesPlayed / totalMatches * 100)}% complete
-              </span>
-            ) as any : undefined}
-          />
-          {topTeam && topTeam.pts > 0 && <StatTile label="Top Team" value={topTeam.team.p2 ? `${topTeam.team.p1.name} & ${topTeam.team.p2.name}` : topTeam.team.p1.name} sub={`${topTeam.pts} PTS · ${topTeam.w} W`} color="#f59e0b" />}
-          {bestDiff && (bestDiff.pf - bestDiff.pa) !== 0 && <StatTile label="Best Diff" value={<><span style={{ color: bestDiff.pf - bestDiff.pa > 0 ? "#22c55e" : "#ef4444" }}>{bestDiff.pf - bestDiff.pa > 0 ? "+" : ""}{bestDiff.pf - bestDiff.pa}</span></>} sub={bestDiff.team.p2 ? `${bestDiff.team.p1.name} & ${bestDiff.team.p2.name}` : bestDiff.team.p1.name} color="#a855f7" />}
-        </div>
-        {totalMatches > 0 && (
-          <div style={{ marginTop: 14, height: 4, background: "#0f1e36", borderRadius: 2, overflow: "hidden", border: "1px solid #1a3050" }}>
-            <div style={{ height: "100%", width: `${Math.round(matchesPlayed / totalMatches * 100)}%`, background: "linear-gradient(90deg,#00b8ff,#00d4ff)", boxShadow: "0 0 12px rgba(0,212,255,0.6)", transition: "width .4s" }} />
-          </div>
-        )}
-      </div>
-
-      {/* Upcoming + Recent — two-column layout on wide screens */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(360px,1fr))", gap: 20, marginBottom: 32 }}>
-        {upcoming.length > 0 && (
-          <div>
-            <SectionHeader accent="#00d4ff">Upcoming</SectionHeader>
-            <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
-              {upcoming.map((m, i) => (
-                <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", gap: 12, position: "relative", background: i === 0 ? "rgba(0,212,255,0.04)" : "transparent" }}>
-                  {i === 0 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: "#00d4ff" }} />}
-                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? "#00d4ff" : "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{i === 0 ? "▸ NEXT" : stageBadge(m)}</div>
-                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: "#cbd5e1" }}>{tName(m.team_a_id)}</div>
-                  <div className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 2 }}>VS</div>
-                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13, textAlign: "right", color: "#cbd5e1" }}>{tName(m.team_b_id)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {recent.length > 0 && (
-          <div>
-            <SectionHeader accent="#22c55e">Recent Results</SectionHeader>
-            <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
-              {recent.map((m, i) => (
-                <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < recent.length - 1 ? "1px solid #1a3050" : "none", gap: 12 }}>
-                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{stageBadge(m)}</div>
-                  <div style={{ flex: 1, fontWeight: m.winner_id === m.team_a_id ? 700 : 500, color: m.winner_id === m.team_a_id ? "#22c55e" : "#94a3b8", fontSize: 13 }}>{tName(m.team_a_id)}</div>
-                  <div className="font-display" style={{ fontWeight: 700, fontSize: 14, padding: "4px 10px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, color: "#22c55e", letterSpacing: 1 }}>{m.score_a}–{m.score_b}</div>
-                  <div style={{ flex: 1, fontWeight: m.winner_id === m.team_b_id ? 700 : 500, color: m.winner_id === m.team_b_id ? "#22c55e" : "#94a3b8", textAlign: "right", fontSize: 13 }}>{tName(m.team_b_id)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Group standings */}
-      {phase !== "none" && groups.length > 0 && (
-        <div>
-          <SectionHeader accent="#a855f7">Standings</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
-            {groups.map((g, gi) => {
-              const st = getStandings(g, gi);
-              const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];
-              const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
-              const accent = groupAccents[gi % groupAccents.length];
-              return (
-                <div key={gi} style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
-                  <div style={{ position: "relative", padding: "16px 16px 14px", borderBottom: "1px solid #1a3050", overflow: "hidden", minHeight: 76 }}>
-                    <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${groupBgs[gi % groupBgs.length]})`, backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.55 }} />
-                    <div style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, rgba(15,30,55,0.95) 0%, rgba(15,30,55,0.6) 60%, rgba(15,30,55,0.3) 100%)` }} />
-                    <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accent }} />
-                    <div style={{ position: "relative", zIndex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>Group {String.fromCharCode(65 + gi)}</span>
-                        <span className="font-display" style={{ fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 1.5, padding: "3px 8px", background: "rgba(0,0,0,0.4)", borderRadius: 3, border: `1px solid ${accent}66` }}>TOP 2 ADVANCE</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4, fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{g.length} TEAMS · {st.reduce((acc, s) => acc + s.w + s.l, 0)} matches played</div>
-                    </div>
-                  </div>
-                  <div>
-                    {st.map((s, si) => (
-                      <div key={s.team.id} style={{ display: "flex", alignItems: "center", padding: "10px 14px", borderTop: si === 0 ? "none" : "1px solid #1a3050", background: si < 2 ? "rgba(34,197,94,0.04)" : "transparent", position: "relative" }}>
-                        {si < 2 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2, background: "#22c55e" }} />}
-                        <div className="font-display" style={{ width: 24, fontSize: 14, fontWeight: 700, color: si === 0 ? "#fbbf24" : si === 1 ? "#22c55e" : "#475569" }}>{si + 1}</div>
-                        <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#cbd5e1" }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</div>
-                        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{s.w}-{s.l}</span>
-                          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: s.pf - s.pa > 0 ? "#22c55e" : s.pf - s.pa < 0 ? "#ef4444" : "#64748b", minWidth: 30, textAlign: "right" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</span>
-                          <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: si < 2 ? "#00d4ff" : "#cbd5e1", minWidth: 24, textAlign: "right", letterSpacing: 0.5 }}>{s.pts}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {live.length === 0 && upcoming.length === 0 && recent.length === 0 && (
-        <div style={{ position: "relative", textAlign: "center", padding: 60, color: "#64748b", background: "#0f1e36", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", minHeight: 220 }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(15,30,55,0.6) 0%, rgba(15,30,55,0.95) 100%)" }} />
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{ fontSize: 48, marginBottom: 10, opacity: 0.5 }}>🏸</div>
-            <p className="font-display" style={{ margin: 0, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "#fff" }}>No matches scheduled</p>
-            <p style={{ margin: "4px 0 0", fontSize: 13 }}>The tournament will begin shortly.</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// LiveTab extracted to src/components/LiveTab.tsx

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Category, ProjectedMatch, Team, Player } from "../types";
 import { fmtElapsed } from "../hooks/useScheduling";
 
-export function CourtStatus({
+export const CourtStatus = React.memo(function CourtStatus({
   numCourts,
   liveByCourt,
   categories,
@@ -15,7 +15,7 @@ export function CourtStatus({
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
   }, []);
 
@@ -71,7 +71,7 @@ export function CourtStatus({
       </div>
     </div>
   );
-}
+});
 
 function tName(t: any): string {
   if (!t || !t.p1) return "TBD";

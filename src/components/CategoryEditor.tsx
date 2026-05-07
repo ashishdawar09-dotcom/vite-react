@@ -1,5 +1,6 @@
 import { useState } from "react";
 import * as db from "../lib/db";
+import { toast } from "./Toast";
 import type { Category, Player, PlayerCategory } from "../types";
 
 export function CategoryEditor({
@@ -22,7 +23,7 @@ export function CategoryEditor({
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
-    if (!name.trim()) { alert("Category name required"); return; }
+    if (!name.trim()) { toast("Category name required", "warn"); return; }
     setBusy(true);
     try {
       const startsIso = startsAt ? new Date(startsAt).toISOString() : null;
@@ -32,7 +33,7 @@ export function CategoryEditor({
         await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
       }
       onClose();
-    } catch (e: any) { alert(e?.message ?? "Save failed"); }
+    } catch (e: any) { toast(e?.message ?? "Save failed", "error"); }
     finally { setBusy(false); }
   };
 
@@ -41,7 +42,7 @@ export function CategoryEditor({
     if (!confirm(`Delete "${category.name}" — all teams + matches in this category will be removed. Continue?`)) return;
     setBusy(true);
     try { await db.deleteCategory(category.id); onClose(); }
-    catch (e: any) { alert(e?.message ?? "Delete failed"); }
+    catch (e: any) { toast(e?.message ?? "Delete failed", "error"); }
     finally { setBusy(false); }
   };
 
