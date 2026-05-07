@@ -6,7 +6,7 @@ import type { Category, Match, Player, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
 
-export function LiveTab({ teamsView, allTeamById, matches, groupMatches, knockoutMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedById, projectedMatches }: {
+export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches }: {
   teamsView: TeamView[];
   allTeamById: Record<string, TeamView | undefined>;
   matches: Match[];

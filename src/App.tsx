@@ -12,7 +12,7 @@ import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { toast } from "./components/Toast";
-import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "./types";
+import type { Match, Player, Team, Tournament } from "./types";
 
 const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
 const CategoriesTab = React.lazy(() => import("./components/CategoriesTab").then(m => ({ default: m.CategoriesTab })));
