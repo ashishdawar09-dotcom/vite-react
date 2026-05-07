@@ -97,8 +97,22 @@ export default function App() {
   const teamById = useMemo(() => Object.fromEntries(teamsView.map(t => [t.id, t])), [teamsView]);
 
   const categoryMatches = useMemo(() => currentCategoryId ? matches.filter(m => m.category_id === currentCategoryId) : matches, [matches, currentCategoryId]);
-  const groupMatches = useMemo(() => categoryMatches.filter(m => m.stage === "group").sort((a, b) => (a.group_idx! - b.group_idx!) || (a.slot_idx - b.slot_idx)), [categoryMatches]);
-  const knockoutMatches = useMemo(() => categoryMatches.filter(m => m.stage === "knockout").sort((a, b) => (a.round_idx! - b.round_idx!) || (a.slot_idx - b.slot_idx)), [categoryMatches]);
+  // Stable sort: tie-break on id so cards never swap positions between
+  // snapshot polls while a user is editing a score.
+  const groupMatches = useMemo(() =>
+    categoryMatches.filter(m => m.stage === "group").sort((a, b) =>
+      (a.group_idx! - b.group_idx!) ||
+      (a.slot_idx - b.slot_idx) ||
+      a.id.localeCompare(b.id)
+    ),
+  [categoryMatches]);
+  const knockoutMatches = useMemo(() =>
+    categoryMatches.filter(m => m.stage === "knockout").sort((a, b) =>
+      (a.round_idx! - b.round_idx!) ||
+      (a.slot_idx - b.slot_idx) ||
+      a.id.localeCompare(b.id)
+    ),
+  [categoryMatches]);
 
   // Schedule projection across all categories (for Live + Matches tabs)
   const numCourts = current?.num_courts ?? 2;
