@@ -3,6 +3,7 @@ import { CourtStatus } from "./CourtStatus";
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -128,6 +129,28 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   );
 
   const stageBadge = (m: Match) => m.stage === "group" ? `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : m.stage === "knockout" ? `ROUND ${(m.round_idx ?? 0) + 1}` : "";
+
+  // Resolve a category's saved format → topN, groupsCount, knockout shape.
+  // Used by the Standings panel to render dynamic per-group badges and to
+  // highlight the qualifying rows. Falls back to the format planner's
+  // default if the category was created before the recommender shipped.
+  const formatForCategory = (catId: string): { topN: number; groupsCount: number; shape: KnockoutShape; category: Category } | null => {
+    const c = catById[catId];
+    if (!c) return null;
+    let topN = c.top_n_advance > 0 ? c.top_n_advance : 0;
+    let groupsCount = c.groups_count > 0 ? c.groups_count : 0;
+    if (topN <= 0 || groupsCount <= 0) {
+      // Fall back: use planner's default for the team count we actually see.
+      const teamsInCat = teamsView.filter(t => t.category_id === catId).length;
+      const plan = defaultFormat(teamsInCat);
+      if (topN <= 0) topN = plan.topNAdvance;
+      if (groupsCount <= 0) groupsCount = Math.max(1, plan.groupsCount);
+    }
+    const shape: KnockoutShape = topN <= 0
+      ? "RR-only"
+      : knockoutShapeFor(groupsCount * topN);
+    return { topN, groupsCount, shape, category: c };
+  };
 
   return (
     <div style={{ background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
@@ -364,49 +387,85 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         )}
       </div>
 
-      {phase !== "none" && groups.length > 0 && (
-        <div>
-          <SectionHeader accent="#a855f7">Standings</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
-            {groups.map((g, gi) => {
-              const st = getStandings(g, gi);
-              const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];
-              const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
-              const accent = groupAccents[gi % groupAccents.length];
-              return (
-                <div key={gi} style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
-                  <div style={{ position: "relative", padding: "16px 16px 14px", borderBottom: "1px solid #1a3050", overflow: "hidden", minHeight: 76 }}>
-                    <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${groupBgs[gi % groupBgs.length]})`, backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.55 }} />
-                    <div style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, rgba(15,30,55,0.95) 0%, rgba(15,30,55,0.6) 60%, rgba(15,30,55,0.3) 100%)` }} />
-                    <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accent }} />
-                    <div style={{ position: "relative", zIndex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>Group {String.fromCharCode(65 + gi)}</span>
-                        <span className="font-display" style={{ fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 1.5, padding: "3px 8px", background: "rgba(0,0,0,0.4)", borderRadius: 3, border: `1px solid ${accent}66` }}>TOP 2 ADVANCE</span>
+      {phase !== "none" && groups.length > 0 && (() => {
+        // Distinct categories represented by the visible groups — used to
+        // render the format-summary lines above the cards.
+        const categoryIdsInView = Array.from(
+          new Set(groups.map(g => g[0]?.category_id).filter((id): id is string => Boolean(id))),
+        );
+        return (
+          <div>
+            <SectionHeader accent="#a855f7">Standings</SectionHeader>
+            {/* Format summary — one line per visible category */}
+            {categoryIdsInView.length > 0 && (
+              <div style={{ marginTop: -4, marginBottom: 14, display: "flex", flexDirection: "column", gap: 4 }}>
+                {categoryIdsInView.map(catId => {
+                  const fmt = formatForCategory(catId);
+                  if (!fmt) return null;
+                  const shapeText = fmt.shape === "RR-only" ? "round-robin only"
+                    : fmt.shape === "none" ? `top ${fmt.topN}`
+                    : `top ${fmt.topN} ${fmt.groupsCount === 1 ? "" : "each "}→ ${fmt.shape}`;
+                  return (
+                    <div key={catId} style={{ fontSize: 11, color: "#94a3b8", letterSpacing: 0.4 }}>
+                      <span style={{ color: "#a855f7", fontWeight: 700, letterSpacing: 1 }}>{fmt.category.name.toUpperCase()}</span>
+                      <span style={{ margin: "0 8px", color: "#475569" }}>·</span>
+                      <span>{fmt.groupsCount} group{fmt.groupsCount === 1 ? "" : "s"} · {shapeText}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
+              {groups.map((g, gi) => {
+                const st = getStandings(g, gi);
+                const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];
+                const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
+                const accent = groupAccents[gi % groupAccents.length];
+                const fmt = g[0]?.category_id ? formatForCategory(g[0].category_id) : null;
+                const topN = fmt?.topN ?? 2;
+                const badgeText = !fmt ? "TOP 2"
+                  : fmt.shape === "RR-only" ? "ROUND-ROBIN"
+                  : fmt.shape === "none" ? `TOP ${fmt.topN}`
+                  : `TOP ${fmt.topN} → ${fmt.shape}`;
+                return (
+                  <div key={gi} style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
+                    <div style={{ position: "relative", padding: "16px 16px 14px", borderBottom: "1px solid #1a3050", overflow: "hidden", minHeight: 76 }}>
+                      <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${groupBgs[gi % groupBgs.length]})`, backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.55 }} />
+                      <div style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, rgba(15,30,55,0.95) 0%, rgba(15,30,55,0.6) 60%, rgba(15,30,55,0.3) 100%)` }} />
+                      <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accent }} />
+                      <div style={{ position: "relative", zIndex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                          <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>Group {String.fromCharCode(65 + gi)}</span>
+                          <span className="font-display" style={{ fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 1.5, padding: "3px 8px", background: "rgba(0,0,0,0.4)", borderRadius: 3, border: `1px solid ${accent}66`, whiteSpace: "nowrap" }}>{badgeText}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4, fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{g.length} TEAMS · {st.reduce((acc, s) => acc + s.w + s.l, 0)} matches played</div>
                       </div>
-                      <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4, fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{g.length} TEAMS · {st.reduce((acc, s) => acc + s.w + s.l, 0)} matches played</div>
+                    </div>
+                    <div>
+                      {st.map((s, si) => {
+                        const advancing = topN > 0 && si < topN;
+                        const rankColor = si === 0 ? "#fbbf24" : advancing ? "#22c55e" : "#475569";
+                        return (
+                          <div key={s.team.id} style={{ display: "flex", alignItems: "center", padding: "10px 14px", borderTop: si === 0 ? "none" : "1px solid #1a3050", background: advancing ? "rgba(34,197,94,0.04)" : "transparent", position: "relative" }}>
+                            {advancing && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2, background: "#22c55e" }} />}
+                            <div className="font-display" style={{ width: 24, fontSize: 14, fontWeight: 700, color: rankColor }}>{si + 1}</div>
+                            <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#cbd5e1" }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</div>
+                            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{s.w}-{s.l}</span>
+                              <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: s.pf - s.pa > 0 ? "#22c55e" : s.pf - s.pa < 0 ? "#ef4444" : "#64748b", minWidth: 30, textAlign: "right" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</span>
+                              <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: advancing ? "#00d4ff" : "#cbd5e1", minWidth: 24, textAlign: "right", letterSpacing: 0.5 }}>{s.pts}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  <div>
-                    {st.map((s, si) => (
-                      <div key={s.team.id} style={{ display: "flex", alignItems: "center", padding: "10px 14px", borderTop: si === 0 ? "none" : "1px solid #1a3050", background: si < 2 ? "rgba(34,197,94,0.04)" : "transparent", position: "relative" }}>
-                        {si < 2 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2, background: "#22c55e" }} />}
-                        <div className="font-display" style={{ width: 24, fontSize: 14, fontWeight: 700, color: si === 0 ? "#fbbf24" : si === 1 ? "#22c55e" : "#475569" }}>{si + 1}</div>
-                        <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#cbd5e1" }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</div>
-                        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{s.w}-{s.l}</span>
-                          <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: s.pf - s.pa > 0 ? "#22c55e" : s.pf - s.pa < 0 ? "#ef4444" : "#64748b", minWidth: 30, textAlign: "right" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</span>
-                          <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: si < 2 ? "#00d4ff" : "#cbd5e1", minWidth: 24, textAlign: "right", letterSpacing: 0.5 }}>{s.pts}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {live.length === 0 && upcoming.length === 0 && recent.length === 0 && (
         <div style={{ position: "relative", textAlign: "center", padding: 60, color: "#64748b", background: "#0f1e36", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", minHeight: 220 }}>
