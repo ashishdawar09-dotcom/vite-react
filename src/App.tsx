@@ -829,7 +829,12 @@ export default function App() {
             {current?.event_date && (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
                 <span style={{ color: "#00d4ff", fontSize: 13 }}>▸</span>
-                <span className="font-display" style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", letterSpacing: 1 }}>{new Date(current.event_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }).toUpperCase()}</span>
+                <span className="font-display" style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", letterSpacing: 1 }}>{
+                  // event_date is a DATE column (no time / timezone). `new Date('YYYY-MM-DD')` parses as
+                  // UTC midnight, which becomes the previous day in any timezone west of UTC. Appending
+                  // T12:00:00 (noon, local) avoids that off-by-one without timezone gymnastics.
+                  new Date(current.event_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }).toUpperCase()
+                }</span>
               </div>
             )}
             <TournamentPicker tournaments={tournaments} current={current} onSelect={setCurrentId} isAdmin={isAdmin} onChange={reloadTournaments} />
