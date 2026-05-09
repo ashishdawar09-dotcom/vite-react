@@ -202,10 +202,6 @@ export default function App() {
     return [...map.keys()].sort((a, b) => a - b).map(ri => map.get(ri)!.sort((a, b) => a.slot_idx - b.slot_idx));
   }, [knockoutMatches]);
 
-  const active = players.filter(p => p.active);
-  const paired = new Set(teamsView.flatMap(t => [t.p1_id, t.p2_id]));
-  const unpaired = active.filter(p => !paired.has(p.id));
-
   // Map each player to the set of categories they're assigned to (via junction table)
   const playerCategoryMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -215,6 +211,36 @@ export default function App() {
     }
     return map;
   }, [playerCategories]);
+
+  // Active players in the *current category* (or all if no filter). This is
+  // the source of truth for who's eligible to be paired here. Without this
+  // filter, Auto-Pair / Partner-Picker pull in players from other categories
+  // and tag the resulting teams with the wrong category_id.
+  const active = useMemo(() => {
+    const all = players.filter(p => p.active);
+    if (!currentCategoryId) return all;
+    return all.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId));
+  }, [players, currentCategoryId, playerCategoryMap]);
+  const paired = useMemo(
+    () => new Set(teamsView.flatMap(t => [t.p1_id, t.p2_id])),
+    [teamsView],
+  );
+  const unpaired = useMemo(
+    () => active.filter(p => !paired.has(p.id)),
+    [active, paired],
+  );
+
+  // Teams currently in the viewed category whose players don't all belong to
+  // this category — leftovers from the pre-fix Auto-Pair bug. Surfaced via
+  // the "Clean up" button on the Teams tab.
+  const invalidTeamsInCategory = useMemo(() => {
+    if (!currentCategoryId) return [];
+    return teamsView.filter(t => {
+      const p1Ok = playerCategoryMap.get(t.p1_id)?.has(currentCategoryId) ?? false;
+      const p2Ok = !t.p2_id || (playerCategoryMap.get(t.p2_id)?.has(currentCategoryId) ?? false);
+      return !p1Ok || !p2Ok;
+    });
+  }, [teamsView, currentCategoryId, playerCategoryMap]);
 
   // Sync the in-progress inline category-edit set with the underlying map.
   // - Open editor: seed local set from current memberships
@@ -512,6 +538,35 @@ export default function App() {
     setPickingCourtFor(null);
   };
   const removeTeam = async (id: string) => { if (!guard()) return; if (!confirm("Remove this team?")) return; await db.deleteTeam(id); };
+
+  /**
+   * One-shot cleanup for teams whose players don't actually belong to the
+   * category the team is tagged with. Caused historically by an Auto-Pair
+   * bug that ignored `currentCategoryId` when computing the unpaired list.
+   * Only runs while phase === "none" so it can't break a running tournament.
+   */
+  const cleanupInvalidTeams = async () => {
+    if (!guard() || !currentCategoryId) return;
+    const bad = invalidTeamsInCategory;
+    if (bad.length === 0) {
+      toast("No invalid teams in this category.", "info");
+      return;
+    }
+    const msg = `Remove ${bad.length} team${bad.length === 1 ? "" : "s"} where one or both players aren't assigned to this category?\n\nAffected teams will be deleted permanently. Players themselves are NOT removed.`;
+    if (!confirm(msg)) return;
+    let removed = 0;
+    let failed = 0;
+    for (const t of bad) {
+      try {
+        await db.deleteTeam(t.id);
+        removed++;
+      } catch {
+        failed++;
+      }
+    }
+    if (failed === 0) toast(`Removed ${removed} invalid team${removed === 1 ? "" : "s"}.`, "success");
+    else toast(`Removed ${removed} of ${bad.length}; ${failed} failed.`, "warn");
+  };
 
   const adjustScore = async (m: Match, side: "a" | "b", delta: number) => {
     if (!isAdmin) return;
@@ -1053,6 +1108,25 @@ export default function App() {
         {current && tab === "teams" && (
           <div>
             <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
+            {isAdmin && phase === "none" && currentCategoryId && invalidTeamsInCategory.length > 0 && (
+              <div style={{ background: "linear-gradient(90deg, rgba(239,68,68,0.08), rgba(239,68,68,0.04))", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 12, padding: "14px 18px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div className="font-display" style={{ fontSize: 12, fontWeight: 800, color: "#ef4444", letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 4 }}>
+                    ⚠ {invalidTeamsInCategory.length} invalid team{invalidTeamsInCategory.length === 1 ? "" : "s"} detected
+                  </div>
+                  <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.4 }}>
+                    {invalidTeamsInCategory.length === 1 ? "One team has" : "These teams have"} a player who isn't assigned to <strong>{currentCategory?.name ?? "this category"}</strong>. Likely from an Auto-Pair bug now fixed. Clean them up to restore correct counts.
+                  </div>
+                </div>
+                <button
+                  onClick={cleanupInvalidTeams}
+                  className="font-display"
+                  style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer", boxShadow: "0 2px 8px rgba(220,38,38,0.4)" }}
+                >
+                  Clean Up Invalid Teams
+                </button>
+              </div>
+            )}
             {teamsView.length === 0 ? (
               <div style={{ textAlign: "center", padding: 50, color: "#94a3b8" }}><p>No teams yet.</p></div>
             ) : (
