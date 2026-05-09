@@ -17,6 +17,8 @@ export type Category = {
   starts_at: string | null;
   phase: "none" | "group" | "knockout";
   rounds_per_pair: number;
+  groups_count: number;       // 0 = auto-derive at stage-start time via formatPlanner
+  top_n_advance: number;      // 0 = auto-derive (qualifiers per group → knockout)
   sort_order: number;
   created_at: string;
 };

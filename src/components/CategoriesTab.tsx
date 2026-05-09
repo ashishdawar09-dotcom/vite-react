@@ -111,7 +111,7 @@ export function CategoriesTab({
         </div>
       )}
 
-      {editing && <CategoryEditor tournamentId={tournament.id} category={editing === "new" ? undefined : editing} players={players} playerCategories={playerCategories} onClose={() => setEditing(null)} />}
+      {editing && <CategoryEditor tournamentId={tournament.id} category={editing === "new" ? undefined : editing} players={players} playerCategories={playerCategories} numCourts={tournament.num_courts} onClose={() => setEditing(null)} />}
       {/* fmtClock referenced for tree-shake guard */}
       <span style={{ display: "none" }}>{fmtClock(null)}</span>
     </div>

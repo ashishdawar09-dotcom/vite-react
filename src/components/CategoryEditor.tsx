@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
+import { recommendFormats, describeFormat, type FormatPlan } from "../lib/formatPlanner";
 import type { Category, Player, PlayerCategory } from "../types";
 
 export function CategoryEditor({
@@ -8,12 +9,14 @@ export function CategoryEditor({
   category,
   players,
   playerCategories,
+  numCourts,
   onClose,
 }: {
   tournamentId: string;
   category?: Category;
   players: Player[];
   playerCategories: PlayerCategory[];
+  numCourts: number;
   onClose: () => void;
 }) {
   const [name, setName] = useState(category?.name ?? "");
@@ -21,6 +24,38 @@ export function CategoryEditor({
   const [matchMin, setMatchMin] = useState(category?.match_minutes ?? 12);
   const [startsAt, setStartsAt] = useState<string>(category?.starts_at ? toLocalInput(category.starts_at) : "");
   const [busy, setBusy] = useState(false);
+
+  // Estimated number of teams in this category — drives the format recommender.
+  // Doubles → floor(activePlayers / 2). Singles → activePlayers.
+  const estimatedTeamCount = useMemo(() => {
+    if (!category) return 0;
+    const idsInCat = new Set(playerCategories.filter(pc => pc.category_id === category.id).map(pc => pc.player_id));
+    const activeInCat = players.filter(p => p.active && idsInCat.has(p.id));
+    return teamSize === 2 ? Math.floor(activeInCat.length / 2) : activeInCat.length;
+  }, [category, players, playerCategories, teamSize]);
+
+  // Format option cards (recommended / more games / compact). Computed once per
+  // (estimatedTeamCount) and selection is stored as the picked plan's label.
+  const formatOptions = useMemo<FormatPlan[]>(
+    () => estimatedTeamCount >= 2 ? recommendFormats(estimatedTeamCount) : [],
+    [estimatedTeamCount],
+  );
+
+  // Pick the option that best matches the saved category settings; default to "Recommended".
+  const initialLabel: FormatPlan["label"] = useMemo(() => {
+    if (!category || formatOptions.length === 0) return "Recommended";
+    const match = formatOptions.find(o =>
+      o.groupsCount === category.groups_count &&
+      o.topNAdvance === category.top_n_advance &&
+      o.roundsPerPair === category.rounds_per_pair,
+    );
+    return match?.label ?? "Recommended";
+  }, [category, formatOptions]);
+  const [selectedLabel, setSelectedLabel] = useState<FormatPlan["label"]>(initialLabel);
+
+  // Re-sync selectedLabel when the recomputed initialLabel changes (e.g.
+  // formatOptions array refreshes due to teamSize toggle).
+  useEffect(() => { setSelectedLabel(initialLabel); }, [initialLabel]);
 
   // Optimistic local state for player↔category checkboxes. Initialized from
   // `playerCategories` prop, kept in sync via the useEffect below so realtime
@@ -40,8 +75,15 @@ export function CategoryEditor({
     setBusy(true);
     try {
       const startsIso = startsAt ? new Date(startsAt).toISOString() : null;
+      const selectedPlan = formatOptions.find(o => o.label === selectedLabel);
       if (category) {
-        await db.updateCategory(category.id, { name: name.trim(), team_size: teamSize, match_minutes: matchMin, starts_at: startsIso });
+        const patch: Partial<Category> = { name: name.trim(), team_size: teamSize, match_minutes: matchMin, starts_at: startsIso };
+        if (selectedPlan) {
+          patch.groups_count = selectedPlan.groupsCount;
+          patch.top_n_advance = selectedPlan.topNAdvance;
+          patch.rounds_per_pair = selectedPlan.roundsPerPair;
+        }
+        await db.updateCategory(category.id, patch);
       } else {
         await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
       }
@@ -82,6 +124,54 @@ export function CategoryEditor({
         <Field label="Start time (optional)">
           <input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={inputStyle} />
         </Field>
+
+        {/* Tournament format recommender — appears once the category has assigned
+            players (so the team count is known). Picking an option saves
+            groups_count + top_n_advance + rounds_per_pair on Save. */}
+        {category && formatOptions.length > 0 && (
+          <Field label={`Tournament format · ${estimatedTeamCount} team${estimatedTeamCount === 1 ? "" : "s"} estimated`}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${formatOptions.length}, 1fr)`, gap: 8 }}>
+              {formatOptions.map(opt => {
+                const selected = opt.label === selectedLabel;
+                const accent = opt.label === "Recommended" ? "#22c55e" : opt.label === "More games" ? "#a855f7" : "#3b82f6";
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setSelectedLabel(opt.label)}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      border: selected ? `2px solid ${accent}` : "1px solid #1a3050",
+                      background: selected ? `${accent}14` : "#0a1628",
+                      color: "#fff",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all .12s",
+                    }}
+                  >
+                    <div className="font-display" style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 4 }}>
+                      {selected && "✓ "}{opt.label}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 4, lineHeight: 1.3 }}>{describeFormat(opt)}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                      {opt.totalMatches} match{opt.totalMatches === 1 ? "" : "es"} · ~{opt.estimatedMinutes(matchMin, Math.max(1, numCourts))} min
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+              Time estimates assume {numCourts} court{numCourts === 1 ? "" : "s"} running in parallel · {matchMin} min/match.
+            </div>
+          </Field>
+        )}
+
+        {category && estimatedTeamCount === 1 && (
+          <div style={{ padding: "10px 12px", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.4)", borderRadius: 8, fontSize: 12, color: "#fbbf24", marginBottom: 14 }}>
+            Only 1 active team in this category. Add at least 2 active teams to see format options.
+          </div>
+        )}
 
         {category && (() => {
           const sorted = [...players].sort((a, b) => {

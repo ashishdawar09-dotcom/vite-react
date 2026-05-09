@@ -14,6 +14,9 @@ import { ShuttleSVG, Av } from "./components/ui";
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { PlayerProfileView } from "./components/PlayerProfileView";
+import { defaultFormat, splitIntoGroups } from "./lib/formatPlanner";
+import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
+import { KnockoutSanityBanner } from "./components/KnockoutSanityBanner";
 import type { Match, Player, Team, Tournament } from "./types";
 
 const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
@@ -86,6 +89,9 @@ export default function App() {
   const [pendingPlayerCats, setPendingPlayerCats] = useState<Set<string> | null>(null);
   // Player whose dedicated profile is shown in the Profiles tab. null = grid view.
   const [profileViewPlayerId, setProfileViewPlayerId] = useState<string | null>(null);
+  // Active "Promote Team" picker target — opens the modal on the given knockout
+  // match slot when set. null = closed.
+  const [promotePickerFor, setPromotePickerFor] = useState<{ matchId: string; side: "a" | "b" } | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Navigate to a specific player's profile from anywhere (search, etc.).
@@ -303,12 +309,51 @@ export default function App() {
 
   const startGroupStage = async () => {
     if (!guard() || !current || !currentCategoryId) return;
-    await db.setCategoryRoundsPerPair(currentCategoryId, pendingRounds);
-    const size = teamsView.length <= 6 ? 3 : 4;
+    const cat = categories.find(c => c.id === currentCategoryId);
+    if (!cat) return;
+
+    // Determine groups_count and group_sizes:
+    // - If category.groups_count > 0: honor that, derive sizes from N
+    // - Else: ask the format planner for the default given N teams; persist
+    //   the derived groups_count + top_n_advance so the knockout stage can
+    //   read consistent values.
+    const N = teamsView.length;
+    let groupsCount = cat.groups_count ?? 0;
+    let groupSizes: number[];
+    let topNAdvance = cat.top_n_advance ?? 0;
+
+    if (groupsCount > 0) {
+      groupSizes = splitIntoGroups(N, groupsCount);
+    } else {
+      const plan = defaultFormat(N);
+      groupsCount = plan.groupsCount;
+      groupSizes = plan.groupSizes;
+      if (topNAdvance <= 0) topNAdvance = plan.topNAdvance;
+    }
+
+    // Persist the planner's choices + the user-specified rounds-per-pair so
+    // knockout generation is deterministic later.
+    await db.updateCategory(currentCategoryId, {
+      rounds_per_pair: pendingRounds,
+      groups_count: groupsCount,
+      top_n_advance: topNAdvance,
+    });
+
+    if (groupsCount === 0 || groupSizes.length === 0) {
+      toast("Too few teams to start a tournament. Add more teams first.", "warn");
+      return;
+    }
+
+    // Distribute shuffled teams across groups by explicit sizes.
     const sh = shuffle(teamsView);
-    const nG = Math.ceil(sh.length / size);
-    const gs: TeamView[][] = Array.from({ length: nG }, () => []);
-    sh.forEach((t, i) => gs[i % nG].push(t));
+    const gs: TeamView[][] = [];
+    let idx = 0;
+    for (let g = 0; g < groupsCount; g++) {
+      const arr: TeamView[] = [];
+      for (let k = 0; k < groupSizes[g] && idx < sh.length; k++) arr.push(sh[idx++]);
+      gs.push(arr);
+    }
+
     const rows: any[] = [];
     let slot = 0;
     gs.forEach((g, gi) => {
@@ -351,17 +396,35 @@ export default function App() {
 
   const startKnockout = async () => {
     if (!guard() || !current || !currentCategoryId) return;
+    const cat = categories.find(c => c.id === currentCategoryId);
+    if (!cat) return;
+
+    // Determine top-N-advance per group. Honor category.top_n_advance if set;
+    // otherwise fall back to the planner's default for the current team count.
+    let topN = cat.top_n_advance ?? 0;
+    if (topN <= 0) {
+      const plan = defaultFormat(teamsView.length);
+      topN = plan.topNAdvance;
+    }
+    if (topN <= 0) topN = 2; // last-resort safety net
+
+    // Collect qualifiers from each group's standings (already sorted W/+/-).
     const q: TeamView[] = [];
     groups.forEach((g, gi) => {
       const st = getStandings(g, gi);
-      for (let i = 0; i < Math.min(2, st.length); i++) q.push(st[i].team);
+      const limit = Math.min(topN, st.length);
+      for (let i = 0; i < limit; i++) q.push(st[i].team);
     });
     if (q.length < 2) return;
-    // Cap at 8 to keep format = QF + SF + F (no "Round of 16")
-    const cappedQ = q.slice(0, 8);
-    const rds = Math.ceil(Math.log2(cappedQ.length));
+
+    // Build a power-of-2 bracket. With the format planner driving group/topN
+    // choices, q.length should already be a power of 2 — but if it's not
+    // (e.g. admin customized values that don't add up), we fall back to byes
+    // for the trailing slots so the bracket still renders. Admins can fix
+    // mis-seeded brackets via the Promote-Team UI on each match card.
+    const rds = Math.ceil(Math.log2(q.length));
     const slots = Math.pow(2, rds);
-    const seeded: (TeamView | null)[] = [...cappedQ];
+    const seeded: (TeamView | null)[] = [...q];
     while (seeded.length < slots) seeded.push(null);
     const rows: any[] = [];
     for (let i = 0; i < slots / 2; i++) {
@@ -531,11 +594,23 @@ export default function App() {
       const stepBtn = (delta: number, label: string) => (
         <button onClick={() => adjustScore(m, side, delta)} style={{ width: 56, height: 56, borderRadius: 14, border: "2px solid #e2e8f0", background: "#fff", fontSize: 26, fontWeight: 800, color: "#1a1a2e", cursor: "pointer", touchAction: "manipulation", userSelect: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }} aria-label={label}>{label}</button>
       );
+      // Empty knockout slot — show a "Select team" button for admins.
+      const isEmptyKnockoutSlot = !team && m.stage === "knockout" && !m.is_bye && !m.confirmed;
       return (
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "10px 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "1 1 140px", minWidth: 0 }}>
             {team?.p1 && <Av name={team.p1.name} photo={team.p1.photo_url} sz={34} color={team.p1.color} />}
-            <span style={{ fontWeight: isWin ? 800 : 600, fontSize: 14, color: isWin ? "#16a34a" : "#1a1a2e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tLabel(team)}</span>
+            {isEmptyKnockoutSlot && isAdmin ? (
+              <button
+                onClick={() => setPromotePickerFor({ matchId: m.id, side })}
+                style={{ padding: "6px 12px", borderRadius: 8, border: "1px dashed #a855f7", background: "rgba(168,85,247,0.08)", color: "#a855f7", fontSize: 12, fontWeight: 800, letterSpacing: 0.5, cursor: "pointer", textTransform: "uppercase" }}
+                title="Pick a team for this slot"
+              >
+                + Select Team
+              </button>
+            ) : (
+              <span style={{ fontWeight: isWin ? 800 : 600, fontSize: 14, color: isWin ? "#16a34a" : "#1a1a2e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tLabel(team)}</span>
+            )}
           </div>
           {inlineMode ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
@@ -1063,7 +1138,15 @@ export default function App() {
           </div>
         )}
 
-        {current && tab === "knockout" && (
+        {current && tab === "knockout" && (() => {
+          const expectedQualifiers = currentCategory
+            ? Math.max(0, (currentCategory.groups_count || groups.length) * (currentCategory.top_n_advance || 2))
+            : 0;
+          const round1Matches = knockoutMatches.filter(m => m.round_idx === 0);
+          const actualQualifiers = round1Matches.reduce(
+            (n, m) => n + (m.team_a_id ? 1 : 0) + (m.team_b_id ? 1 : 0), 0,
+          );
+          return (
           <div>
             <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
             {champion && (
@@ -1072,6 +1155,13 @@ export default function App() {
                 <div style={{ fontWeight: 900, fontSize: 14, color: "#b45309", textTransform: "uppercase", letterSpacing: 3 }}>Champions</div>
                 <div style={{ fontWeight: 900, fontSize: 22, color: "#78350f", marginTop: 10 }}>{champion.p2 ? `${champion.p1.name} & ${champion.p2.name}` : champion.p1.name}</div>
               </div>
+            )}
+            {!champion && knockoutMatches.length > 0 && (
+              <KnockoutSanityBanner
+                knockoutMatches={knockoutMatches}
+                expectedQualifiers={expectedQualifiers}
+                actualQualifiers={actualQualifiers}
+              />
             )}
             <div style={{ overflowX: "auto", paddingBottom: 20 }}>
               <div style={{ display: "flex", gap: 0, minWidth: knockout.length * 290 }}>
@@ -1088,7 +1178,8 @@ export default function App() {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {current && tab === "scoreboard" && (
           <div>
@@ -1153,6 +1244,61 @@ export default function App() {
 
       {showLogin && <Login onClose={() => setShowLogin(false)} />}
       {showAdminManager && isAdmin && <AdminManager currentEmail={email} onClose={() => setShowAdminManager(false)} />}
+
+      {promotePickerFor && (() => {
+        // Build the eligibility-status sets fresh on each open (cheap given small N).
+        const bracketTeamIds = new Set<string>();
+        const eliminatedTeamIds = new Set<string>();
+        knockoutMatches.forEach(m => {
+          if (m.team_a_id) bracketTeamIds.add(m.team_a_id);
+          if (m.team_b_id) bracketTeamIds.add(m.team_b_id);
+          if (m.confirmed && !m.is_bye && m.team_a_id && m.team_b_id && m.winner_id) {
+            const loser = m.winner_id === m.team_a_id ? m.team_b_id : m.team_a_id;
+            eliminatedTeamIds.add(loser);
+          }
+        });
+        const qualifiedTeamIds = new Set<string>();
+        const topN = currentCategory?.top_n_advance && currentCategory.top_n_advance > 0
+          ? currentCategory.top_n_advance
+          : 2;
+        groups.forEach((g, gi) => {
+          const st = getStandings(g, gi);
+          for (let i = 0; i < Math.min(topN, st.length); i++) qualifiedTeamIds.add(st[i].team.id);
+        });
+        const targetMatch = knockoutMatches.find(m => m.id === promotePickerFor.matchId);
+        const currentTeamId = targetMatch
+          ? (promotePickerFor.side === "a" ? targetMatch.team_a_id : targetMatch.team_b_id)
+          : null;
+        return (
+          <PromoteTeamPicker
+            title="Select team for this slot"
+            subtitle={`Knockout match · side ${promotePickerFor.side.toUpperCase()}`}
+            candidates={teamsView}
+            bracketTeamIds={bracketTeamIds}
+            eliminatedTeamIds={eliminatedTeamIds}
+            qualifiedTeamIds={qualifiedTeamIds}
+            currentTeamId={currentTeamId}
+            onSelect={async (teamId) => {
+              // If the chosen team is already in another bracket slot, clear it from there.
+              for (const m of knockoutMatches) {
+                if (m.id === promotePickerFor.matchId) continue;
+                if (m.team_a_id === teamId) {
+                  await db.updateMatch(m.id, { team_a_id: null, status: "pending", winner_id: null, confirmed: false, score_a: null, score_b: null, confirmed_at: null });
+                }
+                if (m.team_b_id === teamId) {
+                  await db.updateMatch(m.id, { team_b_id: null, status: "pending", winner_id: null, confirmed: false, score_a: null, score_b: null, confirmed_at: null });
+                }
+              }
+              const patch = promotePickerFor.side === "a"
+                ? { team_a_id: teamId }
+                : { team_b_id: teamId };
+              await db.updateMatch(promotePickerFor.matchId, patch);
+              toast("Team placed in bracket slot", "success");
+            }}
+            onClose={() => setPromotePickerFor(null)}
+          />
+        );
+      })()}
 
       {partnerPicker && (() => {
         const me = playerById[partnerPicker];
