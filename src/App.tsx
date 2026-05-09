@@ -14,7 +14,7 @@ import { ShuttleSVG, Av } from "./components/ui";
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { PlayerProfileView } from "./components/PlayerProfileView";
-import { defaultFormat, splitIntoGroups } from "./lib/formatPlanner";
+import { defaultFormat, recommendFormats, describeFormat, splitIntoGroups, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { KnockoutSanityBanner } from "./components/KnockoutSanityBanner";
 import type { Match, Player, Team, Tournament } from "./types";
@@ -79,6 +79,9 @@ export default function App() {
   const [editName, setEditName] = useState("");
   const [partnerPicker, setPartnerPicker] = useState<string | null>(null); // playerId whose partner we're choosing
   const [pendingRounds, setPendingRounds] = useState(1);
+  // Active format-card selection on the Teams tab. Synced from the saved
+  // category settings via the useEffect below; user clicks override.
+  const [selectedFormatLabel, setSelectedFormatLabel] = useState<FormatPlan["label"]>("Recommended");
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null); // confirmed match being re-edited
   const [currentCategoryId, setCurrentCategoryId] = useState<string | null>(null);
   const [pickingCourtFor, setPickingCourtFor] = useState<Match | null>(null);
@@ -307,20 +310,20 @@ export default function App() {
     }
   };
 
-  const startGroupStage = async () => {
+  const startGroupStage = async (override?: { groupsCount: number; topNAdvance: number; roundsPerPair: number }) => {
     if (!guard() || !current || !currentCategoryId) return;
     const cat = categories.find(c => c.id === currentCategoryId);
     if (!cat) return;
 
-    // Determine groups_count and group_sizes:
-    // - If category.groups_count > 0: honor that, derive sizes from N
-    // - Else: ask the format planner for the default given N teams; persist
-    //   the derived groups_count + top_n_advance so the knockout stage can
-    //   read consistent values.
+    // Resolution order for format params:
+    //   1. Explicit override from the Teams tab format-card click (most authoritative)
+    //   2. The category's saved values (groups_count > 0 / top_n_advance > 0)
+    //   3. Planner default for the current team count
     const N = teamsView.length;
-    let groupsCount = cat.groups_count ?? 0;
+    let groupsCount = override?.groupsCount ?? cat.groups_count ?? 0;
+    let topNAdvance = override?.topNAdvance ?? cat.top_n_advance ?? 0;
+    const roundsPerPair = override?.roundsPerPair ?? pendingRounds;
     let groupSizes: number[];
-    let topNAdvance = cat.top_n_advance ?? 0;
 
     if (groupsCount > 0) {
       groupSizes = splitIntoGroups(N, groupsCount);
@@ -331,10 +334,9 @@ export default function App() {
       if (topNAdvance <= 0) topNAdvance = plan.topNAdvance;
     }
 
-    // Persist the planner's choices + the user-specified rounds-per-pair so
-    // knockout generation is deterministic later.
+    // Persist the choices so the knockout stage reads the same values.
     await db.updateCategory(currentCategoryId, {
-      rounds_per_pair: pendingRounds,
+      rounds_per_pair: roundsPerPair,
       groups_count: groupsCount,
       top_n_advance: topNAdvance,
     });
@@ -358,7 +360,7 @@ export default function App() {
     let slot = 0;
     gs.forEach((g, gi) => {
       for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
-        for (let r = 0; r < pendingRounds; r++) {
+        for (let r = 0; r < roundsPerPair; r++) {
           rows.push({
             tournament_id: current.id, category_id: currentCategoryId, stage: "group", group_idx: gi, round_idx: null, slot_idx: slot++,
             team_a_id: g[i].id, team_b_id: g[j].id,
@@ -563,6 +565,20 @@ export default function App() {
   };
 
   useEffect(() => { if (currentCategory) setPendingRounds(currentCategory.rounds_per_pair || 1); }, [currentCategory?.id, currentCategory?.rounds_per_pair]);
+
+  // Sync selected format card to whatever the category has saved (or default
+  // to "Recommended" if there's no saved match). Re-runs when team count
+  // changes (which can change the available options).
+  useEffect(() => {
+    if (!currentCategory || teamsView.length < 2) return;
+    const opts = recommendFormats(teamsView.length);
+    const match = opts.find(o =>
+      o.groupsCount === currentCategory.groups_count &&
+      o.topNAdvance === currentCategory.top_n_advance &&
+      o.roundsPerPair === currentCategory.rounds_per_pair,
+    );
+    setSelectedFormatLabel(match?.label ?? "Recommended");
+  }, [currentCategory?.id, currentCategory?.groups_count, currentCategory?.top_n_advance, currentCategory?.rounds_per_pair, teamsView.length]);
 
   const btn = (bg = "#3A86FF", clr = "#fff"): React.CSSProperties => ({ background: bg, color: clr, border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", fontWeight: 600, fontSize: 14, transition: "all .2s", boxShadow: `0 2px 8px ${bg}33` });
   const tabBtn = (t: typeof tab, label: string, icon: string) => (
@@ -1066,27 +1082,85 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-                {isAdmin && teamsView.length >= 2 && phase === "none" && (
-                  <div style={{ textAlign: "center", marginTop: 32, padding: 28, background: "linear-gradient(135deg,#1a1a2e,#2d3a5c)", borderRadius: 18, color: "#fff" }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 3, color: "#93c5fd", textTransform: "uppercase", marginBottom: 6 }}>Configure Group Stage</div>
-                    <div style={{ fontSize: 14, color: "#cbd5e1", marginBottom: 18 }}>How many times should each pair play?</div>
-                    <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
-                      {[1, 2, 3].map(n => (
-                        <button key={n} onClick={() => setPendingRounds(n)} style={{ padding: "16px 24px", minWidth: 100, borderRadius: 14, border: pendingRounds === n ? "2px solid #84cc16" : "2px solid rgba(255,255,255,0.1)", background: pendingRounds === n ? "linear-gradient(135deg,#84cc16,#65a30d)" : "rgba(255,255,255,0.04)", color: "#fff", cursor: "pointer", textAlign: "center" }}>
-                          <div style={{ fontSize: 28, fontWeight: 900 }}>{n}</div>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: pendingRounds === n ? "rgba(255,255,255,0.9)" : "#94a3b8" }}>{n === 1 ? "Match" : "Matches"}</div>
+                {isAdmin && teamsView.length >= 2 && phase === "none" && (() => {
+                  const formatOptions = recommendFormats(teamsView.length);
+                  const selectedPlan = formatOptions.find(o => o.label === selectedFormatLabel) ?? formatOptions[0];
+                  const courts = Math.max(1, current.num_courts || 1);
+                  const matchMinutes = currentCategory?.match_minutes ?? 12;
+                  const handleStart = () => {
+                    if (!selectedPlan) return startGroupStage();
+                    return startGroupStage({
+                      groupsCount: selectedPlan.groupsCount,
+                      topNAdvance: selectedPlan.topNAdvance,
+                      roundsPerPair: selectedPlan.roundsPerPair,
+                    });
+                  };
+                  const accentFor = (label: FormatPlan["label"]) =>
+                    label === "Recommended" ? "#84cc16" :
+                    label === "More games" ? "#a855f7" : "#3b82f6";
+                  return (
+                    <div style={{ marginTop: 32, padding: "26px 28px", background: "linear-gradient(135deg,#1a1a2e,#2d3a5c)", borderRadius: 18, color: "#fff" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
+                        <div>
+                          <div className="font-display" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2.5, color: "#93c5fd", textTransform: "uppercase", marginBottom: 4 }}>Tournament Format</div>
+                          <div style={{ fontSize: 14, color: "#cbd5e1" }}>Choose how the {teamsView.length} teams will compete.</div>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "right", lineHeight: 1.6 }}>
+                          Estimates assume<br />{courts} court{courts === 1 ? "" : "s"} · {matchMinutes} min/match
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`, gap: 12, marginBottom: 22 }}>
+                        {formatOptions.map(opt => {
+                          const selected = opt.label === selectedFormatLabel;
+                          const accent = accentFor(opt.label);
+                          return (
+                            <button
+                              key={opt.label}
+                              type="button"
+                              onClick={() => setSelectedFormatLabel(opt.label)}
+                              style={{
+                                padding: "14px 16px",
+                                borderRadius: 12,
+                                border: selected ? `2px solid ${accent}` : "2px solid rgba(255,255,255,0.08)",
+                                background: selected ? `${accent}1A` : "rgba(255,255,255,0.03)",
+                                color: "#fff",
+                                cursor: "pointer",
+                                textAlign: "left",
+                                transition: "border-color .15s, background .15s",
+                                boxShadow: selected ? `0 8px 24px ${accent}33` : "none",
+                              }}
+                            >
+                              <div className="font-display" style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                {selected ? "✓" : "○"} {opt.label}
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0", marginBottom: 8, lineHeight: 1.35 }}>{describeFormat(opt)}</div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11, color: "#94a3b8", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8 }}>
+                                <span><strong style={{ color: "#fff", fontSize: 13 }}>{opt.totalMatches}</strong> matches</span>
+                                <span>~{opt.estimatedMinutes(matchMinutes, courts)} min</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        <button
+                          onClick={handleStart}
+                          style={{ ...btn("#84cc16"), padding: "16px 44px", fontSize: 17, borderRadius: 14, fontWeight: 800 }}
+                        >
+                          📊 Start Group Stage
                         </button>
-                      ))}
+                      </div>
+                      {selectedPlan && (
+                        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 10, textAlign: "center" }}>
+                          {selectedPlan.totalGroupGames} group games + {selectedPlan.totalKnockoutGames} knockout
+                          {selectedPlan.knockoutShape !== "RR-only" && selectedPlan.knockoutShape !== "none" && " · top advances per " + (selectedPlan.groupsCount === 1 ? "category" : "group")}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#cbd5e1", marginBottom: 18 }}>
-                      {pendingRounds === 1 && "⚡ Quick — single match per pair"}
-                      {pendingRounds === 2 && "✅ Recommended — best balance of competition"}
-                      {pendingRounds === 3 && "🏆 Full — most competitive, longest tournament"}
-                    </div>
-                    <button onClick={startGroupStage} style={{ ...btn("#84cc16"), padding: "16px 44px", fontSize: 17, borderRadius: 14, fontWeight: 800 }}>📊 Start Group Stage</button>
-                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 10 }}>Top 2 per group advance to knockouts</div>
-                  </div>
-                )}
+                  );
+                })()}
               </>
             )}
             {isAdmin && <div style={{ textAlign: "center", marginTop: 20 }}><button onClick={resetAll} style={{ ...btn("#E63946"), padding: "10px 22px", fontSize: 13, borderRadius: 10 }}>🔄 Reset This Tournament</button></div>}
