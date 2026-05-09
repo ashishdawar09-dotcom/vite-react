@@ -13,6 +13,7 @@ import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
+import { PlayerProfileView } from "./components/PlayerProfileView";
 import type { Match, Player, Team, Tournament } from "./types";
 
 const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
@@ -83,7 +84,15 @@ export default function App() {
   // Optimistic local set of category IDs for the player currently being edited inline.
   // Initialized from playerCategoryMap when editingPlayerCats becomes non-null; cleared on close.
   const [pendingPlayerCats, setPendingPlayerCats] = useState<Set<string> | null>(null);
+  // Player whose dedicated profile is shown in the Profiles tab. null = grid view.
+  const [profileViewPlayerId, setProfileViewPlayerId] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Navigate to a specific player's profile from anywhere (search, etc.).
+  const showProfile = (playerId: string) => {
+    setProfileViewPlayerId(playerId);
+    setTab("profiles");
+  };
 
   const reloadTournaments = async () => {
     const list = await db.listTournaments();
@@ -724,7 +733,7 @@ export default function App() {
           </div>
         )}
 
-        {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} />}
+        {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} players={players} playerCategories={playerCategories} onShowProfile={showProfile} />}
 
         {current && tab === "matches" && (
           <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading...</div>}>
@@ -875,6 +884,29 @@ export default function App() {
         })()}
 
         {current && tab === "profiles" && (() => {
+          // Dedicated single-player profile view — shown when a name is clicked in
+          // search results, on a player card, or via direct nav.
+          if (profileViewPlayerId) {
+            const p = players.find(x => x.id === profileViewPlayerId);
+            if (!p) {
+              // Player not found (deleted?) — fall back to grid.
+              setProfileViewPlayerId(null);
+              return null;
+            }
+            return (
+              <PlayerProfileView
+                player={p}
+                allTeams={allTeamsView}
+                matches={projectedMatches}
+                categories={categories}
+                playerCategories={playerCategories}
+                groups={groups}
+                getStandings={getStandings}
+                onBack={() => setProfileViewPlayerId(null)}
+                onShowProfile={(pid) => setProfileViewPlayerId(pid)}
+              />
+            );
+          }
           const filteredProfiles = currentCategoryId
             ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId!))
             : players;
@@ -884,7 +916,7 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
               <span style={{ fontSize: 28 }}>👤</span>
               <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Player Profiles</h2>
-              <span style={{ marginLeft: "auto", fontSize: 13, color: "#94a3b8" }}>{isAdmin ? "Click photo to upload, click name to edit" : "View only"}</span>
+              <span style={{ marginLeft: "auto", fontSize: 13, color: "#94a3b8" }}>{isAdmin ? "Click photo to upload, name to edit, or VIEW for full profile" : "Click VIEW for full profile"}</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 18 }}>
               {filteredProfiles.map((p, i) => (
@@ -911,6 +943,14 @@ export default function App() {
                       </div>
                     ) : null; })()}
                     <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>{p.active ? (paired.has(p.id) ? "✓ On a team" : "Available") : "Inactive"}</div>
+                    <button
+                      onClick={() => setProfileViewPlayerId(p.id)}
+                      style={{ marginTop: 14, width: "100%", padding: "9px 14px", borderRadius: 10, border: "1px solid #3A86FF", background: "transparent", color: "#3A86FF", fontSize: 11, fontWeight: 800, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase", transition: "all .15s" }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "#3A86FF"; e.currentTarget.style.color = "#fff"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#3A86FF"; }}
+                    >
+                      View Profile →
+                    </button>
                   </div>
                 </div>
               ))}

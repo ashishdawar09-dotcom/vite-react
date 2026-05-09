@@ -3,11 +3,11 @@ import { CourtStatus } from "./CourtStatus";
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
-import type { Category, Match, Player, ProjectedMatch, Team } from "../types";
+import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
 
-export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches }: {
+export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches, players, playerCategories, onShowProfile }: {
   teamsView: TeamView[];
   allTeamById: Record<string, TeamView | undefined>;
   matches: Match[];
@@ -21,6 +21,9 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   liveByCourt: Record<number, ProjectedMatch | undefined>;
   projectedById: Record<string, ProjectedMatch>;
   projectedMatches: ProjectedMatch[];
+  players: Player[];
+  playerCategories: PlayerCategory[];
+  onShowProfile: (playerId: string) => void;
 }) {
   const isMobile = useIsMobile();
   const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
@@ -66,6 +69,18 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [projectedMatches, q]
   );
+
+  // Player name results for the search box. Active players first, then by name.
+  const playerResults = useMemo(() => {
+    if (!q) return [];
+    return players
+      .filter(p => p.name.toLowerCase().includes(q))
+      .sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 12);
+  }, [players, q]);
 
   const stats: Record<string, { team: TeamView; w: number; pts: number; pf: number; pa: number }> = {};
   teamsView.forEach(t => { stats[t.id] = { team: t, w: 0, pts: 0, pf: 0, pa: 0 }; });
@@ -146,10 +161,56 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         </div>
         {q && (
           <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: 1.5 }}>
-            {live.length + upcoming.length + recent.length} MATCH{live.length + upcoming.length + recent.length === 1 ? "" : "ES"}
+            {playerResults.length} PLAYER{playerResults.length === 1 ? "" : "S"} · {live.length + upcoming.length + recent.length} MATCH{live.length + upcoming.length + recent.length === 1 ? "" : "ES"}
           </span>
         )}
       </div>
+
+      {/* Player name results — clickable, navigate to player profile */}
+      {q && playerResults.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <SectionHeader
+            accent="#a855f7"
+            badge={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.4)", padding: "3px 10px", borderRadius: 4 }}>
+                <span className="font-display" style={{ fontSize: 10, fontWeight: 700, color: "#a855f7", letterSpacing: 1.5 }}>{playerResults.length} {playerResults.length === 1 ? "RESULT" : "RESULTS"}</span>
+              </span>
+            }
+          >Matching Players</SectionHeader>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(240px,1fr))", gap: 10 }}>
+            {playerResults.map(p => {
+              const cats = playerCategories
+                .filter(pc => pc.player_id === p.id)
+                .map(pc => catById[pc.category_id]?.name)
+                .filter((n): n is string => Boolean(n));
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => onShowProfile(p.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, border: "1px solid #1a3050", background: "#0f1e36", color: "#fff", cursor: "pointer", textAlign: "left", opacity: p.active ? 1 : 0.6, transition: "background .15s, border-color .15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "#11243f"; e.currentTarget.style.borderColor = "#a855f7"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "#0f1e36"; e.currentTarget.style.borderColor = "#1a3050"; }}
+                  title={`View ${p.name}'s profile`}
+                >
+                  <Av name={p.name} photo={p.photo_url} sz={36} color={p.color} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.name}
+                      {!p.active && <span style={{ marginLeft: 6, fontSize: 9, color: "#64748b", letterSpacing: 1, fontWeight: 700 }}>INACTIVE</span>}
+                    </div>
+                    {cats.length > 0 ? (
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cats.join(" · ")}</div>
+                    ) : (
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 2, fontStyle: "italic" }}>No category</div>
+                    )}
+                  </div>
+                  <span className="font-display" style={{ fontSize: 16, color: "#a855f7", fontWeight: 800 }}>→</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {upcoming.length > 0 && live.length === 0 && upcoming.slice(0, 3).some(m => {
         const start = m.projected_start_at ? new Date(m.projected_start_at).getTime() : 0;

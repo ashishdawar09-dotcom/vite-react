@@ -1,4 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import * as db from "../lib/db";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
@@ -38,61 +56,127 @@ export function MatchesTab({
   const [now, setNow] = useState(Date.now());
   const isMobile = useIsMobile();
 
+  // Optimistic order overrides per-category for the pending list.
+  // Maps category_id → ordered match-id array set immediately on drag-end so
+  // the UI reflects the user's intent without waiting for the server round-trip.
+  const [pendingOrderOverrides, setPendingOrderOverrides] = useState<Record<string, string[]>>({});
+
+  // Collapse state per category for the completed sub-section.
+  const [collapsedCompleted, setCollapsedCompleted] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
   }, []);
 
+  // Drop optimistic overrides once the server's order matches what we set
+  // (i.e. realtime caught up). Compares the order of pending match IDs by
+  // queue_position vs the override.
+  useEffect(() => {
+    if (Object.keys(pendingOrderOverrides).length === 0) return;
+    setPendingOrderOverrides(prev => {
+      const next: typeof prev = {};
+      for (const [catId, idOrder] of Object.entries(prev)) {
+        const serverOrder = matches
+          .filter(m => m.category_id === catId && m.status === "pending")
+          .sort((a, b) => (a.queue_position ?? a.slot_idx) - (b.queue_position ?? b.slot_idx))
+          .map(m => m.id);
+        if (JSON.stringify(serverOrder) !== JSON.stringify(idOrder)) {
+          next[catId] = idOrder;
+        }
+      }
+      return next;
+    });
+  }, [matches, pendingOrderOverrides]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const catById = Object.fromEntries(categories.map(c => [c.id, c]));
   const busyCourts = new Set(Object.keys(liveByCourt).map(n => parseInt(n)));
 
-  const filtered = useMemo(() => {
-    return matches.filter(m => {
+  // Group filtered matches by category, then split each into live/pending/completed.
+  const sections = useMemo(() => {
+    const visible = matches.filter(m => {
       if (filterCat && m.category_id !== filterCat) return false;
       if (filterStatus && m.status !== filterStatus) return false;
       if (filterCourt && String(m.court_number ?? "") !== filterCourt) return false;
       return true;
-    }).sort((a, b) => {
-      const order = { live: 0, pending: 1, completed: 2 };
-      const oa = order[a.status];
-      const ob = order[b.status];
-      if (oa !== ob) return oa - ob;
-      const ta = new Date(a.projected_start_at ?? 0).getTime();
-      const tb = new Date(b.projected_start_at ?? 0).getTime();
-      return ta - tb;
     });
-  }, [matches, filterCat, filterStatus, filterCourt]);
-
-  // Pending matches per category for reordering
-  const pendingByCat = useMemo(() => {
-    const map = new Map<string, ProjectedMatch[]>();
-    for (const m of filtered) {
-      if (m.status !== "pending") continue;
-      const arr = map.get(m.category_id) ?? [];
+    const byCategory = new Map<string, ProjectedMatch[]>();
+    for (const m of visible) {
+      const arr = byCategory.get(m.category_id) ?? [];
       arr.push(m);
-      map.set(m.category_id, arr);
+      byCategory.set(m.category_id, arr);
     }
-    return map;
-  }, [filtered]);
+    return categories
+      .filter(c => byCategory.has(c.id))
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(c => {
+        const cMatches = byCategory.get(c.id) ?? [];
+        const live = cMatches
+          .filter(m => m.status === "live")
+          .sort((a, b) => new Date(a.started_at ?? 0).getTime() - new Date(b.started_at ?? 0).getTime());
+        const serverPending = cMatches
+          .filter(m => m.status === "pending")
+          .sort((a, b) => (a.queue_position ?? a.slot_idx) - (b.queue_position ?? b.slot_idx));
+        const override = pendingOrderOverrides[c.id];
+        let pending = serverPending;
+        if (override) {
+          const byId = new Map(serverPending.map(m => [m.id, m]));
+          const ordered: ProjectedMatch[] = [];
+          for (const id of override) {
+            const m = byId.get(id);
+            if (m) { ordered.push(m); byId.delete(id); }
+          }
+          // Append any new pending matches the override doesn't know about
+          for (const m of byId.values()) ordered.push(m);
+          pending = ordered;
+        }
+        const completed = cMatches
+          .filter(m => m.confirmed)
+          .sort((a, b) => (b.confirmed_at ?? "").localeCompare(a.confirmed_at ?? ""));
+        return { category: c, live, pending, completed };
+      });
+  }, [matches, categories, filterCat, filterStatus, filterCourt, pendingOrderOverrides]);
 
-  const moveMatch = async (m: ProjectedMatch, direction: "up" | "down") => {
-    const pending = pendingByCat.get(m.category_id);
-    if (!pending) return;
-    const idx = pending.findIndex(x => x.id === m.id);
-    if (idx < 0) return;
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= pending.length) return;
-    const other = pending[swapIdx];
-    const pos1 = m.queue_position ?? m.slot_idx;
-    const pos2 = other.queue_position ?? other.slot_idx;
-    await db.swapMatchQueuePositions(m.id, pos1, other.id, pos2);
-  };
+  const totalVisible = sections.reduce((acc, s) => acc + s.live.length + s.pending.length + s.completed.length, 0);
 
-  const canMove = (m: ProjectedMatch, direction: "up" | "down") => {
-    const pending = pendingByCat.get(m.category_id);
-    if (!pending) return false;
-    const idx = pending.findIndex(x => x.id === m.id);
-    return direction === "up" ? idx > 0 : idx < pending.length - 1;
+  const handleDragEnd = async (event: DragEndEvent, categoryId: string, currentPending: ProjectedMatch[]) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = currentPending.findIndex(m => m.id === active.id);
+    const newIdx = currentPending.findIndex(m => m.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+
+    const reordered = arrayMove(currentPending, oldIdx, newIdx);
+    const newOrder = reordered.map(m => m.id);
+
+    // Optimistic
+    setPendingOrderOverrides(prev => ({ ...prev, [categoryId]: newOrder }));
+
+    // Server: assign sequential queue_position values (0..N-1) for matches whose
+    // position changed. This produces a stable ordering that matches the visual.
+    try {
+      const writes = reordered
+        .map((m, i) => {
+          const cur = m.queue_position ?? m.slot_idx;
+          if (cur === i) return null;
+          return db.updateMatch(m.id, { queue_position: i });
+        })
+        .filter(Boolean) as Promise<unknown>[];
+      await Promise.all(writes);
+    } catch (e: any) {
+      toast(e?.message ?? "Reorder failed", "error");
+      setPendingOrderOverrides(prev => {
+        const next = { ...prev };
+        delete next[categoryId];
+        return next;
+      });
+    }
   };
 
   const startMatch = async (m: ProjectedMatch, court: number) => {
@@ -229,13 +313,111 @@ export function MatchesTab({
 
   const tName = (t: TeamView | null | undefined) => t?.p1 ? (t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name) : "TBD";
 
-  // For court reassignment, exclude the match's own court from busy list
   const reassignBusyCourts = useMemo(() => {
     if (!reassigningCourtFor) return busyCourts;
     const s = new Set(busyCourts);
     if (reassigningCourtFor.court_number != null) s.delete(reassigningCourtFor.court_number);
     return s;
   }, [busyCourts, reassigningCourtFor]);
+
+  // Renders one match row. `dragHandle` is provided only for sortable pending rows.
+  const renderMatch = (m: ProjectedMatch, dragHandle: React.ReactNode | null = null) => {
+    const ta = m.team_a_id ? teamById[m.team_a_id] : null;
+    const tb = m.team_b_id ? teamById[m.team_b_id] : null;
+    const isLive = m.status === "live";
+    const isCompleted = m.confirmed;
+    const winA = isCompleted && m.winner_id === m.team_a_id;
+    const winB = isCompleted && m.winner_id === m.team_b_id;
+    const deltaColor = isCompleted ? (m.delta_min != null && m.delta_min > 1 ? "#fbbf24" : m.delta_min != null && m.delta_min < -1 ? "#22c55e" : "#94a3b8") : isLive ? (m.delta_min != null && m.delta_min > 1 ? "#ef4444" : "#00d4ff") : "#94a3b8";
+    const timeOver = isTimeOver(m);
+    const pickingTeamForThis = timeOverPicking && timeOverPicking.matchId === m.id;
+
+    return (
+      <div style={{ background: isLive ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)") : "#0f1e36", border: isLive ? (timeOver ? "1px solid #f59e0b" : "1px solid #ef4444") : "1px solid #1a3050", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
+        {isLive && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: timeOver ? "#f59e0b" : "#ef4444" }} />}
+        {dragHandle}
+        {/* Stage badge (smaller now that category is the section header) */}
+        <div style={{ minWidth: isMobile ? 0 : 80 }}>
+          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1 }}>{stageLabel(m)}</div>
+          {timeOver && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", marginTop: 4, letterSpacing: 1.2 }}>⏰ TIME OVER</div>}
+        </div>
+
+        {/* Teams */}
+        <div style={{ flex: 1, minWidth: isMobile ? 160 : 220 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winA ? 800 : 600, color: winA ? "#22c55e" : "#fff" }}>
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(ta)}</span>
+            {(isLive || isCompleted) && (
+              isAdmin && isLive ? <ScoreStepper value={m.score_a ?? 0} onPlus={() => inlineScore(m, "a", 1)} onMinus={() => inlineScore(m, "a", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winA ? "#22c55e" : "#fff" }}>{m.score_a ?? 0}</span>
+            )}
+          </div>
+          <div style={{ height: 1, background: "#1a3050", margin: "4px 0" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winB ? 800 : 600, color: winB ? "#22c55e" : "#fff" }}>
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(tb)}</span>
+            {(isLive || isCompleted) && (
+              isAdmin && isLive ? <ScoreStepper value={m.score_b ?? 0} onPlus={() => inlineScore(m, "b", 1)} onMinus={() => inlineScore(m, "b", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winB ? "#22c55e" : "#fff" }}>{m.score_b ?? 0}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Time / court / status */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, minWidth: isMobile ? 0 : 130 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {m.court_number != null && (
+              isAdmin && isLive ? (
+                <button onClick={() => setReassigningCourtFor(m)} className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 8px", background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.3)", borderRadius: 4, letterSpacing: 1, cursor: "pointer" }} title="Change court">COURT {m.court_number} ✏️</button>
+              ) : (
+                <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 8px", background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.3)", borderRadius: 4, letterSpacing: 1 }}>COURT {m.court_number}</span>
+              )
+            )}
+            {m.is_walkover && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", padding: "3px 8px", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, letterSpacing: 1 }}>W/O</span>}
+          </div>
+          <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 0.5 }}>{fmtClock(m.projected_start_at)}</div>
+          <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: deltaColor, letterSpacing: 1 }}>{m.delta_label}</div>
+        </div>
+
+        {/* Admin actions */}
+        {isAdmin && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
+            <button onClick={() => setHistoryFor(m)} className="font-display" style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="View change history">📜 LOG</button>
+            {m.status === "pending" && !m.is_bye && m.team_a_id && m.team_b_id && (
+              <button onClick={() => setPickingCourtFor(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</button>
+            )}
+            {isLive && !timeOver && (
+              <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>✓ CONFIRM</button>
+            )}
+            {isLive && timeOver && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0", borderTop: "1px solid #f59e0b33" }}>
+                <button onClick={() => handleExtend(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #3b82f6", background: "rgba(59,130,246,0.15)", color: "#60a5fa", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>+5 MIN</button>
+                <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>✓ CONFIRM</button>
+                <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "walkover" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fbbf24", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>WALKOVER</button>
+                <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "winner" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>SELECT WINNER</button>
+                <button onClick={() => handleReschedule(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #64748b", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>RESCHEDULE</button>
+                <button onClick={() => handleCancel(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #ef4444", background: "rgba(239,68,68,0.1)", color: "#f87171", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>CANCEL</button>
+              </div>
+            )}
+            {pickingTeamForThis && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0" }}>
+                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, alignSelf: "center" }}>
+                  {timeOverPicking!.action === "walkover" ? "Walkover — pick winner:" : "Select winner:"}
+                </span>
+                <button onClick={() => timeOverPicking!.action === "walkover" ? markWalkover(m, "a") : handleSelectWinner(m, "a")} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{tName(ta)}</button>
+                <button onClick={() => timeOverPicking!.action === "walkover" ? markWalkover(m, "b") : handleSelectWinner(m, "b")} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{tName(tb)}</button>
+                <button onClick={() => setTimeOverPicking(null)} style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const toggleCollapsed = (catId: string) => {
+    setCollapsedCompleted(prev => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId); else next.add(catId);
+      return next;
+    });
+  };
 
   return (
     <div style={{ background: "#0a1628", borderRadius: 14, padding: 20, border: "1px solid #1a3050", color: "#fff" }}>
@@ -247,107 +429,78 @@ export function MatchesTab({
         <FilterChip label="STATUS" value={filterStatus} onChange={setFilterStatus} options={[{ v: "", l: "All" }, { v: "pending", l: "Pending" }, { v: "live", l: "Live" }, { v: "completed", l: "Completed" }]} />
         <FilterChip label="COURT" value={filterCourt} onChange={setFilterCourt} options={[{ v: "", l: "All" }, ...Array.from({ length: tournament.num_courts }, (_, i) => ({ v: String(i + 1), l: `Court ${i + 1}` }))]} />
         <div style={{ flex: 1 }} />
-        <span className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 1, padding: "6px 10px" }}>{filtered.length} MATCH{filtered.length === 1 ? "" : "ES"}</span>
+        <span className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 1, padding: "6px 10px" }}>{totalVisible} MATCH{totalVisible === 1 ? "" : "ES"}</span>
       </div>
 
-      {/* Match rows */}
-      {filtered.length === 0 ? (
+      {/* Sections */}
+      {sections.length === 0 ? (
         <div style={{ textAlign: "center", padding: 40, color: "#64748b", background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050" }}>
           No matches match these filters.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map(m => {
-            const cat = catById[m.category_id];
-            const ta = m.team_a_id ? teamById[m.team_a_id] : null;
-            const tb = m.team_b_id ? teamById[m.team_b_id] : null;
-            const isLive = m.status === "live";
-            const isCompleted = m.confirmed;
-            const winA = isCompleted && m.winner_id === m.team_a_id;
-            const winB = isCompleted && m.winner_id === m.team_b_id;
-            const deltaColor = isCompleted ? (m.delta_min != null && m.delta_min > 1 ? "#fbbf24" : m.delta_min != null && m.delta_min < -1 ? "#22c55e" : "#94a3b8") : isLive ? (m.delta_min != null && m.delta_min > 1 ? "#ef4444" : "#00d4ff") : "#94a3b8";
-            const timeOver = isTimeOver(m);
-            const pickingTeamForThis = timeOverPicking && timeOverPicking.matchId === m.id;
-
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          {sections.map(({ category, live, pending, completed }) => {
+            const isCollapsed = collapsedCompleted.has(category.id);
             return (
-              <div key={m.id} style={{ background: isLive ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)") : "#0f1e36", border: isLive ? (timeOver ? "1px solid #f59e0b" : "1px solid #ef4444") : "1px solid #1a3050", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
-                {isLive && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: timeOver ? "#f59e0b" : "#ef4444" }} />}
-                {/* Category + stage */}
-                <div style={{ minWidth: isMobile ? 0 : 130 }}>
-                  <div className="font-display" style={{ fontSize: 11, color: "#00d4ff", fontWeight: 700, letterSpacing: 1.2 }}>{cat?.name?.toUpperCase() ?? "—"}</div>
-                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1, marginTop: 2 }}>{stageLabel(m)}</div>
-                  {timeOver && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", marginTop: 4, letterSpacing: 1.2 }}>⏰ TIME OVER</div>}
+              <div key={category.id} style={{ background: "#0c1a30", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden" }}>
+                {/* Category header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid #1a3050", background: "linear-gradient(90deg, rgba(0,184,255,0.06) 0%, rgba(15,30,55,0) 70%)" }}>
+                  <div style={{ width: 4, height: 22, background: "#00d4ff", borderRadius: 1 }} />
+                  <h3 className="font-display" style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{category.name}</h3>
+                  <div style={{ flex: 1 }} />
+                  <SectionPill color="#ef4444" label="LIVE" count={live.length} />
+                  <SectionPill color="#00d4ff" label="UP NEXT" count={pending.length} />
+                  <SectionPill color="#22c55e" label="DONE" count={completed.length} />
                 </div>
 
-                {/* Teams */}
-                <div style={{ flex: 1, minWidth: isMobile ? 160 : 220 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winA ? 800 : 600, color: winA ? "#22c55e" : "#fff" }}>
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(ta)}</span>
-                    {(isLive || isCompleted) && (
-                      isAdmin && isLive ? <ScoreStepper value={m.score_a ?? 0} onPlus={() => inlineScore(m, "a", 1)} onMinus={() => inlineScore(m, "a", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winA ? "#22c55e" : "#fff" }}>{m.score_a ?? 0}</span>
-                    )}
+                {/* Live */}
+                {live.length > 0 && (
+                  <div style={{ padding: "12px 16px", borderBottom: pending.length > 0 || completed.length > 0 ? "1px solid #11243f" : "none" }}>
+                    <SubHeader color="#ef4444" pulse>LIVE NOW</SubHeader>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {live.map(m => <div key={m.id}>{renderMatch(m)}</div>)}
+                    </div>
                   </div>
-                  <div style={{ height: 1, background: "#1a3050", margin: "4px 0" }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winB ? 800 : 600, color: winB ? "#22c55e" : "#fff" }}>
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(tb)}</span>
-                    {(isLive || isCompleted) && (
-                      isAdmin && isLive ? <ScoreStepper value={m.score_b ?? 0} onPlus={() => inlineScore(m, "b", 1)} onMinus={() => inlineScore(m, "b", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winB ? "#22c55e" : "#fff" }}>{m.score_b ?? 0}</span>
-                    )}
-                  </div>
-                </div>
+                )}
 
-                {/* Time / court / status */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, minWidth: isMobile ? 0 : 130 }}>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {m.court_number != null && (
-                      isAdmin && isLive ? (
-                        <button onClick={() => setReassigningCourtFor(m)} className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 8px", background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.3)", borderRadius: 4, letterSpacing: 1, cursor: "pointer" }} title="Change court">COURT {m.court_number} ✏️</button>
-                      ) : (
-                        <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 8px", background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.3)", borderRadius: 4, letterSpacing: 1 }}>COURT {m.court_number}</span>
-                      )
-                    )}
-                    {m.is_walkover && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", padding: "3px 8px", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, letterSpacing: 1 }}>W/O</span>}
-                  </div>
-                  <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 0.5 }}>{fmtClock(m.projected_start_at)}</div>
-                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: deltaColor, letterSpacing: 1 }}>{m.delta_label}</div>
-                </div>
-
-                {/* Admin actions */}
-                {isAdmin && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
-                    <button onClick={() => setHistoryFor(m)} className="font-display" style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="View change history">📜 LOG</button>
-                    {m.status === "pending" && !m.is_bye && m.team_a_id && m.team_b_id && (
-                      <>
-                        <button onClick={() => setPickingCourtFor(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</button>
-                        <button onClick={() => moveMatch(m, "up")} disabled={!canMove(m, "up")} style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: canMove(m, "up") ? "#94a3b8" : "#334155", fontSize: 14, fontWeight: 800, cursor: canMove(m, "up") ? "pointer" : "not-allowed", opacity: canMove(m, "up") ? 1 : 0.4 }} title="Move up">↑</button>
-                        <button onClick={() => moveMatch(m, "down")} disabled={!canMove(m, "down")} style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: canMove(m, "down") ? "#94a3b8" : "#334155", fontSize: 14, fontWeight: 800, cursor: canMove(m, "down") ? "pointer" : "not-allowed", opacity: canMove(m, "down") ? 1 : 0.4 }} title="Move down">↓</button>
-                      </>
-                    )}
-                    {isLive && !timeOver && (
-                      <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>✓ CONFIRM</button>
-                    )}
-
-                    {/* Time-over actions */}
-                    {isLive && timeOver && (
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0", borderTop: "1px solid #f59e0b33" }}>
-                        <button onClick={() => handleExtend(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #3b82f6", background: "rgba(59,130,246,0.15)", color: "#60a5fa", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>+5 MIN</button>
-                        <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>✓ CONFIRM</button>
-                        <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "walkover" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fbbf24", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>WALKOVER</button>
-                        <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "winner" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>SELECT WINNER</button>
-                        <button onClick={() => handleReschedule(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #64748b", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>RESCHEDULE</button>
-                        <button onClick={() => handleCancel(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #ef4444", background: "rgba(239,68,68,0.1)", color: "#f87171", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>CANCEL</button>
+                {/* Pending — sortable */}
+                {pending.length > 0 && (
+                  <div style={{ padding: "12px 16px", borderBottom: completed.length > 0 ? "1px solid #11243f" : "none" }}>
+                    <SubHeader color="#00d4ff">UP NEXT {isAdmin && pending.length > 1 && <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1, marginLeft: 8 }}>· DRAG ≡ TO REORDER</span>}</SubHeader>
+                    {isAdmin ? (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={e => handleDragEnd(e, category.id, pending)}>
+                        <SortableContext items={pending.map(m => m.id)} strategy={verticalListSortingStrategy}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {pending.map(m => (
+                              <SortablePendingRow key={m.id} match={m} render={(dragHandle) => renderMatch(m, dragHandle)} disabled={!isAdmin || pending.length < 2} />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {pending.map(m => <div key={m.id}>{renderMatch(m)}</div>)}
                       </div>
                     )}
+                  </div>
+                )}
 
-                    {/* Team picker for walkover/winner selection */}
-                    {pickingTeamForThis && (
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0" }}>
-                        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, alignSelf: "center" }}>
-                          {pickingTeamForThis ? (timeOverPicking!.action === "walkover" ? "Walkover — pick winner:" : "Select winner:") : ""}
-                        </span>
-                        <button onClick={() => timeOverPicking!.action === "walkover" ? markWalkover(m, "a") : handleSelectWinner(m, "a")} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{tName(ta)}</button>
-                        <button onClick={() => timeOverPicking!.action === "walkover" ? markWalkover(m, "b") : handleSelectWinner(m, "b")} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{tName(tb)}</button>
-                        <button onClick={() => setTimeOverPicking(null)} style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                {/* Completed — collapsible */}
+                {completed.length > 0 && (
+                  <div style={{ padding: "12px 16px" }}>
+                    <button
+                      onClick={() => toggleCollapsed(category.id)}
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: 0, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
+                    >
+                      <span style={{ display: "inline-block", width: 4, height: 14, background: "#22c55e", borderRadius: 1 }} />
+                      <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", letterSpacing: 1.5, textTransform: "uppercase" }}>
+                        Completed ({completed.length})
+                      </span>
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>{isCollapsed ? "▸ Show" : "▾ Hide"}</span>
+                    </button>
+                    {!isCollapsed && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                        {completed.map(m => <div key={m.id}>{renderMatch(m)}</div>)}
                       </div>
                     )}
                   </div>
@@ -386,6 +539,59 @@ export function MatchesTab({
           onClose={() => setHistoryFor(null)}
         />
       )}
+    </div>
+  );
+}
+
+// Sortable wrapper for one pending match. Provides a drag handle button that
+// the user grabs; the rest of the row remains interactive (buttons clickable).
+function SortablePendingRow({ match, render, disabled }: { match: ProjectedMatch; render: (dragHandle: React.ReactNode) => React.ReactNode; disabled: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: match.id, disabled });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.45 : 1,
+    boxShadow: isDragging ? "0 12px 30px rgba(0,0,0,0.5), 0 0 0 1px #00d4ff" : undefined,
+    zIndex: isDragging ? 10 : undefined,
+  };
+  const handle = disabled ? null : (
+    <button
+      {...attributes}
+      {...listeners}
+      aria-label="Drag to reorder"
+      style={{
+        padding: "6px 8px",
+        borderRadius: 5,
+        border: "1px solid #1a3050",
+        background: "rgba(0,184,255,0.06)",
+        color: "#00d4ff",
+        fontSize: 18,
+        fontWeight: 800,
+        lineHeight: 1,
+        cursor: isDragging ? "grabbing" : "grab",
+        touchAction: "none",
+        userSelect: "none",
+      }}
+      title="Drag to reorder"
+    >≡</button>
+  );
+  return <div ref={setNodeRef} style={style}>{render(handle)}</div>;
+}
+
+function SectionPill({ color, label, count }: { color: string; label: string; count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="font-display" style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: 1.2, padding: "3px 8px", border: `1px solid ${color}55`, background: `${color}10`, borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 6 }}>
+      {label} <span style={{ color: "#fff", fontWeight: 800 }}>{count}</span>
+    </span>
+  );
+}
+
+function SubHeader({ color, children, pulse }: { color: string; children: React.ReactNode; pulse?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: color, animation: pulse ? "pulse-strong 1.4s ease-in-out infinite" : undefined, boxShadow: pulse ? `0 0 8px ${color}` : undefined }} />
+      <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color, letterSpacing: 1.8, textTransform: "uppercase" }}>{children}</span>
     </div>
   );
 }
