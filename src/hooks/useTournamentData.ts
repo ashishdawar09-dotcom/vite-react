@@ -107,13 +107,15 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   const debouncedLoadTeams = useRef(debounce(loadTeams, 300));
   const debouncedLoadMatches = useRef(debounce(loadMatches, 300));
   const debouncedLoadCategories = useRef(debounce(loadCategories, 300));
+  const debouncedLoadPlayerCategories = useRef(debounce(loadPlayerCategories, 300));
 
   useEffect(() => {
     debouncedLoadPlayers.current = debounce(loadPlayers, 300);
     debouncedLoadTeams.current = debounce(loadTeams, 300);
     debouncedLoadMatches.current = debounce(loadMatches, 300);
     debouncedLoadCategories.current = debounce(loadCategories, 300);
-  }, [loadPlayers, loadTeams, loadMatches, loadCategories]);
+    debouncedLoadPlayerCategories.current = debounce(loadPlayerCategories, 300);
+  }, [loadPlayers, loadTeams, loadMatches, loadCategories, loadPlayerCategories]);
 
   useEffect(() => {
     if (!tournamentId) {
@@ -132,7 +134,7 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         .channel(`pg:${tournamentId}`)
         .on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `tournament_id=eq.${tournamentId}` }, () => {
           debouncedLoadPlayers.current();
-          loadPlayerCategories();
+          debouncedLoadPlayerCategories.current();
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "teams", filter: `tournament_id=eq.${tournamentId}` }, () => {
           debouncedLoadTeams.current();
@@ -142,7 +144,12 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "categories", filter: `tournament_id=eq.${tournamentId}` }, () => {
           debouncedLoadCategories.current();
-          loadPlayerCategories();
+          debouncedLoadPlayerCategories.current();
+        })
+        // player_categories has no tournament_id column; subscribe without filter.
+        // listPlayerCategories() already scopes via inner-join on players.tournament_id.
+        .on("postgres_changes", { event: "*", schema: "public", table: "player_categories" }, () => {
+          debouncedLoadPlayerCategories.current();
         })
         .subscribe();
 
@@ -152,6 +159,7 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         debouncedLoadTeams.current.cancel();
         debouncedLoadMatches.current.cancel();
         debouncedLoadCategories.current.cancel();
+        debouncedLoadPlayerCategories.current.cancel();
         supabase.removeChannel(pgChannel);
       };
     } else {

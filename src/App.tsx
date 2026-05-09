@@ -80,6 +80,9 @@ export default function App() {
   const [pickingCourtFor, setPickingCourtFor] = useState<Match | null>(null);
   const [addPlayerCats, setAddPlayerCats] = useState<Set<string>>(new Set()); // categories for new player
   const [editingPlayerCats, setEditingPlayerCats] = useState<string | null>(null); // player whose categories are being edited
+  // Optimistic local set of category IDs for the player currently being edited inline.
+  // Initialized from playerCategoryMap when editingPlayerCats becomes non-null; cleared on close.
+  const [pendingPlayerCats, setPendingPlayerCats] = useState<Set<string> | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const reloadTournaments = async () => {
@@ -194,6 +197,19 @@ export default function App() {
     }
     return map;
   }, [playerCategories]);
+
+  // Sync the in-progress inline category-edit set with the underlying map.
+  // - Open editor: seed local set from current memberships
+  // - Close editor: clear local set
+  // - Realtime updates: re-seed so other admins' changes don't get lost
+  useEffect(() => {
+    if (editingPlayerCats) {
+      setPendingPlayerCats(new Set(playerCategoryMap.get(editingPlayerCats) ?? []));
+    } else {
+      setPendingPlayerCats(null);
+    }
+  }, [editingPlayerCats, playerCategoryMap]);
+
   const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
 
   const guard = () => { if (!isAdmin) { setShowLogin(true); return false; } return true; };
@@ -798,12 +814,29 @@ export default function App() {
                     {isEditingCats ? (
                       <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
                         {categories.map(c => {
-                          const has = pCats?.has(c.id) ?? false;
+                          // Read from optimistic local set so the checkbox flips instantly on click.
+                          const has = pendingPlayerCats?.has(c.id) ?? false;
                           return (
                             <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: has ? "#eff6ff" : "#f8fafc", color: has ? "#3A86FF" : "#94a3b8", border: has ? "1px solid #bfdbfe" : "1px solid #e2e8f0", cursor: "pointer" }}>
                               <input type="checkbox" checked={has} onChange={async () => {
-                                if (has) await db.removePlayerFromCategory(p.id, c.id);
-                                else await db.addPlayerToCategory(p.id, c.id);
+                                // Optimistic toggle
+                                setPendingPlayerCats(prev => {
+                                  const next = new Set(prev ?? []);
+                                  if (has) next.delete(c.id); else next.add(c.id);
+                                  return next;
+                                });
+                                try {
+                                  if (has) await db.removePlayerFromCategory(p.id, c.id);
+                                  else await db.addPlayerToCategory(p.id, c.id);
+                                } catch (e: any) {
+                                  // Revert on failure
+                                  setPendingPlayerCats(prev => {
+                                    const next = new Set(prev ?? []);
+                                    if (has) next.add(c.id); else next.delete(c.id);
+                                    return next;
+                                  });
+                                  toast(e?.message ?? "Failed to update category assignment", "error");
+                                }
                               }} style={{ accentColor: "#3A86FF", width: 12, height: 12 }} />
                               {c.name}
                             </label>

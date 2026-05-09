@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
 import type { Category, Player, PlayerCategory } from "../types";
@@ -21,6 +21,19 @@ export function CategoryEditor({
   const [matchMin, setMatchMin] = useState(category?.match_minutes ?? 12);
   const [startsAt, setStartsAt] = useState<string>(category?.starts_at ? toLocalInput(category.starts_at) : "");
   const [busy, setBusy] = useState(false);
+
+  // Optimistic local state for player↔category checkboxes. Initialized from
+  // `playerCategories` prop, kept in sync via the useEffect below so realtime
+  // updates from other admins are reflected. Click handlers update locally
+  // first (instant UX), then fire the async server write — revert on error.
+  const [localAssigned, setLocalAssigned] = useState<Set<string>>(() =>
+    new Set(playerCategories.filter(pc => pc.category_id === category?.id).map(pc => pc.player_id))
+  );
+
+  useEffect(() => {
+    if (!category) return;
+    setLocalAssigned(new Set(playerCategories.filter(pc => pc.category_id === category.id).map(pc => pc.player_id)));
+  }, [playerCategories, category?.id]);
 
   const save = async () => {
     if (!name.trim()) { toast("Category name required", "warn"); return; }
@@ -71,21 +84,36 @@ export function CategoryEditor({
         </Field>
 
         {category && (() => {
-          const assignedIds = new Set(playerCategories.filter(pc => pc.category_id === category.id).map(pc => pc.player_id));
           const sorted = [...players].sort((a, b) => {
             if (a.active !== b.active) return a.active ? -1 : 1;
             return a.sort_order - b.sort_order;
           });
           return (
-            <Field label={`Players in this category (${assignedIds.size})`}>
+            <Field label={`Players in this category (${localAssigned.size})`}>
               <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #1a3050", borderRadius: 6, background: "#0a1628" }}>
                 {sorted.map(p => {
-                  const has = assignedIds.has(p.id);
+                  const has = localAssigned.has(p.id);
                   return (
                     <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #1a3050", opacity: p.active ? 1 : 0.5 }}>
                       <input type="checkbox" checked={has} onChange={async () => {
-                        if (has) await db.removePlayerFromCategory(p.id, category.id);
-                        else await db.addPlayerToCategory(p.id, category.id);
+                        // Optimistic toggle
+                        setLocalAssigned(prev => {
+                          const next = new Set(prev);
+                          if (has) next.delete(p.id); else next.add(p.id);
+                          return next;
+                        });
+                        try {
+                          if (has) await db.removePlayerFromCategory(p.id, category.id);
+                          else await db.addPlayerToCategory(p.id, category.id);
+                        } catch (e: any) {
+                          // Revert on failure
+                          setLocalAssigned(prev => {
+                            const next = new Set(prev);
+                            if (has) next.add(p.id); else next.delete(p.id);
+                            return next;
+                          });
+                          toast(e?.message ?? "Failed to update category assignment", "error");
+                        }
                       }} style={{ accentColor: "#00d4ff", width: 16, height: 16 }} />
                       <span style={{ fontSize: 13, fontWeight: 600, color: has ? "#00d4ff" : "#94a3b8" }}>{p.name}</span>
                       {!p.active && <span style={{ fontSize: 10, color: "#64748b" }}>(inactive)</span>}
