@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { CourtStatus } from "./CourtStatus";
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
@@ -29,6 +29,20 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   const isMobile = useIsMobile();
   const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
   const catById = Object.fromEntries(categories.map(c => [c.id, c]));
+
+  // Heartbeat for warm-up-elapsed display in Up Next rows. The projection's
+  // wall-clock already updates via useScheduling's own 15s tick; this one is
+  // dedicated to the seconds:minutes warmup format.
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+  const fmtWarmupShort = (allocatedAt: string | null) => {
+    if (!allocatedAt) return "";
+    const sec = Math.max(0, Math.floor((nowMs - new Date(allocatedAt).getTime()) / 1000));
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+  };
   const tName = (id: string | null) => {
     if (!id) return "TBD";
     const t = allTeamById[id];
@@ -357,15 +371,39 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           <div>
             <SectionHeader accent="#00d4ff">Upcoming</SectionHeader>
             <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
-              {upcoming.map((m, i) => (
-                <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", gap: 12, position: "relative", background: i === 0 ? "rgba(0,212,255,0.04)" : "transparent" }}>
-                  {i === 0 && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: "#00d4ff" }} />}
-                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? "#00d4ff" : "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{i === 0 ? "▸ NEXT" : stageBadge(m)}</div>
-                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: "#cbd5e1" }}>{tName(m.team_a_id)}</div>
-                  <div className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 2 }}>VS</div>
-                  <div style={{ flex: 1, fontWeight: 600, fontSize: 13, textAlign: "right", color: "#cbd5e1" }}>{tName(m.team_b_id)}</div>
-                </div>
-              ))}
+              {upcoming.map((m, i) => {
+                const isWarming = !!m.court_allocated_at && !m.started_at;
+                // Compose the rightmost time cell. Warming overrides the queue projection.
+                let timeText = "";
+                let timeColor = "#94a3b8";
+                if (isWarming) {
+                  timeText = `🟡 COURT ${m.court_number} · ${fmtWarmupShort(m.court_allocated_at)}`;
+                  timeColor = "#fbbf24";
+                } else if (m.projected_start_at) {
+                  // delta_label is "IN 5M" / "STARTS NOW" / "LATER" / "BYE".
+                  // Pair it with the rolling wall-clock from projected_start_at.
+                  const wallClock = fmtClock(m.projected_start_at);
+                  if (m.delta_label && m.delta_label !== "STARTS NOW" && m.delta_label !== "BYE") {
+                    timeText = `${wallClock} · ${m.delta_label}`;
+                  } else if (m.delta_label === "BYE") {
+                    timeText = "BYE";
+                  } else {
+                    timeText = wallClock; // backlogged — wall-clock rolls forward
+                  }
+                }
+                return (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", gap: 12, position: "relative", background: isWarming ? "rgba(251,191,36,0.06)" : i === 0 ? "rgba(0,212,255,0.04)" : "transparent" }}>
+                    {(isWarming || i === 0) && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: isWarming ? "#fbbf24" : "#00d4ff" }} />}
+                    <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: isWarming ? "#fbbf24" : i === 0 ? "#00d4ff" : "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{isWarming ? "🟡 WARM-UP" : i === 0 ? "▸ NEXT" : stageBadge(m)}</div>
+                    <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: "#cbd5e1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_a_id)}</div>
+                    <div className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 2 }}>VS</div>
+                    <div style={{ flex: 1, fontWeight: 600, fontSize: 13, textAlign: "right", color: "#cbd5e1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_b_id)}</div>
+                    {timeText && (
+                      <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: timeColor, letterSpacing: 0.5, minWidth: 100, textAlign: "right", whiteSpace: "nowrap" }}>{timeText}</div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

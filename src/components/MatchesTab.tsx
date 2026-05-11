@@ -96,7 +96,27 @@ export function MatchesTab({
   );
 
   const catById = Object.fromEntries(categories.map(c => [c.id, c]));
-  const busyCourts = new Set(Object.keys(liveByCourt).map(n => parseInt(n)));
+
+  // Matches currently in the warm-up state (court allocated, scoring not yet
+  // begun). Keyed by court number, mirroring liveByCourt's shape. A court can
+  // only ever be in ONE of {live, warming, free} at a time.
+  const warmingByCourt = useMemo(() => {
+    const map: Record<number, ProjectedMatch | undefined> = {};
+    for (const m of matches) {
+      if (m.court_allocated_at && !m.started_at && m.court_number != null) {
+        map[m.court_number] = m;
+      }
+    }
+    return map;
+  }, [matches]);
+
+  // Busy = live OR warming. Used to disable Allocate when no court available.
+  const busyCourts = useMemo(() => {
+    const set = new Set<number>();
+    Object.keys(liveByCourt).forEach(n => set.add(parseInt(n)));
+    Object.keys(warmingByCourt).forEach(n => set.add(parseInt(n)));
+    return set;
+  }, [liveByCourt, warmingByCourt]);
 
   // Group filtered matches by category, then split each into live/pending/completed.
   const sections = useMemo(() => {
@@ -179,7 +199,21 @@ export function MatchesTab({
     }
   };
 
-  const startMatch = async (m: ProjectedMatch, court: number) => {
+  /**
+   * Allocate a court for a pending match (kicks off the warm-up phase).
+   * This is the action behind the existing ▶ START button — the label is
+   * preserved for familiarity, but the semantics changed: it only reserves
+   * a court and shows it to players. The play clock starts with Begin Scoring.
+   *
+   * Conflict checks consider BOTH live and warming matches to avoid
+   * double-allocating a player or a court.
+   */
+  const allocateCourt = async (m: ProjectedMatch, court: number) => {
+    if (busyCourts.has(court)) {
+      toast(`Court ${court} is already taken (live or warming up). Pick another.`, "warn");
+      return;
+    }
+
     const teamA = m.team_a_id ? teamById[m.team_a_id] : null;
     const teamB = m.team_b_id ? teamById[m.team_b_id] : null;
     const playerIds = new Set<string>();
@@ -187,17 +221,22 @@ export function MatchesTab({
     if (teamB) { playerIds.add(teamB.p1_id); if (teamB.p2_id) playerIds.add(teamB.p2_id); }
 
     const conflicts: string[] = [];
-    for (const live of Object.values(liveByCourt)) {
-      if (!live || live.id === m.id) continue;
-      const lTeamA = live.team_a_id ? teamById[live.team_a_id] : null;
-      const lTeamB = live.team_b_id ? teamById[live.team_b_id] : null;
-      const liveIds = new Set<string>();
-      if (lTeamA) { liveIds.add(lTeamA.p1_id); if (lTeamA.p2_id) liveIds.add(lTeamA.p2_id); }
-      if (lTeamB) { liveIds.add(lTeamB.p1_id); if (lTeamB.p2_id) liveIds.add(lTeamB.p2_id); }
+    const activeOnOtherCourts: ProjectedMatch[] = [];
+    Object.values(liveByCourt).forEach(x => x && activeOnOtherCourts.push(x));
+    Object.values(warmingByCourt).forEach(x => x && activeOnOtherCourts.push(x));
+
+    for (const other of activeOnOtherCourts) {
+      if (other.id === m.id) continue;
+      const oTeamA = other.team_a_id ? teamById[other.team_a_id] : null;
+      const oTeamB = other.team_b_id ? teamById[other.team_b_id] : null;
+      const otherIds = new Set<string>();
+      if (oTeamA) { otherIds.add(oTeamA.p1_id); if (oTeamA.p2_id) otherIds.add(oTeamA.p2_id); }
+      if (oTeamB) { otherIds.add(oTeamB.p1_id); if (oTeamB.p2_id) otherIds.add(oTeamB.p2_id); }
       for (const pid of playerIds) {
-        if (liveIds.has(pid)) {
+        if (otherIds.has(pid)) {
           const name = playerById[pid]?.name ?? "?";
-          conflicts.push(`${name} is on Court ${live.court_number}`);
+          const where = other.started_at ? "playing" : "warming up";
+          conflicts.push(`${name} is ${where} on Court ${other.court_number}`);
         }
       }
     }
@@ -208,15 +247,37 @@ export function MatchesTab({
     }
 
     try {
-      const ok = await db.startMatchOnCourt(m.id, court);
-      if (!ok) {
-        toast(`Court ${court} is already in use — pick another court.`, "warn");
-        return;
-      }
+      await db.allocateCourtForMatch(m.id, court);
       setPickingCourtFor(null);
       setConflictWarning(null);
+      toast(`Court ${court} allocated. Players warming up.`, "success");
     } catch (e: any) {
-      toast(e?.message ?? "Failed to start match", "error");
+      toast(e?.message ?? "Failed to allocate court", "error");
+    }
+  };
+
+  /**
+   * Begin scoring on an allocated match. Sets started_at = now() and status
+   * = "live", starting the 12-min play clock. Court was already reserved at
+   * allocation time, so no court-availability re-check needed.
+   */
+  const beginScoring = async (m: ProjectedMatch) => {
+    try {
+      await db.beginScoring(m.id);
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to begin scoring", "error");
+    }
+  };
+
+  /** Release the court allocation (e.g. wrong court, player no-show). Returns
+   *  the match to plain pending — court frees for other matches. */
+  const cancelAllocation = async (m: ProjectedMatch) => {
+    if (!confirm(`Cancel allocation of Court ${m.court_number}? The court will free up for other matches.`)) return;
+    try {
+      await db.deallocateCourtForMatch(m.id);
+      toast("Court allocation cancelled", "info");
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to cancel allocation", "error");
     }
   };
 
@@ -320,26 +381,46 @@ export function MatchesTab({
     return s;
   }, [busyCourts, reassigningCourtFor]);
 
+  /** Format ms-elapsed since court allocation as MM:SS, never below zero. */
+  const fmtWarmup = (m: ProjectedMatch): string => {
+    if (!m.court_allocated_at) return "0:00";
+    const ms = now - new Date(m.court_allocated_at).getTime();
+    const sec = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+  };
+
   // Renders one match row. `dragHandle` is provided only for sortable pending rows.
   const renderMatch = (m: ProjectedMatch, dragHandle: React.ReactNode | null = null) => {
     const ta = m.team_a_id ? teamById[m.team_a_id] : null;
     const tb = m.team_b_id ? teamById[m.team_b_id] : null;
     const isLive = m.status === "live";
     const isCompleted = m.confirmed;
+    // "Warming up" = court allocated, scoring not yet begun. Status is still
+    // `pending` at the DB layer; this is the visual third state.
+    const isWarming = !isLive && !isCompleted && !!m.court_allocated_at && !m.started_at;
     const winA = isCompleted && m.winner_id === m.team_a_id;
     const winB = isCompleted && m.winner_id === m.team_b_id;
     const deltaColor = isCompleted ? (m.delta_min != null && m.delta_min > 1 ? "#fbbf24" : m.delta_min != null && m.delta_min < -1 ? "#22c55e" : "#94a3b8") : isLive ? (m.delta_min != null && m.delta_min > 1 ? "#ef4444" : "#00d4ff") : "#94a3b8";
     const timeOver = isTimeOver(m);
     const pickingTeamForThis = timeOverPicking && timeOverPicking.matchId === m.id;
 
+    const bg = isLive
+      ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)")
+      : isWarming
+        ? "linear-gradient(90deg,#2a200f 0%,#0f1e36 30%)"
+        : "#0f1e36";
+    const borderColor = isLive ? (timeOver ? "#f59e0b" : "#ef4444") : isWarming ? "#fbbf24" : "#1a3050";
+    const accentColor = isLive ? (timeOver ? "#f59e0b" : "#ef4444") : isWarming ? "#fbbf24" : null;
+
     return (
-      <div style={{ background: isLive ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)") : "#0f1e36", border: isLive ? (timeOver ? "1px solid #f59e0b" : "1px solid #ef4444") : "1px solid #1a3050", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
-        {isLive && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: timeOver ? "#f59e0b" : "#ef4444" }} />}
+      <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
+        {accentColor && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accentColor }} />}
         {dragHandle}
         {/* Stage badge (smaller now that category is the section header) */}
         <div style={{ minWidth: isMobile ? 0 : 80 }}>
           <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1 }}>{stageLabel(m)}</div>
           {timeOver && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", marginTop: 4, letterSpacing: 1.2 }}>⏰ TIME OVER</div>}
+          {isWarming && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", marginTop: 4, letterSpacing: 1.2 }}>🟡 WARMING UP · {fmtWarmup(m)}</div>}
         </div>
 
         {/* Teams */}
@@ -379,8 +460,16 @@ export function MatchesTab({
         {isAdmin && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
             <button onClick={() => setHistoryFor(m)} className="font-display" style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="View change history">📜 LOG</button>
-            {m.status === "pending" && !m.is_bye && m.team_a_id && m.team_b_id && (
+            {/* Plain pending (no court allocated yet): show ▶ START to allocate a court. */}
+            {m.status === "pending" && !m.is_bye && !isWarming && m.team_a_id && m.team_b_id && (
               <button onClick={() => setPickingCourtFor(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</button>
+            )}
+            {/* Warming up: ▶ Begin Scoring starts the 12-min play clock. ↩ Cancel frees the court. */}
+            {isWarming && (
+              <>
+                <button onClick={() => beginScoring(m)} className="font-display" style={{ padding: "8px 14px", borderRadius: 5, border: "none", background: "#fbbf24", color: "#1a1a2e", fontSize: 11, fontWeight: 800, cursor: "pointer", letterSpacing: 1 }}>▶ BEGIN SCORING</button>
+                <button onClick={() => cancelAllocation(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #94a3b8", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="Free this court for other matches">↩ CANCEL ALLOCATION</button>
+              </>
             )}
             {isLive && !timeOver && (
               <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>✓ CONFIRM</button>
@@ -421,7 +510,7 @@ export function MatchesTab({
 
   return (
     <div style={{ background: "#0a1628", borderRadius: 14, padding: 20, border: "1px solid #1a3050", color: "#fff" }}>
-      <CourtStatus numCourts={tournament.num_courts} liveByCourt={liveByCourt} categories={categories} teamById={teamById} />
+      <CourtStatus numCourts={tournament.num_courts} liveByCourt={liveByCourt} warmingByCourt={warmingByCourt} categories={categories} teamById={teamById} />
 
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, padding: 12, background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050" }}>
@@ -516,7 +605,7 @@ export function MatchesTab({
           numCourts={tournament.num_courts}
           busyCourts={busyCourts}
           warning={conflictWarning && conflictWarning !== "confirmed" ? conflictWarning : null}
-          onPick={c => startMatch(pickingCourtFor, c)}
+          onPick={c => allocateCourt(pickingCourtFor, c)}
           onCancel={() => { setPickingCourtFor(null); setConflictWarning(null); }}
         />
       )}

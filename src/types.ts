@@ -66,6 +66,8 @@ export type Match = {
   scheduled_at: string | null;
   confirmed_at: string | null;
   court_number: number | null;
+  /** Set when admin allocates a court (warm-up phase begins). NULL until allocated. */
+  court_allocated_at: string | null;
   queue_position: number | null;
   extended_minutes: number;
 };

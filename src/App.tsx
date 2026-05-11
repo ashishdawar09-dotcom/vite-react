@@ -508,37 +508,82 @@ export default function App() {
     if (!m) return;
     setPickingCourtFor(m);
   };
+  // Court picker → allocates the court (warm-up phase). The play clock is
+  // started by Begin Scoring later. Conflict check considers both LIVE and
+  // WARMING matches so a player isn't double-booked.
   const startMatchOnCourt = async (m: Match, court: number) => {
-    // Player conflict check
     const ta = m.team_a_id ? allTeamById[m.team_a_id] : null;
     const tb = m.team_b_id ? allTeamById[m.team_b_id] : null;
     const playerIds = new Set<string>();
     if (ta) { playerIds.add(ta.p1_id); if (ta.p2_id) playerIds.add(ta.p2_id); }
     if (tb) { playerIds.add(tb.p1_id); if (tb.p2_id) playerIds.add(tb.p2_id); }
+
+    // Gather all active (live or warming) matches with players to check against.
+    const others: Match[] = [];
+    Object.values(liveByCourt).forEach(x => x && others.push(x));
+    for (const other of matches) {
+      if (other.court_allocated_at && !other.started_at && other.court_number != null) {
+        others.push(other);
+      }
+    }
+
+    // Court conflict?
+    const courtConflict = others.find(o => o.id !== m.id && o.court_number === court);
+    if (courtConflict) {
+      const state = courtConflict.started_at ? "in play" : "warming up";
+      toast(`Court ${court} is ${state}. Pick another.`, "warn");
+      return;
+    }
+
     const conflicts: string[] = [];
-    for (const live of Object.values(liveByCourt)) {
-      if (!live || live.id === m.id) continue;
-      const lA = live.team_a_id ? allTeamById[live.team_a_id] : null;
-      const lB = live.team_b_id ? allTeamById[live.team_b_id] : null;
-      const liveIds = new Set<string>();
-      if (lA) { liveIds.add(lA.p1_id); if (lA.p2_id) liveIds.add(lA.p2_id); }
-      if (lB) { liveIds.add(lB.p1_id); if (lB.p2_id) liveIds.add(lB.p2_id); }
+    for (const other of others) {
+      if (other.id === m.id) continue;
+      const oA = other.team_a_id ? allTeamById[other.team_a_id] : null;
+      const oB = other.team_b_id ? allTeamById[other.team_b_id] : null;
+      const oIds = new Set<string>();
+      if (oA) { oIds.add(oA.p1_id); if (oA.p2_id) oIds.add(oA.p2_id); }
+      if (oB) { oIds.add(oB.p1_id); if (oB.p2_id) oIds.add(oB.p2_id); }
       for (const pid of playerIds) {
-        if (liveIds.has(pid)) {
+        if (oIds.has(pid)) {
           const name = playerById[pid]?.name ?? "?";
-          conflicts.push(`${name} on Court ${live.court_number}`);
+          const where = other.started_at ? "playing on" : "warming up on";
+          conflicts.push(`${name} ${where} Court ${other.court_number}`);
         }
       }
     }
     if (conflicts.length) {
-      if (!confirm(`Player conflict — ${conflicts.join(", ")}.\n\nStart anyway?`)) return;
+      if (!confirm(`Player conflict — ${conflicts.join(", ")}.\n\nAllocate anyway?`)) return;
     }
-    const ok = await db.startMatchOnCourt(m.id, court);
-    if (!ok) {
-      toast(`Court ${court} is already in use — pick another court.`, "warn");
-      return;
+
+    try {
+      await db.allocateCourtForMatch(m.id, court);
+      setPickingCourtFor(null);
+      toast(`Court ${court} allocated. Players warming up — click Begin Scoring when ready.`, "success");
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to allocate court", "error");
     }
-    setPickingCourtFor(null);
+  };
+
+  /** Start the 12-minute play clock for an already-allocated match. */
+  const beginScoringMatch = async (id: string) => {
+    if (!guard()) return;
+    try {
+      await db.beginScoring(id);
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to begin scoring", "error");
+    }
+  };
+
+  /** Release the court allocation, return match to plain pending. */
+  const cancelMatchAllocation = async (m: Match) => {
+    if (!guard()) return;
+    if (!confirm(`Cancel allocation of Court ${m.court_number}? The court will free for other matches.`)) return;
+    try {
+      await db.deallocateCourtForMatch(m.id);
+      toast("Court allocation cancelled", "info");
+    } catch (e: any) {
+      toast(e?.message ?? "Failed to cancel allocation", "error");
+    }
   };
   const removeTeam = async (id: string) => { if (!guard()) return; if (!confirm("Remove this team?")) return; await db.deleteTeam(id); };
 
@@ -653,16 +698,25 @@ export default function App() {
     const showStaticScore = m.confirmed || (m.score_a != null || m.score_b != null);
     const winA = m.confirmed && m.winner_id === ta?.id;
     const winB = m.confirmed && m.winner_id === tb?.id;
+    // Warming up = court allocated, scoring not yet begun. Status still `pending` at the DB.
+    const isWarming = !m.confirmed && m.status !== "live" && !!m.court_allocated_at && !m.started_at;
 
     const [cardNow, setCardNow] = useState(Date.now());
     const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
     useEffect(() => {
-      if (m.status !== "live") return;
+      // Tick both for live (play clock) AND warming (warm-up elapsed timer).
+      if (m.status !== "live" && !isWarming) return;
       const id = setInterval(() => setCardNow(Date.now()), 15_000);
       return () => clearInterval(id);
-    }, [m.status]);
+    }, [m.status, isWarming]);
     const totalMin = (matchMinutes ?? 12) + (m.extended_minutes ?? 0);
     const cardTimeOver = m.status === "live" && m.started_at ? (cardNow - new Date(m.started_at).getTime()) / 60_000 > totalMin : false;
+    const warmupElapsed = isWarming && m.court_allocated_at
+      ? (() => {
+          const sec = Math.max(0, Math.floor((cardNow - new Date(m.court_allocated_at).getTime()) / 1000));
+          return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+        })()
+      : null;
 
     const teamRow = (team: typeof ta, side: "a" | "b", scoreVal: number, isWin: boolean) => {
       const stepBtn = (delta: number, label: string) => (
@@ -722,11 +776,12 @@ export default function App() {
     };
 
     return (
-      <div style={{ background: "#fff", borderRadius: 14, border: cardTimeOver ? "2px solid #f59e0b" : m.status === "live" ? "2px solid #ef4444" : "1px solid #e8ecf1", overflow: "hidden", boxShadow: m.status === "live" ? (cardTimeOver ? "0 4px 20px rgba(245,158,11,0.3)" : "0 4px 20px rgba(239,68,68,0.25)") : "0 2px 12px rgba(0,0,0,0.04)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: cardTimeOver ? "linear-gradient(90deg,#fffbeb,#fef3c7)" : m.status === "live" ? "linear-gradient(90deg,#fef2f2,#fee2e2)" : m.confirmed ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#f8fafc,#f1f5f9)", fontSize: 12, fontWeight: 600 }}>
-          <span style={{ color: "#64748b" }}>Match</span>
+      <div style={{ background: "#fff", borderRadius: 14, border: cardTimeOver ? "2px solid #f59e0b" : m.status === "live" ? "2px solid #ef4444" : isWarming ? "2px solid #fbbf24" : "1px solid #e8ecf1", overflow: "hidden", boxShadow: m.status === "live" ? (cardTimeOver ? "0 4px 20px rgba(245,158,11,0.3)" : "0 4px 20px rgba(239,68,68,0.25)") : isWarming ? "0 4px 20px rgba(251,191,36,0.2)" : "0 2px 12px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", background: cardTimeOver ? "linear-gradient(90deg,#fffbeb,#fef3c7)" : m.status === "live" ? "linear-gradient(90deg,#fef2f2,#fee2e2)" : isWarming ? "linear-gradient(90deg,#fffbeb,#fef3c7)" : m.confirmed ? "linear-gradient(90deg,#f0fdf4,#dcfce7)" : "linear-gradient(90deg,#f8fafc,#f1f5f9)", fontSize: 12, fontWeight: 600 }}>
+          <span style={{ color: "#64748b" }}>Match{m.court_number != null && (isWarming || m.status === "live") ? ` · Court ${m.court_number}` : ""}</span>
           {cardTimeOver && <span style={{ color: "#d97706", fontWeight: 800, display: "flex", alignItems: "center", gap: 4 }}>⏰ TIME OVER</span>}
           {m.status === "live" && !cardTimeOver && <span style={{ color: "#dc2626", display: "flex", alignItems: "center", gap: 4 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#dc2626", animation: "pulse 1.5s ease-in-out infinite" }} />LIVE</span>}
+          {isWarming && <span style={{ color: "#d97706", fontWeight: 800, display: "flex", alignItems: "center", gap: 4 }}>🟡 WARMING UP · {warmupElapsed}</span>}
           {m.confirmed && !isEditing && <span style={{ color: "#16a34a" }}>✓ Confirmed</span>}
           {isEditing && <span style={{ color: "#f59e0b" }}>✏️ Editing</span>}
         </div>
@@ -737,8 +792,14 @@ export default function App() {
 
           {editable && ta && tb && isAdmin && (
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              {m.status === "pending" && !m.confirmed && (
+              {m.status === "pending" && !m.confirmed && !isWarming && (
                 <button onClick={() => startMatchHandler(m.id)} style={{ ...btn("#dc2626"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}>▶ Start Match</button>
+              )}
+              {isWarming && (
+                <>
+                  <button onClick={() => beginScoringMatch(m.id)} style={{ ...btn("#fbbf24", "#1a1a2e"), flex: "1 1 160px", padding: "12px", fontSize: 14, borderRadius: 10, fontWeight: 800 }}>▶ Begin Scoring</button>
+                  <button onClick={() => cancelMatchAllocation(m)} style={{ ...btn("#e2e8f0", "#475569"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}>↩ Cancel Allocation</button>
+                </>
               )}
               {m.status === "live" && !m.confirmed && !cardTimeOver && (
                 <button onClick={() => confirmInline(m)} style={{ ...btn("#16a34a"), flex: "1 1 100%", padding: "14px", fontSize: 15, borderRadius: 10, fontWeight: 800 }}>✓ Confirm Final Score</button>

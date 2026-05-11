@@ -307,6 +307,43 @@ export async function setMatchScheduledAt(id: string, scheduled_at: string | nul
   if (error) throw error;
 }
 
+/**
+ * Allocate a court for a match. Match enters "warming up" state — court is
+ * reserved, players are notified, but the play-clock hasn't started yet.
+ * The match's status stays "pending" until beginScoring() is called.
+ * Caller is responsible for pre-checking court availability + player conflicts.
+ */
+export async function allocateCourtForMatch(id: string, court_number: number) {
+  const { error } = await supabase
+    .from("matches")
+    .update({ court_number, court_allocated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Cancel a court allocation (e.g. wrong court picked, or no-show). Clears
+ *  both the court number and the warm-up timestamp. */
+export async function deallocateCourtForMatch(id: string) {
+  const { error } = await supabase
+    .from("matches")
+    .update({ court_number: null, court_allocated_at: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Begin scoring on an already-allocated match. Sets started_at + status=live;
+ * this is what kicks off the 12-minute play clock. The court was already
+ * reserved by allocateCourtForMatch, so no court-availability re-check needed.
+ */
+export async function beginScoring(id: string) {
+  const { error } = await supabase
+    .from("matches")
+    .update({ status: "live", started_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function setMatchQueuePosition(id: string, queue_position: number) {
   const { error } = await supabase.from("matches").update({ queue_position }).eq("id", id);
   if (error) throw error;
