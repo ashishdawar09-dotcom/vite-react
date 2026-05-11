@@ -5,6 +5,8 @@ import {
   splitIntoGroups,
   knockoutShapeFor,
   describeFormat,
+  bracketSlotOrder,
+  seedBracket,
 } from "../formatPlanner";
 
 describe("splitIntoGroups", () => {
@@ -172,6 +174,125 @@ describe("recommendFormats", () => {
     const compact = opts.find(o => o.label === "Compact");
     expect(compact?.knockoutShape).toBe("F");
     expect(compact?.topNAdvance).toBe(1);
+  });
+});
+
+describe("bracketSlotOrder", () => {
+  it("returns the seed-to-slot permutation", () => {
+    expect(bracketSlotOrder(2)).toEqual([0, 1]);
+    expect(bracketSlotOrder(4)).toEqual([0, 3, 1, 2]);
+    expect(bracketSlotOrder(8)).toEqual([0, 7, 3, 4, 1, 6, 2, 5]);
+    expect(bracketSlotOrder(16)).toEqual([0, 15, 7, 8, 3, 12, 4, 11, 1, 14, 6, 9, 2, 13, 5, 10]);
+  });
+  it("pairs preserve the 1-vs-N property at every level", () => {
+    // For any power-of-2 bracket size, position 2i and 2i+1 sum to (size-1)
+    // in the round-1 pairing — that's the "1v8, 4v5, 2v7, 3v6" property.
+    for (const size of [4, 8, 16]) {
+      const ord = bracketSlotOrder(size);
+      for (let i = 0; i < size; i += 2) {
+        expect(ord[i] + ord[i + 1], `size=${size} pair=${i}`).toBe(size - 1);
+      }
+    }
+  });
+});
+
+describe("seedBracket", () => {
+  // Helper: build qualifier sets with synthetic identifiers
+  // so we can assert the placement order.
+  const team = (group: number, rank: number) => ({ id: `G${group}.${rank}`, group, rank });
+
+  it("4 groups × top-2 → 8 slots with no same-group pairs in round 1", () => {
+    const qualifiers = [
+      [team(0, 0), team(0, 1)],
+      [team(1, 0), team(1, 1)],
+      [team(2, 0), team(2, 1)],
+      [team(3, 0), team(3, 1)],
+    ];
+    const slots = seedBracket(qualifiers);
+    expect(slots.length).toBe(8);
+    // Check every round-1 pair: different groups.
+    for (let i = 0; i < slots.length; i += 2) {
+      const a = slots[i], b = slots[i + 1];
+      if (a && b) {
+        expect(a.group, `slot ${i}/${i + 1}: ${a.id} vs ${b.id} same group`).not.toBe(b.group);
+      }
+    }
+    // Group winner G0.0 should be in slot 0 (top seed).
+    expect(slots[0]?.id).toBe("G0.0");
+  });
+
+  it("2 groups × top-2 → 4 slots, group winners face other group's runners-up", () => {
+    const qualifiers = [
+      [team(0, 0), team(0, 1)],
+      [team(1, 0), team(1, 1)],
+    ];
+    const slots = seedBracket(qualifiers);
+    expect(slots.length).toBe(4);
+    // Pairs: (G0.0, G1.1) and (G1.0, G0.1)
+    for (let i = 0; i < slots.length; i += 2) {
+      const a = slots[i], b = slots[i + 1];
+      if (a && b) expect(a.group).not.toBe(b.group);
+    }
+    // G0.0 in slot 0 (top seed), G1.0 in slot 2 (other half).
+    expect(slots[0]?.id).toBe("G0.0");
+    expect(slots[2]?.id).toBe("G1.0");
+  });
+
+  it("1 group × top-4 → 4 slots, intra-group is unavoidable but seeded correctly", () => {
+    const qualifiers = [[team(0, 0), team(0, 1), team(0, 2), team(0, 3)]];
+    const slots = seedBracket(qualifiers);
+    expect(slots.length).toBe(4);
+    // Same-group is unavoidable; the seeding should be 1v4 / 2v3.
+    expect(slots[0]?.id).toBe("G0.0");
+    expect(slots[1]?.id).toBe("G0.3");
+    expect(slots[2]?.id).toBe("G0.1");
+    expect(slots[3]?.id).toBe("G0.2");
+  });
+
+  it("2 groups × top-2 with 1 missing → bye goes to top seed", () => {
+    const qualifiers = [
+      [team(0, 0), team(0, 1)],
+      [team(1, 0)], // group 1 only sent 1 qualifier
+    ];
+    const slots = seedBracket(qualifiers);
+    expect(slots.length).toBe(4);
+    // 3 qualifiers in 4 slots → 1 bye.
+    // Top seed (G0.0) should have a bye partner (null) — gets advanced to SF.
+    const nullCount = slots.filter(s => s === null).length;
+    expect(nullCount).toBe(1);
+    // The bye is paired with G0.0 (slot 0): slot 1 should be null.
+    expect(slots[0]?.id).toBe("G0.0");
+    expect(slots[1]).toBeNull();
+  });
+
+  it("3 groups (2+2+1) = 5 qualifiers → 3 byes go to group winners", () => {
+    const qualifiers = [
+      [team(0, 0), team(0, 1)],
+      [team(1, 0), team(1, 1)],
+      [team(2, 0)],
+    ];
+    const slots = seedBracket(qualifiers);
+    expect(slots.length).toBe(8);
+    // 5 real + 3 null
+    expect(slots.filter(s => s === null).length).toBe(3);
+    expect(slots.filter(s => s !== null).length).toBe(5);
+    // Group winners (rank 0) should all have null opponents (byes to SF).
+    for (let i = 0; i < slots.length; i += 2) {
+      const a = slots[i], b = slots[i + 1];
+      if (a && b) {
+        // If both are non-null, neither should be a group winner — runners-up
+        // should be the ones who actually play in round 1.
+        // (This holds because byes are placed on the LOW-seed positions
+        // which pair with TOP-seed positions in the bracket order.)
+        expect(a.rank).toBeGreaterThan(0);
+        expect(b.rank).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(seedBracket([])).toEqual([]);
+    expect(seedBracket([[]])).toEqual([]);
   });
 });
 

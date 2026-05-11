@@ -249,6 +249,78 @@ export function recommendFormats(N: number): FormatPlan[] {
   return out;
 }
 
+// --- knockout bracket seeding ---------------------------------------------
+
+/**
+ * Returns the seed-to-slot permutation for a power-of-2 bracket.
+ *
+ * For a bracket of size P, position i pairs with position i+1 (i even).
+ * The returned array maps slot-index → seed-index, such that the standard
+ * tournament pairing (1v8, 4v5, 2v7, 3v6 for 8-team) falls out naturally.
+ *
+ *   bracketSlotOrder(2) → [0, 1]
+ *   bracketSlotOrder(4) → [0, 3, 1, 2]            (1v4, 2v3)
+ *   bracketSlotOrder(8) → [0, 7, 3, 4, 1, 6, 2, 5] (1v8, 4v5, 2v7, 3v6)
+ */
+export function bracketSlotOrder(size: number): number[] {
+  if (size <= 1) return [0];
+  if (size === 2) return [0, 1];
+  const half = bracketSlotOrder(size / 2);
+  const out: number[] = [];
+  for (const i of half) out.push(i, size - 1 - i);
+  return out;
+}
+
+/**
+ * Standard cross-group bracket seeding.
+ *
+ * Takes the top-N teams from each group (sorted by standings; index 0 is the
+ * group winner) and arranges them into bracket slots such that:
+ *
+ *   - Same-group teams DO NOT meet in round 1 (no rematches).
+ *   - Top seeds (group winners) are spread across the bracket halves so #1
+ *     and #2 only meet in the final.
+ *   - For non-power-of-2 qualifier counts, byes fall on top seeds' slots —
+ *     the top seeds advance directly to round 2.
+ *
+ * Algorithm:
+ *   1. Flatten in rank-first order: all rank-0 teams across groups, then all
+ *      rank-1, etc. (group order within a rank is the tiebreaker.)
+ *   2. Apply the bracket-position permutation. The natural pairing then
+ *      cross-groups: slot 0 (top of group 0) pairs with slot size-1 (lowest
+ *      seed from a different group).
+ *
+ * Returns an array of length `nextPowerOf2(totalQualifiers)`. Null entries
+ * indicate a bye — caller emits an `is_bye: true` match for those.
+ *
+ * Generic over the team shape so the helper is also testable with plain
+ * objects (e.g. `{ id: string; group: number; rank: number }`).
+ */
+export function seedBracket<T>(qualifiers: T[][]): (T | null)[] {
+  // Flatten in rank-first order: rank 0 from each group, then rank 1, etc.
+  const flat: T[] = [];
+  const maxRank = qualifiers.reduce((m, g) => Math.max(m, g.length), 0);
+  for (let rank = 0; rank < maxRank; rank++) {
+    for (const group of qualifiers) {
+      if (rank < group.length) flat.push(group[rank]);
+    }
+  }
+  if (flat.length === 0) return [];
+
+  // Bracket size = next power of 2 (minimum 2 — even a 1-team scenario gets
+  // a slot, though that's an edge case the caller usually avoids).
+  const bracketSize = Math.max(2, Math.pow(2, Math.ceil(Math.log2(flat.length))));
+  const slotOrder = bracketSlotOrder(bracketSize);
+
+  // Map slot → seed → team (or null for byes).
+  const result: (T | null)[] = new Array(bracketSize).fill(null);
+  for (let slot = 0; slot < bracketSize; slot++) {
+    const seedIdx = slotOrder[slot];
+    result[slot] = seedIdx < flat.length ? flat[seedIdx] : null;
+  }
+  return result;
+}
+
 /** Human-friendly description of the format, suitable for UI labels. */
 export function describeFormat(plan: FormatPlan): string {
   if (plan.knockoutShape === "none" && plan.groupsCount === 0) return "No tournament";

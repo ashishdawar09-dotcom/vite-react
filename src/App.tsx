@@ -14,7 +14,7 @@ import { ShuttleSVG, Av } from "./components/ui";
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { PlayerProfileView } from "./components/PlayerProfileView";
-import { defaultFormat, recommendFormats, describeFormat, splitIntoGroups, type FormatPlan } from "./lib/formatPlanner";
+import { defaultFormat, recommendFormats, describeFormat, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { KnockoutSanityBanner } from "./components/KnockoutSanityBanner";
 import type { Match, Player, Team, Tournament } from "./types";
@@ -436,24 +436,24 @@ export default function App() {
     }
     if (topN <= 0) topN = 2; // last-resort safety net
 
-    // Collect qualifiers from each group's standings (already sorted W/+/-).
-    const q: TeamView[] = [];
-    groups.forEach((g, gi) => {
+    // Collect qualifiers PER GROUP (not flattened) so seedBracket can apply
+    // standard cross-group bracket seeding — same-group teams don't meet in
+    // round 1, top seeds spread across halves, byes go to top seeds when the
+    // qualifier count isn't a power of 2.
+    const qualifiers: TeamView[][] = groups.map((g, gi) => {
       const st = getStandings(g, gi);
       const limit = Math.min(topN, st.length);
-      for (let i = 0; i < limit; i++) q.push(st[i].team);
-    });
-    if (q.length < 2) return;
+      return st.slice(0, limit).map(s => s.team);
+    }).filter(arr => arr.length > 0);
+    const totalQualifiers = qualifiers.reduce((sum, arr) => sum + arr.length, 0);
+    if (totalQualifiers < 2) return;
 
-    // Build a power-of-2 bracket. With the format planner driving group/topN
-    // choices, q.length should already be a power of 2 — but if it's not
-    // (e.g. admin customized values that don't add up), we fall back to byes
-    // for the trailing slots so the bracket still renders. Admins can fix
-    // mis-seeded brackets via the Promote-Team UI on each match card.
-    const rds = Math.ceil(Math.log2(q.length));
-    const slots = Math.pow(2, rds);
-    const seeded: (TeamView | null)[] = [...q];
-    while (seeded.length < slots) seeded.push(null);
+    // seedBracket returns the slot-ordered placements (length is the next
+    // power of 2). Nulls indicate byes — admins can also fix mis-seeded
+    // brackets later via the Promote-Team UI on each match card.
+    const seeded = seedBracket(qualifiers);
+    const slots = seeded.length;
+    const rds = Math.ceil(Math.log2(slots));
     const rows: any[] = [];
     for (let i = 0; i < slots / 2; i++) {
       const a = seeded[i * 2], b = seeded[i * 2 + 1];
