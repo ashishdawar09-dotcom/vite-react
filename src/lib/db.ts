@@ -136,6 +136,26 @@ export async function updatePlayer(id: string, patch: Partial<Player>) {
   if (error) throw error;
 }
 
+// Tournament-day check-in helpers. checked_in_at is null = not checked in;
+// any timestamp = checked in at that time.
+export async function setPlayerCheckin(id: string, checkedIn: boolean) {
+  const value = checkedIn ? new Date().toISOString() : null;
+  const { error } = await supabase.from("players").update({ checked_in_at: value }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function bulkSetCheckin(player_ids: string[], checkedIn: boolean) {
+  if (player_ids.length === 0) return;
+  const value = checkedIn ? new Date().toISOString() : null;
+  const { error } = await supabase.from("players").update({ checked_in_at: value }).in("id", player_ids);
+  if (error) throw error;
+}
+
+export async function resetCheckins(tournament_id: string) {
+  const { error } = await supabase.from("players").update({ checked_in_at: null }).eq("tournament_id", tournament_id);
+  if (error) throw error;
+}
+
 export async function uploadPlayerPhoto(playerId: string, file: File): Promise<string> {
   const ext = file.name.split(".").pop() ?? "jpg";
   const path = `${playerId}-${Date.now()}.${ext}`;
