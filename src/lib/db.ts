@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { notifyCourtAllocated } from "./notifications";
 import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
 
 const PAL = ["#E63946","#457B9D","#2A9D8F","#E9C46A","#F4A261","#264653","#6A4C93","#1982C4","#FF595E","#8AC926","#FFCA3A","#6A0572","#3A86FF","#FB5607","#FF006E","#8338EC"];
@@ -329,6 +330,17 @@ export async function deallocateCourtForMatch(id: string) {
     .update({ court_number: null, court_allocated_at: null })
     .eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Allocate a court and fire the player-notification email in the background.
+ * Use this from UI call sites instead of allocateCourtForMatch directly so
+ * the notification stays consistent. The notify call is fire-and-forget —
+ * any email failure is logged to Sentry but never blocks the allocation.
+ */
+export async function allocateCourtAndNotify(id: string, court_number: number) {
+  await allocateCourtForMatch(id, court_number);
+  void notifyCourtAllocated(id);
 }
 
 /**

@@ -247,7 +247,7 @@ export function MatchesTab({
     }
 
     try {
-      await db.allocateCourtForMatch(m.id, court);
+      await db.allocateCourtAndNotify(m.id, court);
       setPickingCourtFor(null);
       setConflictWarning(null);
       toast(`Court ${court} allocated. Players warming up.`, "success");

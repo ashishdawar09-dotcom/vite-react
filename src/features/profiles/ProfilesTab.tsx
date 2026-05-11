@@ -81,6 +81,7 @@ export function ProfilesTab({
         getStandings={getStandings}
         onBack={() => setProfileViewPlayerId(null)}
         onShowProfile={(pid) => setProfileViewPlayerId(pid)}
+        isAdmin={isAdmin}
       />
     );
   }

@@ -556,7 +556,7 @@ export default function App() {
     }
 
     try {
-      await db.allocateCourtForMatch(m.id, court);
+      await db.allocateCourtAndNotify(m.id, court);
       setPickingCourtFor(null);
       toast(`Court ${court} allocated. Players warming up — click Begin Scoring when ready.`, "success");
     } catch (e: any) {

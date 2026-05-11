@@ -1,7 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
+import { updatePlayer } from "../lib/db";
 import type { Category, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type TeamView = Team & { p1: Player; p2: Player | null };
 
@@ -15,6 +18,7 @@ export function PlayerProfileView({
   getStandings,
   onBack,
   onShowProfile,
+  isAdmin,
 }: {
   player: Player;
   allTeams: TeamView[];
@@ -25,7 +29,39 @@ export function PlayerProfileView({
   getStandings: (g: TeamView[], gi: number) => { team: TeamView; w: number; l: number; pts: number; pf: number; pa: number }[];
   onBack: () => void;
   onShowProfile: (playerId: string) => void;
+  isAdmin: boolean;
 }) {
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState(player.email ?? "");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const startEditEmail = () => {
+    setEmailDraft(player.email ?? "");
+    setEmailError(null);
+    setEditingEmail(true);
+  };
+  const cancelEditEmail = () => {
+    setEditingEmail(false);
+    setEmailError(null);
+  };
+  const saveEmail = async () => {
+    const trimmed = emailDraft.trim().toLowerCase();
+    if (trimmed && !EMAIL_RE.test(trimmed)) {
+      setEmailError("Doesn't look like a valid email address.");
+      return;
+    }
+    setSavingEmail(true);
+    setEmailError(null);
+    try {
+      await updatePlayer(player.id, { email: trimmed || null });
+      setEditingEmail(false);
+    } catch (e: unknown) {
+      setEmailError(e instanceof Error ? e.message : "Failed to save email.");
+    } finally {
+      setSavingEmail(false);
+    }
+  };
   const playerTeams = useMemo(
     () => allTeams.filter(t => t.p1_id === player.id || t.p2_id === player.id),
     [allTeams, player.id]
@@ -156,6 +192,69 @@ export function PlayerProfileView({
             <StatTile label="WIN RATE" value={recent.length > 0 ? `${Math.round(wins / recent.length * 100)}%` : "—"} color="#a855f7" />
           </div>
         </div>
+      </div>
+
+      {/* Contact */}
+      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1px solid #e8ecf1", marginBottom: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 18 }}>✉️</span>
+          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, minWidth: 60 }}>Email</div>
+          {editingEmail && isAdmin ? (
+            <>
+              <input
+                type="email"
+                value={emailDraft}
+                onChange={e => { setEmailDraft(e.target.value); if (emailError) setEmailError(null); }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") void saveEmail();
+                  if (e.key === "Escape") cancelEditEmail();
+                }}
+                placeholder="player@example.com"
+                autoFocus
+                disabled={savingEmail}
+                style={{ flex: 1, minWidth: 200, padding: "7px 12px", borderRadius: 8, border: `2px solid ${emailError ? "#ef4444" : "#3A86FF"}`, fontSize: 13, outline: "none", fontFamily: "inherit" }}
+              />
+              <button
+                onClick={() => void saveEmail()}
+                disabled={savingEmail}
+                style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#3A86FF", color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: savingEmail ? "wait" : "pointer", opacity: savingEmail ? 0.7 : 1 }}
+              >
+                {savingEmail ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={cancelEditEmail}
+                disabled={savingEmail}
+                style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ flex: 1, fontSize: 14, color: player.email ? "#1a1a2e" : "#94a3b8", fontWeight: player.email ? 600 : 500, fontStyle: player.email ? "normal" : "italic" }}>
+                {player.email ?? "No email on file"}
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={startEditEmail}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", color: "#3A86FF", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer" }}
+                >
+                  ✏️ Edit
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        {emailError && (
+          <div style={{ marginTop: 8, marginLeft: 30, fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+            {emailError}
+          </div>
+        )}
+        {!editingEmail && isAdmin && (
+          <div style={{ marginTop: 6, marginLeft: 30, fontSize: 11, color: "#94a3b8" }}>
+            Used to notify the player when their court is allocated.
+          </div>
+        )}
       </div>
 
       {/* Upcoming */}

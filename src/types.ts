@@ -33,6 +33,7 @@ export type Player = {
   active: boolean;
   sort_order: number;
   checked_in_at: string | null; // tournament-day check-in timestamp; null = not checked in
+  email: string | null;         // optional contact email for court-allocation notifications
 };
 
 export type Team = {
