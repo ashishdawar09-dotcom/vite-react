@@ -241,7 +241,7 @@ export function MatchesTab({
     const next = matches.find(x => x.category_id === m.category_id && x.stage === "knockout" && x.round_idx === (m.round_idx! + 1) && x.slot_idx === Math.floor(m.slot_idx / 2));
     if (!next) return;
     const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
-    const patch: any = { [side]: winner_id };
+    const patch: Partial<ProjectedMatch> = { [side]: winner_id };
     if (next.winner_id && (next.team_a_id === m.winner_id || next.team_b_id === m.winner_id)) {
       patch.winner_id = null;
       patch.confirmed = false;
@@ -296,7 +296,7 @@ export function MatchesTab({
     const cat = catById[m.category_id];
     if (!cat) return false;
     const matchMin = cat.match_minutes || 12;
-    const extended = (m as any).extended_minutes ?? 0;
+    const extended = m.extended_minutes ?? 0;
     const elapsed = (now - new Date(m.started_at).getTime()) / 60_000;
     return elapsed > matchMin + extended;
   };

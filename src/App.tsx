@@ -385,7 +385,7 @@ export default function App() {
       gs.push(arr);
     }
 
-    const rows: any[] = [];
+    const rows: Partial<Match>[] = [];
     let slot = 0;
     gs.forEach((g, gi) => {
       for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
@@ -457,7 +457,7 @@ export default function App() {
     const seeded = seedBracket(qualifiers);
     const slots = seeded.length;
     const rds = Math.ceil(Math.log2(slots));
-    const rows: any[] = [];
+    const rows: Partial<Match>[] = [];
     for (let i = 0; i < slots / 2; i++) {
       const a = seeded[i * 2], b = seeded[i * 2 + 1];
       const bye = !a || !b;

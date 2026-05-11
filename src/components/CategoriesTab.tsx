@@ -118,7 +118,7 @@ export function CategoriesTab({
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: any; color: string }) {
+function Stat({ label, value, color }: { label: string; value: React.ReactNode; color: string }) {
   return (
     <div style={{ background: "#0a1628", borderRadius: 5, padding: "8px 10px", border: "1px solid #1a3050" }}>
       <div style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: 1.5 }}>{label}</div>

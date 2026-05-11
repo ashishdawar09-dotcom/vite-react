@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Category, Match, Player, PlayerCategory, Tournament } from "../types";
+import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
 
 const PAL = ["#E63946","#457B9D","#2A9D8F","#E9C46A","#F4A261","#264653","#6A4C93","#1982C4","#FF595E","#8AC926","#FFCA3A","#6A0572","#3A86FF","#FB5607","#FF006E","#8338EC"];
 
@@ -173,7 +173,13 @@ export async function listPlayerCategories(tournament_id: string): Promise<Playe
     .select("*, players!inner(tournament_id)")
     .eq("players.tournament_id", tournament_id);
   if (error) throw error;
-  return (data ?? []).map((d: any) => ({ id: d.id, player_id: d.player_id, category_id: d.category_id }));
+  // The join shape has an embedded `players` object we don't care about; pick
+  // the three columns we use and let TS verify the row shape.
+  type Row = { id: string; player_id: string; category_id: string };
+  return (data ?? []).map((d) => {
+    const row = d as Row;
+    return { id: row.id, player_id: row.player_id, category_id: row.category_id };
+  });
 }
 
 export async function setPlayerCategories(player_id: string, category_ids: string[]) {
@@ -188,7 +194,7 @@ export async function setPlayerCategories(player_id: string, category_ids: strin
       const { data: existing, error: fetchErr } = await supabase
         .from("player_categories").select("category_id").eq("player_id", player_id);
       if (fetchErr) throw fetchErr;
-      const current = new Set((existing ?? []).map((r: any) => r.category_id));
+      const current = new Set((existing ?? []).map((r) => (r as { category_id: string }).category_id));
       const desired = new Set(category_ids);
       const toRemove = [...current].filter(id => !desired.has(id));
       const toAdd = [...desired].filter(id => !current.has(id));
@@ -252,7 +258,9 @@ export async function deleteTeamsContainingPlayer(player_id: string, category_id
 
 // MATCHES ----------------------------------------------------------------
 
-export async function insertMatches(rows: Omit<Match, "id">[]) {
+// Match inserts: rows may omit fields with DB defaults (extended_minutes,
+// scheduled_at, court_number, queue_position, etc.) so we accept Partial.
+export async function insertMatches(rows: Partial<Match>[]) {
   if (!rows.length) return;
   const { error } = await supabase.from("matches").insert(rows);
   if (error) throw error;
@@ -415,9 +423,9 @@ export async function deleteMatchesForTournament(tournament_id: string) {
 // LIVE SNAPSHOT (single round-trip for spectators) -----------------------------
 
 export type LiveSnapshot = {
-  tournament: any;
+  tournament: Tournament | null;
   players: Player[];
-  teams: any[];
+  teams: Team[];
   matches: Match[];
   categories: Category[];
   player_categories: PlayerCategory[];
@@ -509,8 +517,8 @@ export type MatchAuditEntry = {
   changed_at: string;
   changed_by: string | null;
   action: "insert" | "update" | "delete";
-  before_data: any | null;
-  after_data: any | null;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
   changed_fields: string[] | null;
 };
 
