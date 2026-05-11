@@ -50,7 +50,22 @@ export function useScheduling(matches: Match[], categories: Category[], numCourt
   void tick;
 
   return useMemo(() => {
+    // Dev-only profiling: warn if the projection compute takes longer than
+    // 50ms on a single tick. Production builds strip this entirely.
+    const profileStart = import.meta.env.DEV ? performance.now() : 0;
+
     const now = nowMs ?? Date.now();
+    // Bail out when there's nothing to project — saves a function call's worth
+    // of overhead on a freshly-created tournament with no matches yet.
+    if (matches.length === 0) {
+      return {
+        projected: [] as ProjectedMatch[],
+        byId: {} as Record<string, ProjectedMatch>,
+        tournamentDeltaMin: 0,
+        tournamentDeltaLabel: fmtDelta(0),
+        liveByCourt: {} as Record<number, ProjectedMatch | undefined>,
+      };
+    }
     const projected: ProjectedMatch[] = [];
     const byCat = new Map<string, Match[]>();
     for (const m of matches) {
@@ -153,6 +168,14 @@ export function useScheduling(matches: Match[], categories: Category[], numCourt
     }
 
     const tournamentDeltaMin = tournamentDeltaCount > 0 ? tournamentDeltaSum / tournamentDeltaCount : 0;
+
+    if (import.meta.env.DEV) {
+      const elapsed = performance.now() - profileStart;
+      if (elapsed > 50) {
+        // eslint-disable-next-line no-console
+        console.warn(`[useScheduling] projection took ${elapsed.toFixed(1)}ms for ${matches.length} matches × ${categories.length} categories — consider profiling.`);
+      }
+    }
 
     return { projected, byId, tournamentDeltaMin, tournamentDeltaLabel: fmtDelta(tournamentDeltaMin), liveByCourt };
   }, [matches, categories, numCourts, nowMs]); // eslint-disable-line react-hooks/exhaustive-deps
