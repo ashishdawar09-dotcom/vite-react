@@ -54,6 +54,14 @@ export async function setNumCourts(id: string, numCourts: number) {
   if (error) throw error;
 }
 
+export async function updateTournament(id: string, patch: Partial<Tournament>) {
+  // Strip immutable / derived fields defensively so callers can pass a full Tournament if they want.
+  const { id: _i, created_at: _c, ...safe } = patch as Tournament;
+  void _i; void _c;
+  const { error } = await supabase.from("tournaments").update(safe).eq("id", id);
+  if (error) throw error;
+}
+
 // CATEGORIES -------------------------------------------------------------
 
 export async function listCategories(tournament_id: string): Promise<Category[]> {
