@@ -1,4 +1,5 @@
 import React from "react";
+import { captureError } from "../lib/sentry";
 
 type Props = { children: React.ReactNode; fallback?: React.ReactNode };
 type State = { error: Error | null };
@@ -13,6 +14,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // eslint-disable-next-line no-console
     console.error("[ErrorBoundary]", error, info.componentStack);
+    // Forward to Sentry (no-op when VITE_SENTRY_DSN isn't set).
+    captureError(error, { componentStack: info.componentStack });
   }
 
   reset = () => this.setState({ error: null });
