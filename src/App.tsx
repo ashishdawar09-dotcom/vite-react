@@ -16,9 +16,9 @@ import { AdminManager } from "./components/AdminManager";
 import { PlayerProfileView } from "./components/PlayerProfileView";
 import { CheckInTab } from "./features/checkin/CheckInTab";
 import { ScoreboardTab } from "./features/scoreboard/ScoreboardTab";
+import { KnockoutTab } from "./features/knockoutstage/KnockoutTab";
 import { defaultFormat, recommendFormats, describeFormat, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
-import { KnockoutSanityBanner } from "./components/KnockoutSanityBanner";
 import type { Match, Player, Team, Tournament } from "./types";
 
 const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
@@ -65,7 +65,6 @@ function ScoreInput({ value, onCommit }: { value: number; onCommit: (next: numbe
   );
 }
 
-const rName = (n: number, i: number) => { if (i === n - 1) return "🏆 Final"; if (i === n - 2) return "Semi-Final"; if (i === n - 3) return "Quarter-Final"; return `Round ${i + 1}`; };
 
 type TeamView = Team & { p1: Player; p2: Player | null };
 
@@ -1306,48 +1305,19 @@ export default function App() {
           </div>
         )}
 
-        {current && tab === "knockout" && (() => {
-          const expectedQualifiers = currentCategory
-            ? Math.max(0, (currentCategory.groups_count || groups.length) * (currentCategory.top_n_advance || 2))
-            : 0;
-          const round1Matches = knockoutMatches.filter(m => m.round_idx === 0);
-          const actualQualifiers = round1Matches.reduce(
-            (n, m) => n + (m.team_a_id ? 1 : 0) + (m.team_b_id ? 1 : 0), 0,
-          );
-          return (
-          <div>
-            <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
-            {champion && (
-              <div style={{ textAlign: "center", padding: 32, background: "linear-gradient(135deg,#fef3c7,#fde68a,#fef3c7)", borderRadius: 20, border: "3px solid #f59e0b", marginBottom: 28 }}>
-                <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
-                <div style={{ fontWeight: 900, fontSize: 14, color: "#b45309", textTransform: "uppercase", letterSpacing: 3 }}>Champions</div>
-                <div style={{ fontWeight: 900, fontSize: 22, color: "#78350f", marginTop: 10 }}>{champion.p2 ? `${champion.p1.name} & ${champion.p2.name}` : champion.p1.name}</div>
-              </div>
-            )}
-            {!champion && knockoutMatches.length > 0 && (
-              <KnockoutSanityBanner
-                knockoutMatches={knockoutMatches}
-                expectedQualifiers={expectedQualifiers}
-                actualQualifiers={actualQualifiers}
-              />
-            )}
-            <div style={{ overflowX: "auto", paddingBottom: 20 }}>
-              <div style={{ display: "flex", gap: 0, minWidth: knockout.length * 290 }}>
-                {knockout.map((round, ri) => (
-                  <div key={ri} style={{ flex: 1, minWidth: 270, display: "flex", flexDirection: "column" }}>
-                    <div style={{ textAlign: "center", fontWeight: 800, color: "#1a1a2e", fontSize: 13, textTransform: "uppercase", letterSpacing: 1, padding: "10px 12px", background: "linear-gradient(90deg,#e0e7ff,#ede9fe,#e0e7ff)", borderRadius: 10, margin: "0 8px 16px" }}>
-                      {rName(knockout.length, ri)}
-                    </div>
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", gap: 14, padding: "0 8px" }}>
-                      {round.map(m => <MatchCard key={m.id} match={m} editable={!m.is_bye} matchMinutes={currentCategory?.match_minutes} />)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          );
-        })()}
+        {current && tab === "knockout" && (
+          <KnockoutTab
+            categories={categories}
+            currentCategoryId={currentCategoryId}
+            setCurrentCategoryId={setCurrentCategoryId}
+            currentCategory={currentCategory ?? null}
+            groups={groups}
+            knockout={knockout}
+            knockoutMatches={knockoutMatches}
+            champion={champion}
+            MatchCard={MatchCard}
+          />
+        )}
 
         {current && tab === "scoreboard" && (
           <ScoreboardTab
