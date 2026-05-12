@@ -3,9 +3,34 @@ html, body, #root { margin: 0; padding: 0; min-height: 100vh; }
 body {
   font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #0a1628;
+  /* MAKEOVER: refined to bg.deep token (#070F1F) — see src/lib/theme.ts */
+  background: #070F1F;
 }
 .font-display {
   font-family: 'Oswald', 'Inter', system-ui, sans-serif;
   letter-spacing: 0.02em;
+}
+
+/* MAKEOVER: visible focus ring for keyboard users only.
+   Inline styles cannot express :focus-visible, so this lives in global CSS. */
+*:focus-visible {
+  outline: 2px solid #3A86FF;
+  outline-offset: 2px;
+}
+
+/* MAKEOVER: honour prefers-reduced-motion globally.
+   Framer Motion's useReducedMotion() also gates per-component motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* MAKEOVER: shared keyframes used by global CSS + reduced-motion fallbacks. */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
