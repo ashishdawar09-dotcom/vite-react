@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion"; /* NEW: makeover motion */
 import { useAuth } from "./hooks/useAuth";
 import { useTournamentData } from "./hooks/useTournamentData";
 import { useScheduling } from "./hooks/useScheduling";
@@ -684,9 +685,45 @@ export default function App() {
   }, [currentCategory?.id, currentCategory?.groups_count, currentCategory?.top_n_advance, currentCategory?.rounds_per_pair, teamsView.length]);
 
   const btn = (bg = "#3A86FF", clr = "#fff"): React.CSSProperties => ({ background: bg, color: clr, border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", fontWeight: 600, fontSize: 14, transition: "all .2s", boxShadow: `0 2px 8px ${bg}33` });
-  const tabBtn = (t: typeof tab, label: string, icon: string) => (
-    <button key={t} onClick={() => setTab(t)} className="font-display" style={{ padding: "14px 22px", cursor: "pointer", fontWeight: 700, fontSize: 13, letterSpacing: 1.5, textTransform: "uppercase", background: "transparent", color: tab === t ? "#00d4ff" : "#64748b", border: "none", borderBottom: tab === t ? "3px solid #00d4ff" : "3px solid transparent", marginBottom: -1, display: "flex", alignItems: "center", gap: 6, transition: "color .15s" }}><span style={{ fontSize: 14 }}>{icon}</span>{label}</button>
-  );
+  const tabBtn = (t: typeof tab, label: string, icon: string) => {
+    const isActive = tab === t;
+    return (
+      <button
+        key={t}
+        onClick={() => setTab(t)}
+        style={{
+          padding: "14px 22px",
+          cursor: "pointer",
+          fontWeight: 600,                                /* MAKEOVER: 700 -> 600 */
+          fontSize: 12,                                   /* MAKEOVER: 13 -> 12 per Section 3 spec */
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          background: "transparent",
+          color: isActive ? "#00d4ff" : "#64748b",
+          border: "none",
+          borderBottom: "3px solid transparent",          /* MAKEOVER: reserves layout space for motion indicator */
+          marginBottom: -1,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          position: "relative",                           /* NEW: anchors motion.div indicator */
+          transition: "color .15s",
+          fontFamily: "'Inter', system-ui, sans-serif",   /* MAKEOVER: dropped font-display (Oswald) per Section 3 spec */
+        }}
+      >
+        <span style={{ fontSize: 14 }}>{icon}</span>
+        {label}
+        {isActive && (
+          /* NEW: Framer Motion active-tab indicator with layoutId morph */
+          <motion.div
+            layoutId="nav-active-indicator"
+            style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 3, background: "#00d4ff" }}
+            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          />
+        )}
+      </button>
+    );
+  };
   const tLabel = (t: TeamView | null) => t?.p1 ? (t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name) : "TBD";
   const teamFromId = (id: string | null): TeamView | null => id ? teamById[id] ?? null : null;
 
@@ -861,7 +898,10 @@ export default function App() {
         {/* Top bar: brand + admin chip */}
         <div style={{ position: "relative", zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 28px", borderBottom: "1px solid rgba(0,184,255,0.12)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,#00b8ff,#0066ff)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, boxShadow: "0 4px 16px rgba(0,184,255,0.4)" }}>🏸</div>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,#00b8ff,#0066ff)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,184,255,0.4)" }}>
+              {/* MAKEOVER: 🏸 emoji -> custom shuttlecock SVG */}
+              <ShuttleSVG sz={22} color="#fff" opacity={1} />
+            </div>
             <div>
               <div className="font-display" style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1, color: "#fff", lineHeight: 1 }}>BADMINTON<span style={{ color: "#00b8ff" }}>LIVE</span></div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: "#64748b", textTransform: "uppercase", marginTop: 2 }}>Tournament Center</div>
