@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
 import { updatePlayer } from "../lib/db";
@@ -31,6 +32,7 @@ export function PlayerProfileView({
   onShowProfile: (playerId: string) => void;
   isAdmin: boolean;
 }) {
+  const reduceMotion = useReducedMotion(); /* NEW: motion gate for WinRateRing draw-on-view */
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailDraft, setEmailDraft] = useState(player.email ?? "");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -184,12 +186,12 @@ export function PlayerProfileView({
             )}
           </div>
 
-          {/* Stats column */}
+          {/* Stats column — MAKEOVER: WIN RATE tile replaced with WinRateRing (annular SVG drawn on view) */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "stretch" }}>
             <StatTile label="MATCHES" value={recent.length} color="#3A86FF" />
             <StatTile label="WINS" value={wins} color="#22c55e" />
             <StatTile label="LOSSES" value={losses} color="#ef4444" />
-            <StatTile label="WIN RATE" value={recent.length > 0 ? `${Math.round(wins / recent.length * 100)}%` : "—"} color="#a855f7" />
+            <WinRateRing percentage={recent.length > 0 ? Math.round(wins / recent.length * 100) : null} reduceMotion={!!reduceMotion} />
           </div>
         </div>
       </div>
@@ -280,7 +282,7 @@ export function PlayerProfileView({
       {/* Standings — one section per group the player is in */}
       {playerGroups.length > 0 && (
         <div style={{ marginBottom: 22 }}>
-          <SectionHeader color="#a855f7" emoji="📊">Group Standings</SectionHeader>
+          <SectionHeader color="#3A86FF" emoji="📊">Group Standings</SectionHeader>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 14 }}>
             {playerGroups.map(({ groupIdx, group }) => {
               const standings = getStandings(group, groupIdx);
@@ -288,7 +290,7 @@ export function PlayerProfileView({
               return (
                 <div key={`${groupCat?.id ?? "?"}-${groupIdx}`} style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8ecf1", overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.04)" }}>
                   <div style={{ padding: "12px 16px", background: "linear-gradient(90deg,#f8fafc 0%, #fff 70%)", borderBottom: "1px solid #e8ecf1", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ display: "inline-block", width: 4, height: 18, background: "#a855f7", borderRadius: 1 }} />
+                    <span style={{ display: "inline-block", width: 4, height: 18, background: "#3A86FF", borderRadius: 1 }} />
                     <span style={{ fontSize: 13, fontWeight: 800, color: "#1a1a2e", letterSpacing: 1.3, textTransform: "uppercase" }}>{groupCat?.name ?? "Group"} · Group {String.fromCharCode(65 + groupIdx)}</span>
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -307,9 +309,9 @@ export function PlayerProfileView({
                         return (
                           <tr key={s.team.id} style={{ background: isMine ? "rgba(168,85,247,0.08)" : i % 2 === 0 ? "#fff" : "#fafbfc", borderTop: "1px solid #e8ecf1" }}>
                             <td style={{ padding: "10px 12px", fontWeight: 800, color: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : "#cbd5e1" }}>{i + 1}</td>
-                            <td style={{ padding: "10px 12px", fontWeight: isMine ? 800 : 600, color: isMine ? "#a855f7" : "#1a1a2e" }}>
+                            <td style={{ padding: "10px 12px", fontWeight: isMine ? 800 : 600, color: isMine ? "#3A86FF" : "#1a1a2e" }}>
                               {s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}
-                              {isMine && <span style={{ marginLeft: 8, fontSize: 10, color: "#a855f7", letterSpacing: 1.2, fontWeight: 700 }}>YOU</span>}
+                              {isMine && <span style={{ marginLeft: 8, fontSize: 10, color: "#3A86FF", letterSpacing: 1.2, fontWeight: 700 }}>YOU</span>}
                             </td>
                             <td style={{ padding: "10px 8px", textAlign: "center", color: "#475569", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{s.w}-{s.l}</td>
                             <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: 700, color: (s.pf - s.pa) > 0 ? "#22c55e" : (s.pf - s.pa) < 0 ? "#ef4444" : "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{(s.pf - s.pa) > 0 ? "+" : ""}{s.pf - s.pa}</td>
@@ -340,9 +342,43 @@ export function PlayerProfileView({
 
 function StatTile({ label, value, color }: { label: string; value: number | string; color: string }) {
   return (
-    <div style={{ minWidth: 84, padding: "12px 14px", background: "#f8fafc", border: "1px solid #e8ecf1", borderRadius: 10, borderLeft: `3px solid ${color}` }}>
+    <div style={{ minWidth: 94, padding: "12px 14px", background: "#f8fafc", border: "1px solid #e8ecf1", borderRadius: 10, borderLeft: `3px solid ${color}` }}>
       <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: "#1a1a2e", marginTop: 4, letterSpacing: -0.5, lineHeight: 1 }}>{value}</div>
+      {/* MAKEOVER: 22 -> 30 px value, tabular-nums for digit alignment */}
+      <div style={{ fontSize: 30, fontWeight: 800, color: "#1a1a2e", marginTop: 6, letterSpacing: -0.5, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+    </div>
+  );
+}
+
+/* NEW: WinRateRing — annular SVG ring that draws on view via Framer Motion.
+   Replaces the flat WIN RATE StatTile to give the profile a visual centerpiece. */
+function WinRateRing({ percentage, reduceMotion }: { percentage: number | null; reduceMotion: boolean }) {
+  const size = 76;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = percentage !== null ? circumference * (1 - percentage / 100) : circumference;
+  return (
+    <div style={{ minWidth: 110, padding: "10px 14px", background: "#f8fafc", border: "1px solid #e8ecf1", borderRadius: 10, borderLeft: "3px solid #3A86FF", display: "flex", flexDirection: "column", alignItems: "stretch", gap: 4 }}>
+      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700 }}>WIN RATE</div>
+      <div style={{ position: "relative", width: size, height: size, alignSelf: "center", marginTop: 2 }}>
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#e8ecf1" strokeWidth={stroke} />
+          {percentage !== null && (
+            <motion.circle
+              cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#3A86FF" strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              initial={{ strokeDashoffset: reduceMotion ? offset : circumference }}
+              animate={{ strokeDashoffset: offset }}
+              transition={{ duration: reduceMotion ? 0 : 1.1, ease: [0.0, 0.0, 0.2, 1], delay: 0.15 }}
+            />
+          )}
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: "#1a1a2e", letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>
+          {percentage !== null ? `${percentage}%` : "—"}
+        </div>
+      </div>
     </div>
   );
 }

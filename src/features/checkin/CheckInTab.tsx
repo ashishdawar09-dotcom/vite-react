@@ -1,9 +1,35 @@
 import { useState } from "react";
+import { motion } from "framer-motion"; /* NEW: makeover motion for check-mark draw */
 import * as db from "../../lib/db";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { Av } from "../../components/ui";
 import { toast } from "../../components/Toast";
 import type { Category, Player, Tournament } from "../../types";
+
+/* NEW: SVG check mark that draws its stroke when `checked` flips to true,
+   via Framer Motion pathLength. Replaces the static ✅ / ⭕ emoji. */
+function AnimatedCheck({ checked, size = 26 }: { checked: boolean; size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <circle
+        cx={12} cy={12} r={10.5}
+        fill={checked ? "rgba(34,197,94,0.12)" : "transparent"}
+        stroke={checked ? "#16a34a" : "#fecaca"}
+        strokeWidth={2}
+      />
+      {checked && (
+        <motion.path
+          d="M7 12.5 L10.5 16 L17 9"
+          fill="none" stroke="#16a34a" strokeWidth={2.5}
+          strokeLinecap="round" strokeLinejoin="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.4, ease: [0, 0, 0.2, 1] }}
+        />
+      )}
+    </svg>
+  );
+}
 
 /**
  * Tournament-day player check-in screen.
@@ -196,7 +222,8 @@ export function CheckInTab({
                     <div style={{ fontSize: 11, color: "#dc2626", fontWeight: 600, marginTop: 2 }}>⚠ Not checked in</div>
                   )}
                 </div>
-                <span style={{ fontSize: 22, color: checkedIn ? "#16a34a" : "#fecaca" }}>{checkedIn ? "✅" : "⭕"}</span>
+                {/* MAKEOVER: emoji ✅/⭕ -> AnimatedCheck (Framer Motion pathLength draws the stroke) */}
+                <AnimatedCheck checked={checkedIn} size={26} />
               </button>
             );
           })}

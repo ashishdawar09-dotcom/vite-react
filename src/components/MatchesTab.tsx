@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import {
   DndContext,
   closestCenter,
@@ -55,6 +56,7 @@ export function MatchesTab({
   const [historyFor, setHistoryFor] = useState<ProjectedMatch | null>(null);
   const [now, setNow] = useState(Date.now());
   const isMobile = useIsMobile();
+  const reduceMotion = useReducedMotion(); /* NEW: motion gate for whileTap + layoutId */
 
   // Optimistic order overrides per-category for the pending list.
   // Maps category_id → ordered match-id array set immediately on drag-end so
@@ -410,11 +412,17 @@ export function MatchesTab({
         ? "linear-gradient(90deg,#2a200f 0%,#0f1e36 30%)"
         : "#0f1e36";
     const borderColor = isLive ? (timeOver ? "#f59e0b" : "#ef4444") : isWarming ? "#fbbf24" : "#1a3050";
-    const accentColor = isLive ? (timeOver ? "#f59e0b" : "#ef4444") : isWarming ? "#fbbf24" : null;
+    /* MAKEOVER: every state gets a coloured left stripe for at-a-glance scanning
+       — gray pending, amber warming, red live, green completed. */
+    const accentColor = isLive
+      ? (timeOver ? "#f59e0b" : "#ef4444")
+      : isWarming ? "#fbbf24"
+      : isCompleted ? "#16a34a"
+      : "#475569"; /* pending: muted gray */
 
     return (
       <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
-        {accentColor && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accentColor }} />}
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accentColor }} />
         {dragHandle}
         {/* Stage badge (smaller now that category is the section header) */}
         <div style={{ minWidth: isMobile ? 0 : 80 }}>
@@ -461,18 +469,20 @@ export function MatchesTab({
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
             <button onClick={() => setHistoryFor(m)} className="font-display" style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="View change history">📜 LOG</button>
             {/* Plain pending (no court allocated yet): show ▶ START to allocate a court. */}
+            {/* MAKEOVER: shared layoutId across the 3 advance buttons so the morph
+                from START -> BEGIN SCORING -> CONFIRM feels like one element. */}
             {m.status === "pending" && !m.is_bye && !isWarming && m.team_a_id && m.team_b_id && (
-              <button onClick={() => setPickingCourtFor(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</button>
+              <motion.button layoutId={`match-${m.id}-action`} onClick={() => setPickingCourtFor(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</motion.button>
             )}
             {/* Warming up: ▶ Begin Scoring starts the 12-min play clock. ↩ Cancel frees the court. */}
             {isWarming && (
               <>
-                <button onClick={() => beginScoring(m)} className="font-display" style={{ padding: "8px 14px", borderRadius: 5, border: "none", background: "#fbbf24", color: "#1a1a2e", fontSize: 11, fontWeight: 800, cursor: "pointer", letterSpacing: 1 }}>▶ BEGIN SCORING</button>
-                <button onClick={() => cancelAllocation(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #94a3b8", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="Free this court for other matches">↩ CANCEL ALLOCATION</button>
+                <motion.button layoutId={`match-${m.id}-action`} onClick={() => beginScoring(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 14px", borderRadius: 5, border: "none", background: "#fbbf24", color: "#1a1a2e", fontSize: 11, fontWeight: 800, cursor: "pointer", letterSpacing: 1 }}>▶ BEGIN SCORING</motion.button>
+                <motion.button onClick={() => cancelAllocation(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #94a3b8", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="Free this court for other matches">↩ CANCEL ALLOCATION</motion.button>
               </>
             )}
             {isLive && !timeOver && (
-              <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>✓ CONFIRM</button>
+              <motion.button layoutId={`match-${m.id}-action`} onClick={() => confirmMatch(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>✓ CONFIRM</motion.button>
             )}
             {isLive && timeOver && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0", borderTop: "1px solid #f59e0b33" }}>

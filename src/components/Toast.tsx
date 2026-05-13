@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion"; /* NEW: makeover slide-in/out */
 
 type ToastKind = "info" | "success" | "warn" | "error";
 type Toast = { id: number; kind: ToastKind; msg: string };
@@ -42,22 +43,30 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           pointerEvents: "none",
         }}
       >
-        {toasts.map(t => (
-          <div
-            key={t.id}
-            role="status"
-            style={{
-              padding: "12px 16px", borderRadius: 8, minWidth: 240, maxWidth: 360,
-              fontSize: 13, fontWeight: 600, color: "#fff",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-              border: `1px solid ${kindBorder(t.kind)}`,
-              background: kindBg(t.kind),
-              pointerEvents: "auto",
-            }}
-          >
-            {t.msg}
-          </div>
-        ))}
+        {/* MAKEOVER: AnimatePresence + motion.div for slide-in from right, fade-out on dismiss */}
+        <AnimatePresence>
+          {toasts.map(t => (
+            <motion.div
+              key={t.id}
+              role="status"
+              initial={{ x: 80, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 80, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0, 0, 0.2, 1] }}
+              layout
+              style={{
+                padding: "12px 16px", borderRadius: 8, minWidth: 240, maxWidth: 360,
+                fontSize: 13, fontWeight: 600, color: "#fff",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                border: `1px solid ${kindBorder(t.kind)}`,
+                background: kindBg(t.kind),
+                pointerEvents: "auto",
+              }}
+            >
+              {t.msg}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </ToastCtx.Provider>
   );
