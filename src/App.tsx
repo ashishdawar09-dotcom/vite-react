@@ -12,6 +12,7 @@ import { CategoryPicker } from "./components/CategoryPicker";
 import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
+import { SkeletonLoader } from "./components/SkeletonLoader"; /* NEW: replaces bare "Loading..." */
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { CheckInTab } from "./features/checkin/CheckInTab";
@@ -1041,7 +1042,7 @@ export default function App() {
         {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} players={players} playerCategories={playerCategories} onShowProfile={showProfile} />}
 
         {current && tab === "matches" && (
-          <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading...</div>}>
+          <Suspense fallback={<SkeletonLoader />}>
             <MatchesTab
               tournament={current}
               categories={categories}
@@ -1055,7 +1056,7 @@ export default function App() {
         )}
 
         {current && tab === "categories" && isAdmin && (
-          <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading...</div>}>
+          <Suspense fallback={<SkeletonLoader />}>
             <CategoriesTab
               tournament={current}
               categories={categories}
