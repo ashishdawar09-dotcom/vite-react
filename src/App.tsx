@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion"; /* NEW: makeover motion */
+import { motion, AnimatePresence } from "framer-motion"; /* NEW: makeover motion */
 import { useAuth } from "./hooks/useAuth";
+import { useIsMobile } from "./hooks/useIsMobile"; /* NEW: mobile IA detection */
 import { useTournamentData } from "./hooks/useTournamentData";
 import { useScheduling } from "./hooks/useScheduling";
 import * as db from "./lib/db";
@@ -78,6 +79,11 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [showAdminManager, setShowAdminManager] = useState(false);
   const [tab, setTab] = useState<"live" | "matches" | "register" | "checkin" | "profiles" | "teams" | "groups" | "knockout" | "scoreboard" | "categories">("live");
+  /* NEW: mobile IA — 10 tabs is too many on phones; collapse the secondary 7 into a "More" drawer. */
+  const isMobileNav = useIsMobile();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreTabSet = new Set(["register", "checkin", "teams", "groups", "knockout", "scoreboard", "categories"]);
+  const moreIsActive = isMobileNav && moreTabSet.has(tab);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -965,16 +971,59 @@ export default function App() {
       </header>
 
       <nav style={{ display: "flex", justifyContent: "center", gap: 4, paddingTop: 6, background: "#0a1628", borderBottom: "1px solid #1a3050", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}>
-        {tabBtn("live", "Live", "🔴")}
-        {tabBtn("matches", "Matches", "🗓️")}
-        {tabBtn("register", "Players", "📋")}
-        {tabBtn("checkin", "Check-In", "✅")}
-        {tabBtn("profiles", "Profiles", "👤")}
-        {tabBtn("teams", "Teams", "🤝")}
-        {phase !== "none" && tabBtn("groups", "Groups", "📊")}
-        {phase === "knockout" && tabBtn("knockout", "Knockout", "⚔️")}
-        {tabBtn("scoreboard", "Scoreboard", "🏅")}
-        {isAdmin && tabBtn("categories", "Categories", "🏷️")}
+        {/* MAKEOVER: mobile shows 3 priority tabs (LIVE, MATCHES, PROFILES) + a "MORE" button
+            that opens a drawer with the remaining 7 tabs. Desktop keeps the full row. */}
+        {isMobileNav ? (
+          <>
+            {tabBtn("live", "Live", "🔴")}
+            {tabBtn("matches", "Matches", "🗓️")}
+            {tabBtn("profiles", "Profiles", "👤")}
+            <button
+              onClick={() => setMoreOpen(true)}
+              style={{
+                padding: "14px 22px",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: 12,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+                background: "transparent",
+                color: moreIsActive ? "#00d4ff" : "#64748b",
+                border: "none",
+                borderBottom: "3px solid transparent",
+                marginBottom: -1,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                position: "relative",
+                transition: "color .15s",
+                fontFamily: "'Inter', system-ui, sans-serif",
+              }}
+            >
+              <span style={{ fontSize: 14 }}>⋯</span>MORE
+              {moreIsActive && (
+                <motion.div
+                  layoutId="nav-active-indicator"
+                  style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 3, background: "#00d4ff" }}
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+            </button>
+          </>
+        ) : (
+          <>
+            {tabBtn("live", "Live", "🔴")}
+            {tabBtn("matches", "Matches", "🗓️")}
+            {tabBtn("register", "Players", "📋")}
+            {tabBtn("checkin", "Check-In", "✅")}
+            {tabBtn("profiles", "Profiles", "👤")}
+            {tabBtn("teams", "Teams", "🤝")}
+            {phase !== "none" && tabBtn("groups", "Groups", "📊")}
+            {phase === "knockout" && tabBtn("knockout", "Knockout", "⚔️")}
+            {tabBtn("scoreboard", "Scoreboard", "🏅")}
+            {isAdmin && tabBtn("categories", "Categories", "🏷️")}
+          </>
+        )}
       </nav>
 
       <main style={{ maxWidth: 1280, margin: "24px auto", padding: "0 20px" }}>
@@ -1253,6 +1302,53 @@ export default function App() {
           onCancel={() => setPickingCourtFor(null)}
         />
       )}
+
+      {/* NEW: Mobile "More" drawer — slides up from bottom, shows the 7 secondary tabs. */}
+      <AnimatePresence>
+        {isMobileNav && moreOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMoreOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-end" }}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: "100%", background: "#0a1628", borderTop: "1px solid #1a3050", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "12px 16px 24px", maxHeight: "70vh", overflowY: "auto" }}
+            >
+              <div style={{ width: 40, height: 4, background: "#475569", borderRadius: 2, margin: "0 auto 16px" }} />
+              <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 12, padding: "0 4px" }}>More Tabs</div>
+              {[
+                { id: "register" as const, label: "Players", icon: "📋", visible: true },
+                { id: "checkin" as const, label: "Check-In", icon: "✅", visible: true },
+                { id: "teams" as const, label: "Teams", icon: "🤝", visible: true },
+                { id: "groups" as const, label: "Groups", icon: "📊", visible: phase !== "none" },
+                { id: "knockout" as const, label: "Knockout", icon: "⚔️", visible: phase === "knockout" },
+                { id: "scoreboard" as const, label: "Scoreboard", icon: "🏅", visible: true },
+                { id: "categories" as const, label: "Categories", icon: "🏷️", visible: isAdmin },
+              ].filter(t => t.visible).map(t => {
+                const isActive = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => { setTab(t.id); setMoreOpen(false); }}
+                    className="font-display"
+                    style={{ width: "100%", padding: "14px", background: isActive ? "rgba(0,212,255,0.12)" : "transparent", border: isActive ? "1px solid rgba(0,212,255,0.3)" : "1px solid #1a3050", borderRadius: 10, fontSize: 13, fontWeight: 600, color: isActive ? "#00d4ff" : "#cbd5e1", letterSpacing: 1.5, textTransform: "uppercase", textAlign: "left", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", marginBottom: 6 }}
+                  >
+                    <span style={{ fontSize: 18 }}>{t.icon}</span>{t.label}
+                  </button>
+                );
+              })}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
