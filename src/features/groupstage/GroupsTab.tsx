@@ -58,14 +58,15 @@ export function GroupsTab({
                   <thead><tr>{["#", "Team", "W", "L", "PF", "PA", "+/-", "Pts"].map(h => <th key={h} style={{ padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textAlign: "left", textTransform: "uppercase", letterSpacing: 1 }}>{h}</th>)}</tr></thead>
                   <tbody>{st.map((s, si) => (
                     <tr key={s.team.id} style={{ background: si < 2 ? "#f0fdf4" : "#f8fafc" }}>
-                      <td style={{ padding: "10px 12px", fontWeight: 800, color: si < 2 ? "#16a34a" : "#94a3b8" }}>{si + 1}</td>
+                      {/* MAKEOVER: tabular-nums on all numeric columns for clean digit alignment */}
+                      <td style={{ padding: "10px 12px", fontWeight: 800, color: si < 2 ? "#16a34a" : "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{si + 1}</td>
                       <td style={{ padding: "10px 12px", fontWeight: 600 }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</td>
-                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#16a34a" }}>{s.w}</td>
-                      <td style={{ padding: "10px 12px", color: "#E63946" }}>{s.l}</td>
-                      <td style={{ padding: "10px 12px" }}>{s.pf}</td>
-                      <td style={{ padding: "10px 12px" }}>{s.pa}</td>
-                      <td style={{ padding: "10px 12px", fontWeight: 700, color: s.pf - s.pa > 0 ? "#16a34a" : s.pf - s.pa < 0 ? "#E63946" : "#94a3b8" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</td>
-                      <td style={{ padding: "10px 12px", fontWeight: 900, fontSize: 18, color: "#3A86FF" }}>{s.pts}</td>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#16a34a", fontVariantNumeric: "tabular-nums" }}>{s.w}</td>
+                      <td style={{ padding: "10px 12px", color: "#E63946", fontVariantNumeric: "tabular-nums" }}>{s.l}</td>
+                      <td style={{ padding: "10px 12px", fontVariantNumeric: "tabular-nums" }}>{s.pf}</td>
+                      <td style={{ padding: "10px 12px", fontVariantNumeric: "tabular-nums" }}>{s.pa}</td>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: s.pf - s.pa > 0 ? "#16a34a" : s.pf - s.pa < 0 ? "#E63946" : "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</td>
+                      <td className="font-display" style={{ padding: "10px 12px", fontWeight: 800, fontSize: 18, color: "#3A86FF", fontVariantNumeric: "tabular-nums" }}>{s.pts}</td>
                     </tr>
                   ))}</tbody>
                 </table>

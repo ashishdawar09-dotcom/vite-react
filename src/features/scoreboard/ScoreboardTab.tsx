@@ -85,13 +85,15 @@ export function ScoreboardTab({
           <tbody>
             {sorted.map((s, i) => (
               <tr key={s.team.id} style={{ borderBottom: "1px solid #f1f5f9", background: champion && champion.id === s.team.id ? "#fefce8" : i % 2 === 0 ? "#fff" : "#f8fafc" }}>
-                <td style={{ padding: "12px 16px", fontWeight: 900, color: i === 0 && champion ? "#f59e0b" : "#3A86FF" }}>{i + 1}</td>
+                {/* MAKEOVER: rank numeral in Oswald 18px for at-a-glance scan */}
+                <td className="font-display" style={{ padding: "12px 16px", fontWeight: 800, fontSize: 18, color: i === 0 && champion ? "#f59e0b" : "#3A86FF", fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
                 <td style={{ padding: "12px 16px", fontWeight: 600 }}>{s.team.p2 ? `${s.team.p1.name} & ${s.team.p2.name}` : s.team.p1.name}</td>
-                <td style={{ padding: "12px 16px", fontWeight: 700, color: "#16a34a" }}>{s.gw}</td>
-                <td style={{ padding: "12px 16px", color: "#E63946" }}>{s.gl}</td>
-                <td style={{ padding: "12px 16px" }}>{s.pf}</td>
-                <td style={{ padding: "12px 16px" }}>{s.pa}</td>
-                <td style={{ padding: "12px 16px", fontWeight: 700, color: s.pf - s.pa > 0 ? "#16a34a" : s.pf - s.pa < 0 ? "#E63946" : "#94a3b8" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</td>
+                {/* MAKEOVER: tabular-nums on all numeric columns */}
+                <td style={{ padding: "12px 16px", fontWeight: 700, color: "#16a34a", fontVariantNumeric: "tabular-nums" }}>{s.gw}</td>
+                <td style={{ padding: "12px 16px", color: "#E63946", fontVariantNumeric: "tabular-nums" }}>{s.gl}</td>
+                <td style={{ padding: "12px 16px", fontVariantNumeric: "tabular-nums" }}>{s.pf}</td>
+                <td style={{ padding: "12px 16px", fontVariantNumeric: "tabular-nums" }}>{s.pa}</td>
+                <td style={{ padding: "12px 16px", fontWeight: 700, color: s.pf - s.pa > 0 ? "#16a34a" : s.pf - s.pa < 0 ? "#E63946" : "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{s.pf - s.pa > 0 ? "+" : ""}{s.pf - s.pa}</td>
                 <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 600 }}>{s.status}</td>
               </tr>
             ))}
