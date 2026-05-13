@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
+import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { CourtStatus } from "./CourtStatus";
-import { Av } from "./ui";
+import { Av, ShuttleSVG } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
@@ -27,6 +28,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   onShowProfile: (playerId: string) => void;
 }) {
   const isMobile = useIsMobile();
+  const reduceMotion = useReducedMotion(); /* NEW: respect prefers-reduced-motion globally */
   const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
   const catById = Object.fromEntries(categories.map(c => [c.id, c]));
 
@@ -118,7 +120,8 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.6) 0%, rgba(10,22,40,0.95) 100%)" }} />
         <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{ fontSize: 64, marginBottom: 12, opacity: 0.6 }}>🏸</div>
+          {/* MAKEOVER: 🏸 emoji -> custom ShuttleSVG */}
+          <ShuttleSVG sz={80} color="#fff" opacity={0.4} style={{ margin: "0 auto 14px", display: "block" }} />
           <p className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>Tournament hasn't started</p>
           <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 6 }}>Check back soon for live action.</p>
         </div>
@@ -135,10 +138,11 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   );
 
   const StatTile = ({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) => (
-    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 8, padding: "16px 18px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>{label}</div>
-      <div className="font-display" style={{ fontSize: 26, fontWeight: 700, color: "#fff", lineHeight: 1.1, letterSpacing: 0.5 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, fontWeight: 500 }}>{sub}</div>}
+    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 10, padding: "18px 20px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
+      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 10 }}>{label}</div>
+      {/* MAKEOVER: 26 -> 40 px Oswald numeral with tabular-nums for broadcast-quality alignment */}
+      <div className="font-display" style={{ fontSize: 40, fontWeight: 700, color: "#fff", lineHeight: 1, letterSpacing: 0.5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, fontWeight: 500 }}>{sub}</div>}
     </div>
   );
 
@@ -300,7 +304,8 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 
       {live.length > 0 && (
         <div style={{ marginBottom: 32 }}>
-          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite", boxShadow: "0 0 6px #ef4444" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
+          {/* MAKEOVER: replaced broken `pulse-strong` CSS keyframe (was never defined) with Framer Motion */}
+          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><motion.span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
             {live.map(m => {
               const ta = m.team_a_id ? teamById[m.team_a_id] : null;
@@ -313,20 +318,23 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050" }}>
                     <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
-                      <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse-strong 1.4s ease-in-out infinite" }} />LIVE
+                      {/* MAKEOVER: pulse-strong keyframe didn't exist; using Framer Motion */}
+                      <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} />LIVE
                     </span>
                   </div>
                   <div style={{ padding: isMobile ? "12px 14px" : "16px 18px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, padding: "8px 0" }}>
                       {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={isMobile ? 32 : 38} color={ta.p1.color} />}
                       <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#fff" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tName(m.team_a_id)}</span>
-                      <div className="font-display" style={{ minWidth: isMobile ? 56 : 70, padding: isMobile ? "6px 10px" : "8px 16px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: isMobile ? 26 : 32, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sa}</div>
+                      {/* MAKEOVER: broadcast-quality scoreboard numerals — 32->48 desktop, 26->36 mobile, tabular-nums */}
+                      <div className="font-display" style={{ minWidth: isMobile ? 72 : 96, padding: isMobile ? "10px 14px" : "12px 20px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 8, fontSize: isMobile ? 36 : 48, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{sa}</div>
                     </div>
                     <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#1a3050,transparent)", margin: "2px 0" }} />
                     <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, padding: "8px 0" }}>
                       {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={isMobile ? 32 : 38} color={tb.p1.color} />}
                       <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#fff" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tName(m.team_b_id)}</span>
-                      <div className="font-display" style={{ minWidth: isMobile ? 56 : 70, padding: isMobile ? "6px 10px" : "8px 16px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 6, fontSize: isMobile ? 26 : 32, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1 }}>{sb}</div>
+                      {/* MAKEOVER: broadcast-quality scoreboard numerals — 32->48 desktop, 26->36 mobile, tabular-nums */}
+                      <div className="font-display" style={{ minWidth: isMobile ? 72 : 96, padding: isMobile ? "10px 14px" : "12px 20px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 8, fontSize: isMobile ? 36 : 48, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{sb}</div>
                     </div>
                   </div>
                 </div>
@@ -510,7 +518,8 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(15,30,55,0.6) 0%, rgba(15,30,55,0.95) 100%)" }} />
           <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{ fontSize: 48, marginBottom: 10, opacity: 0.5 }}>🏸</div>
+            {/* MAKEOVER: 🏸 emoji -> custom ShuttleSVG */}
+            <ShuttleSVG sz={60} color="#fff" opacity={0.5} style={{ margin: "0 auto 12px", display: "block" }} />
             <p className="font-display" style={{ margin: 0, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "#fff" }}>No matches scheduled</p>
             <p style={{ margin: "4px 0 0", fontSize: 13 }}>The tournament will begin shortly.</p>
           </div>
