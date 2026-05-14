@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
-import { DotLottieReact } from "@lottiefiles/dotlottie-react"; /* NEW: 21st.dev demo Lottie */
 import { CourtStatus } from "./CourtStatus";
 import { Av, ShuttleSVG } from "./ui";
 import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient (page-level) */
@@ -188,20 +187,9 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         gradientStops={[15, 35, 55, 70, 85, 100]}
       />
 
-      {/* NEW: Lottie hero animation (placeholder cat from the 21st.dev demo — swap for a
-          badminton-themed Lottie when one is sourced). Sits on top of the gradient, centered. */}
-      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", marginBottom: 24, marginTop: 8 }}>
-        <div style={{ width: 220, height: 220, maxWidth: "100%" }}>
-          <DotLottieReact
-            src="https://lottie.host/8cf4ba71-e5fb-44f3-8134-178c4d389417/0CCsdcgNIP.json"
-            loop
-            autoplay
-          />
-        </div>
-      </div>
-
-      {/* Existing content — every child below this is in normal flow with z-index 1 so it
-          sits above the absolute-positioned gradient. */}
+      {/* Existing content — wrapped in `position:relative; zIndex:1` so it sits above the
+          absolutely-positioned gradient. (Decorative Lottie removed; cat now only shows in
+          the LottieLoader during actual loading states — see src/components/ui/lottie-loader.tsx.) */}
       <div style={{ position: "relative", zIndex: 1 }}>
       <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} categories={categories} teamById={allTeamById} />
 

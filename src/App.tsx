@@ -13,6 +13,7 @@ import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { SkeletonLoader } from "./components/SkeletonLoader"; /* NEW: replaces bare "Loading..." */
+import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for initial app boot */
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { CheckInTab } from "./features/checkin/CheckInTab";
@@ -886,7 +887,7 @@ export default function App() {
 
   const signOut = async () => { await supabase.auth.signOut(); };
 
-  if (authLoading) return <div style={{ padding: 40, textAlign: "center", fontFamily: "system-ui" }}>Loading…</div>;
+  if (authLoading) return <LottieLoader fullScreen label="Loading tournament…" />; /* NEW: cat Lottie loader during initial auth check */
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter','Segoe UI',system-ui,-apple-system,sans-serif" }}>
