@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
+import { DotLottieReact } from "@lottiefiles/dotlottie-react"; /* NEW: 21st.dev demo Lottie */
 import { CourtStatus } from "./CourtStatus";
 import { Av, ShuttleSVG } from "./ui";
-import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient for hero */
+import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient (page-level) */
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
@@ -172,8 +173,36 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   };
 
   return (
-    <div style={{ background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
+    /* MAKEOVER: page-level gradient backdrop. Outer wrapper now position:relative + overflow:hidden
+       so the absolutely-positioned AnimatedGradientBackground fills the entire LIVE tab area, not
+       just the small hero block. Content sits in normal flow above it. */
+    <div style={{ position: "relative", overflow: "hidden", background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
+      {/* NEW: 21st.dev AnimatedGradientBackground — full LIVE tab backdrop, breathing on. Palette
+          stays inside the Broadcast Minimalism tokens; range bumped to 8% so the breathing reads. */}
+      <AnimatedGradientBackground
+        startingGap={130}
+        Breathing={true}
+        breathingRange={8}
+        animationSpeed={0.02}
+        gradientColors={["#070F1F", "#0F1A2E", "#3A86FF", "#00d4ff", "#FF80AB", "#070F1F"]}
+        gradientStops={[15, 35, 55, 70, 85, 100]}
+      />
 
+      {/* NEW: Lottie hero animation (placeholder cat from the 21st.dev demo — swap for a
+          badminton-themed Lottie when one is sourced). Sits on top of the gradient, centered. */}
+      <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", marginBottom: 24, marginTop: 8 }}>
+        <div style={{ width: 220, height: 220, maxWidth: "100%" }}>
+          <DotLottieReact
+            src="https://lottie.host/8cf4ba71-e5fb-44f3-8134-178c4d389417/0CCsdcgNIP.json"
+            loop
+            autoplay
+          />
+        </div>
+      </div>
+
+      {/* Existing content — every child below this is in normal flow with z-index 1 so it
+          sits above the absolute-positioned gradient. */}
+      <div style={{ position: "relative", zIndex: 1 }}>
       <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} categories={categories} teamById={allTeamById} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -269,18 +298,9 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         </div>
       )}
 
-      {/* MAKEOVER: animated radial gradient is the new bottom layer; athlete photo + cyan glow stay on top.
-          Solid bg.deep fallback in case the gradient hasn't mounted yet (or framer-motion entrance is mid-fade). */}
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "#070F1F", border: "1px solid #1a3050" }}>
-        {/* NEW: 21st.dev AnimatedGradientBackground — palette tuned to the Broadcast Minimalism tokens */}
-        <AnimatedGradientBackground
-          startingGap={120}
-          Breathing={true}
-          breathingRange={4}
-          animationSpeed={0.018}
-          gradientColors={["#070F1F", "#0F1A2E", "#3A86FF", "#00d4ff", "#FF80AB", "#070F1F"]}
-          gradientStops={[20, 40, 55, 70, 85, 100]}
-        />
+      {/* Hero block — solid bg lets the page-level AnimatedGradientBackground show through padding only.
+          (Previous iteration mounted the gradient INSIDE this block; moved to the outer wrapper now.) */}
+      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
           <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #0a1628 0%, rgba(10,22,40,0.7) 30%, rgba(10,22,40,0.1) 100%)" }} />
@@ -537,6 +557,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           </div>
         </div>
       )}
+      </div>{/* close inner content wrapper (z-index:1) */}
     </div>
   );
 }
