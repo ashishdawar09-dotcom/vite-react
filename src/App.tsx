@@ -1305,9 +1305,13 @@ export default function App() {
       )}
 
       {/* NEW: Mobile "More" drawer — slides up from bottom, shows the 7 secondary tabs. */}
+      {/* HOTFIX: explicit `key` props on AnimatePresence children. Without them iOS WebKit
+          could lose track of element identity across enter/exit and throw DOMException
+          NotFoundError during React reconciliation (caught by Sentry: ad68e220a5ff…). */}
       <AnimatePresence>
         {isMobileNav && moreOpen && (
           <motion.div
+            key="more-drawer-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1316,6 +1320,7 @@ export default function App() {
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-end" }}
           >
             <motion.div
+              key="more-drawer-sheet"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}

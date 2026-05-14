@@ -44,7 +44,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         }}
       >
         {/* MAKEOVER: AnimatePresence + motion.div for slide-in from right, fade-out on dismiss */}
-        <AnimatePresence>
+        {/* HOTFIX: mode="popLayout" so exiting toasts position: absolute, can't race the layout
+            reflow on iOS WebKit (defensive companion to the drawer key-prop fix). */}
+        <AnimatePresence mode="popLayout">
           {toasts.map(t => (
             <motion.div
               key={t.id}
