@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { CourtStatus } from "./CourtStatus";
 import { Av, ShuttleSVG } from "./ui";
+import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient for hero */
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
@@ -268,7 +269,18 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         </div>
       )}
 
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
+      {/* MAKEOVER: animated radial gradient is the new bottom layer; athlete photo + cyan glow stay on top.
+          Solid bg.deep fallback in case the gradient hasn't mounted yet (or framer-motion entrance is mid-fade). */}
+      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "#070F1F", border: "1px solid #1a3050" }}>
+        {/* NEW: 21st.dev AnimatedGradientBackground — palette tuned to the Broadcast Minimalism tokens */}
+        <AnimatedGradientBackground
+          startingGap={120}
+          Breathing={true}
+          breathingRange={4}
+          animationSpeed={0.018}
+          gradientColors={["#070F1F", "#0F1A2E", "#3A86FF", "#00d4ff", "#FF80AB", "#070F1F"]}
+          gradientStops={[20, 40, 55, 70, 85, 100]}
+        />
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
           <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #0a1628 0%, rgba(10,22,40,0.7) 30%, rgba(10,22,40,0.1) 100%)" }} />
