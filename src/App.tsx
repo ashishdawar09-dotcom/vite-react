@@ -12,7 +12,7 @@ import { CategoryPicker } from "./components/CategoryPicker";
 import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
-import { SkeletonLoader } from "./components/SkeletonLoader"; /* NEW: replaces bare "Loading..." */
+import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { CheckInTab } from "./features/checkin/CheckInTab";
@@ -133,7 +133,7 @@ export default function App() {
   }, []);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
-  const { players, teams, matches, categories, playerCategories } = useTournamentData(currentId, isAdmin);
+  const { players, teams, matches, categories, playerCategories, loading: dataLoading } = useTournamentData(currentId, isAdmin); /* NEW: dataLoading for the cat loader during tournament switch / data refetch */
 
   // Default to "All" (null). Only auto-select first category if none exists yet and we need one for team operations.
   useEffect(() => {
@@ -886,10 +886,17 @@ export default function App() {
 
   const signOut = async () => { await supabase.auth.signOut(); };
 
-  if (authLoading) return <div style={{ padding: 40, textAlign: "center", fontFamily: "system-ui" }}>Loading…</div>;
+  if (authLoading) return <LottieLoader fullScreen label="Loading tournament…" />; /* NEW: cat Lottie loader during initial auth check */
+
+  /* NEW: full-screen cat overlay during tournament-data refetch (e.g. tournament dropdown switch).
+     Renders only after authLoading is false, so this never doubles up with the auth loader. */
+  const showDataLoader = dataLoading && currentId;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter','Segoe UI',system-ui,-apple-system,sans-serif" }}>
+      {/* NEW: cat overlay during tournament-data refetch (e.g. switching tournament from the
+          dropdown). Renders on top of everything via fullScreen variant (z-index: 9999). */}
+      {showDataLoader && <LottieLoader fullScreen label="Loading tournament data…" />}
       <header style={{ background: "linear-gradient(135deg,#050d1a 0%,#0a1628 50%,#0d1f3a 100%)", color: "#fff", padding: 0, position: "relative", overflow: "hidden", borderBottom: "1px solid #1a3050" }}>
         {/* Athlete photo on the right with diagonal cutout */}
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "55%", clipPath: "polygon(20% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden", zIndex: 0 }}>
@@ -1042,7 +1049,7 @@ export default function App() {
         {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} players={players} playerCategories={playerCategories} onShowProfile={showProfile} />}
 
         {current && tab === "matches" && (
-          <Suspense fallback={<SkeletonLoader />}>
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
             <MatchesTab
               tournament={current}
               categories={categories}
@@ -1056,7 +1063,7 @@ export default function App() {
         )}
 
         {current && tab === "categories" && isAdmin && (
-          <Suspense fallback={<SkeletonLoader />}>
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
             <CategoriesTab
               tournament={current}
               categories={categories}
