@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion"; /* NEW: live-court pulse */
 import type { Category, ProjectedMatch, Team, Player } from "../types";
 import { fmtElapsed } from "../hooks/useScheduling";
 
@@ -28,6 +29,7 @@ export const CourtStatus = React.memo(function CourtStatus({
   teamById: Record<string, (Team & { p1: Player; p2: Player | null }) | undefined>;
 }) {
   const [now, setNow] = useState(Date.now());
+  const reduceMotion = useReducedMotion(); /* NEW: motion gate for IN-PLAY pulse */
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
@@ -80,7 +82,16 @@ export const CourtStatus = React.memo(function CourtStatus({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <span className="font-display" style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", letterSpacing: 2 }}>COURT {n}</span>
                 {isLive ? (
-                  <span className="font-display" style={{ fontSize: 13, fontWeight: 800, color: wayOver ? "#ef4444" : over ? "#fbbf24" : "#00d4ff", letterSpacing: 0.5 }}>{fmtElapsed(m!.started_at, now)}</span>
+                  /* MAKEOVER: pulsing red dot beside the elapsed time, broadcast feel from across a gym */
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <motion.span
+                      aria-hidden
+                      style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: wayOver ? "#ef4444" : over ? "#fbbf24" : "#ef4444", boxShadow: `0 0 6px ${wayOver ? "#ef4444" : over ? "#fbbf24" : "#ef4444"}` }}
+                      animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }}
+                      transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <span className="font-display" style={{ fontSize: 13, fontWeight: 800, color: wayOver ? "#ef4444" : over ? "#fbbf24" : "#00d4ff", letterSpacing: 0.5 }}>{fmtElapsed(m!.started_at, now)}</span>
+                  </span>
                 ) : isWarming ? (
                   <span className="font-display" style={{ fontSize: 10, fontWeight: 700, color: "#fbbf24", letterSpacing: 2, padding: "2px 8px", background: "rgba(251,191,36,0.1)", borderRadius: 3, border: "1px solid rgba(251,191,36,0.3)" }}>
                     🟡 WARMING UP · {fmtElapsed(m!.court_allocated_at, now)}

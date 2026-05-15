@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
+import confetti from "canvas-confetti"; /* NEW: celebrate match confirmation */
 import {
   DndContext,
   closestCenter,
@@ -296,6 +297,19 @@ export function MatchesTab({
     if (sa === sb) { toast("No ties allowed", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
+    /* Celebrate — small confetti burst from page bottom-center, brand palette.
+       Honours prefers-reduced-motion (skip the visual jolt). */
+    if (!reduceMotion) {
+      confetti({
+        particleCount: 60,
+        spread: 70,
+        startVelocity: 32,
+        ticks: 120,
+        origin: { x: 0.5, y: 0.85 },
+        colors: ["#00d4ff", "#3A86FF", "#22c55e", "#fbbf24", "#FF80AB"],
+        disableForReducedMotion: true,
+      });
+    }
     propagateKnockout(m, winner_id);
   };
 
@@ -421,7 +435,14 @@ export function MatchesTab({
       : "#475569"; /* pending: muted gray */
 
     return (
-      <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}>
+      /* MAKEOVER: hover lift + tap-press on every match card. Admin clicks these
+         constantly during a tournament — they should feel responsive. */
+      <motion.div
+        style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}
+        whileHover={reduceMotion ? undefined : { y: -2, boxShadow: "0 6px 16px rgba(0,0,0,0.28)" }}
+        whileTap={reduceMotion ? undefined : { scale: 0.99 }}
+        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accentColor }} />
         {dragHandle}
         {/* Stage badge (smaller now that category is the section header) */}
@@ -506,7 +527,7 @@ export function MatchesTab({
             )}
           </div>
         )}
-      </div>
+      </motion.div>
     );
   };
 

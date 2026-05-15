@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from "framer-motion"; /* NEW: bracket reveal */
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { KnockoutSanityBanner } from "../../components/KnockoutSanityBanner";
 import type { Category, Match, TeamWithPlayers } from "../../types";
@@ -39,6 +40,7 @@ export function KnockoutTab({
   champion: TeamWithPlayers | null;
   MatchCard: React.ComponentType<{ match: Match; editable?: boolean; matchMinutes?: number }>;
 }) {
+  const reduceMotion = useReducedMotion();
   const expectedQualifiers = currentCategory
     ? Math.max(0, (currentCategory.groups_count || groups.length) * (currentCategory.top_n_advance || 2))
     : 0;
@@ -69,19 +71,35 @@ export function KnockoutTab({
         />
       )}
 
+      {/* Bracket reveal — columns sweep in left-to-right with a small slide;
+         cards fade-up inside each column. Gives the feel of the bracket
+         drawing itself round by round on first paint. Reduced-motion: static. */}
       <div style={{ overflowX: "auto", paddingBottom: 20 }}>
         <div style={{ display: "flex", gap: 0, minWidth: knockout.length * 290 }}>
           {knockout.map((round, ri) => (
-            <div key={ri} style={{ flex: 1, minWidth: 270, display: "flex", flexDirection: "column" }}>
+            <motion.div
+              key={ri}
+              initial={reduceMotion ? false : { opacity: 0, x: -16 }}
+              animate={reduceMotion ? false : { opacity: 1, x: 0 }}
+              transition={reduceMotion ? undefined : { duration: 0.45, ease: [0.16, 1, 0.3, 1] as const, delay: ri * 0.12 }}
+              style={{ flex: 1, minWidth: 270, display: "flex", flexDirection: "column" }}
+            >
               <div style={{ textAlign: "center", fontWeight: 800, color: "#1a1a2e", fontSize: 13, textTransform: "uppercase", letterSpacing: 1, padding: "10px 12px", background: "linear-gradient(90deg,#e0e7ff,#ede9fe,#e0e7ff)", borderRadius: 10, margin: "0 8px 16px" }}>
                 {roundName(knockout.length, ri)}
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", gap: 14, padding: "0 8px" }}>
-                {round.map(m => (
-                  <MatchCard key={m.id} match={m} editable={!m.is_bye} matchMinutes={currentCategory?.match_minutes} />
+                {round.map((m, mi) => (
+                  <motion.div
+                    key={m.id}
+                    initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                    animate={reduceMotion ? false : { opacity: 1, y: 0 }}
+                    transition={reduceMotion ? undefined : { duration: 0.35, ease: [0.16, 1, 0.3, 1] as const, delay: ri * 0.12 + 0.18 + mi * 0.04 }}
+                  >
+                    <MatchCard match={m} editable={!m.is_bye} matchMinutes={currentCategory?.match_minutes} />
+                  </motion.div>
                 ))}
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>

@@ -14,6 +14,7 @@ import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
 import { ParticleTextEffect } from "./components/ui/particle-text-effect"; /* NEW: footer particle animation */
+import { NumberTicker } from "./components/ui/number-ticker"; /* NEW: count-up tickers on stats */
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { CheckInTab } from "./features/checkin/CheckInTab";
@@ -971,7 +972,7 @@ export default function App() {
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", maxWidth: "65%" }}>
             {([[active.length, "Active Players", "#00d4ff"], [teamsView.length, "Teams", "#22c55e"], [unpaired.length, "Unpaired", "#f59e0b"]] as const).map(([v, l, c]) => (
               <div key={l} style={{ flex: "1 1 140px", background: "rgba(15,30,55,0.65)", backdropFilter: "blur(8px)", borderRadius: 6, padding: "12px 16px", border: "1px solid rgba(255,255,255,0.08)", borderLeft: `3px solid ${c}`, minWidth: 110 }}>
-                <div className="font-display" style={{ fontSize: 32, fontWeight: 700, color: c, lineHeight: 1 }}>{String(v).padStart(2, "0")}</div>
+                <NumberTicker value={v} padLength={2} className="font-display" style={{ fontSize: 32, fontWeight: 700, color: c, lineHeight: 1, fontVariantNumeric: "tabular-nums", display: "block" }} />
                 <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1.5, marginTop: 4, fontWeight: 600 }}>{l}</div>
               </div>
             ))}

@@ -1,8 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { CourtStatus } from "./CourtStatus";
 import { Av, ShuttleSVG } from "./ui";
 import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient (page-level) */
+import { SectionReveal } from "./ui/section-reveal"; /* NEW: scroll-triggered fade-up wrapper */
+import { BorderBeam } from "./ui/border-beam"; /* NEW: animated sweep on live cards */
+import { LiveMarquee } from "./ui/live-marquee"; /* NEW: broadcast-style LIVE ticker */
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
@@ -191,7 +194,28 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           absolutely-positioned gradient. (Decorative Lottie removed; cat now only shows in
           the LottieLoader during actual loading states — see src/components/ui/lottie-loader.tsx.) */}
       <div style={{ position: "relative", zIndex: 1 }}>
+      {/* MAKEOVER: broadcast-style scrolling ticker when matches are in play.
+          Renders only when live.length > 0 — quiet during pre-match. */}
+      {live.length > 0 && (
+        <SectionReveal>
+          <LiveMarquee
+            items={live.map(m => {
+              const courtNum = m.court_number ?? "?";
+              const a = tName(m.team_a_id);
+              const b = tName(m.team_b_id);
+              const sa = m.score_a ?? 0;
+              const sb = m.score_b ?? 0;
+              return `🔴 LIVE · COURT ${courtNum} · ${a} ${sa} – ${sb} ${b}`;
+            })}
+            speed={45}
+            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, padding: "10px 16px", color: "#fecaca", fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", fontFamily: "'Oswald', 'Inter', sans-serif", marginBottom: 16 }}
+          />
+        </SectionReveal>
+      )}
+
+      <SectionReveal>
       <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} categories={categories} teamById={allTeamById} />
+      </SectionReveal>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <div style={{ position: "relative", flex: "1 1 280px", maxWidth: 520 }}>
@@ -323,6 +347,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       </div>
 
       {live.length > 0 && (
+        <SectionReveal>
         <div style={{ marginBottom: 32 }}>
           {/* MAKEOVER: replaced broken `pulse-strong` CSS keyframe (was never defined) with Framer Motion */}
           <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><motion.span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
@@ -334,27 +359,49 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
               const aLeading = sa > sb, bLeading = sb > sa;
               return (
                 <div key={m.id} style={{ background: "linear-gradient(135deg,#0f1e36 0%,#11243f 100%)", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
+                  {/* MAKEOVER: animated red border sweep on live cards — broadcast feel */}
+                  <BorderBeam duration={3.5} color="#ef4444" strokeWidth={2} radius={10} />
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#ef4444,#f97316)" }} />
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050", position: "relative", zIndex: 1 }}>
                     <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
-                      {/* MAKEOVER: pulse-strong keyframe didn't exist; using Framer Motion */}
                       <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} />LIVE
                     </span>
                   </div>
-                  <div style={{ padding: isMobile ? "12px 14px" : "16px 18px" }}>
+                  <div style={{ padding: isMobile ? "12px 14px" : "16px 18px", position: "relative", zIndex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, padding: "8px 0" }}>
                       {ta?.p1 && <Av name={ta.p1.name} photo={ta.p1.photo_url} sz={isMobile ? 32 : 38} color={ta.p1.color} />}
                       <span style={{ fontWeight: aLeading ? 800 : 600, fontSize: 14, flex: 1, color: aLeading ? "#fff" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tName(m.team_a_id)}</span>
-                      {/* MAKEOVER: broadcast-quality scoreboard numerals — 32->48 desktop, 26->36 mobile, tabular-nums */}
-                      <div className="font-display" style={{ minWidth: isMobile ? 72 : 96, padding: isMobile ? "10px 14px" : "12px 20px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 8, fontSize: isMobile ? 36 : 48, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{sa}</div>
+                      {/* MAKEOVER: score flash on update — AnimatePresence keyed by score value pops the new digit in with a scale-bounce */}
+                      <div className="font-display" style={{ minWidth: isMobile ? 72 : 96, padding: isMobile ? "10px 14px" : "12px 20px", background: aLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: aLeading ? "#fff" : "#94a3b8", borderRadius: 8, fontSize: isMobile ? 36 : 48, fontWeight: 700, textAlign: "center", border: aLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: aLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1, fontVariantNumeric: "tabular-nums", overflow: "hidden" }}>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={sa}
+                            initial={{ scale: 1.5, opacity: 0.6, color: "#fff" }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ opacity: 0, scale: 0.6 }}
+                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ display: "inline-block" }}
+                          >{sa}</motion.span>
+                        </AnimatePresence>
+                      </div>
                     </div>
                     <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#1a3050,transparent)", margin: "2px 0" }} />
                     <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, padding: "8px 0" }}>
                       {tb?.p1 && <Av name={tb.p1.name} photo={tb.p1.photo_url} sz={isMobile ? 32 : 38} color={tb.p1.color} />}
                       <span style={{ fontWeight: bLeading ? 800 : 600, fontSize: 14, flex: 1, color: bLeading ? "#fff" : "#cbd5e1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{tName(m.team_b_id)}</span>
-                      {/* MAKEOVER: broadcast-quality scoreboard numerals — 32->48 desktop, 26->36 mobile, tabular-nums */}
-                      <div className="font-display" style={{ minWidth: isMobile ? 72 : 96, padding: isMobile ? "10px 14px" : "12px 20px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 8, fontSize: isMobile ? 36 : 48, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{sb}</div>
+                      <div className="font-display" style={{ minWidth: isMobile ? 72 : 96, padding: isMobile ? "10px 14px" : "12px 20px", background: bLeading ? "linear-gradient(135deg,#00b8ff,#0066ff)" : "rgba(255,255,255,0.04)", color: bLeading ? "#fff" : "#94a3b8", borderRadius: 8, fontSize: isMobile ? 36 : 48, fontWeight: 700, textAlign: "center", border: bLeading ? "1px solid #00d4ff" : "1px solid #1a3050", boxShadow: bLeading ? "0 4px 16px rgba(0,184,255,0.4)" : "none", letterSpacing: 1, transition: "all .2s", lineHeight: 1, fontVariantNumeric: "tabular-nums", overflow: "hidden" }}>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={sb}
+                            initial={{ scale: 1.5, opacity: 0.6, color: "#fff" }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ opacity: 0, scale: 0.6 }}
+                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ display: "inline-block" }}
+                          >{sb}</motion.span>
+                        </AnimatePresence>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -362,8 +409,10 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
             })}
           </div>
         </div>
+        </SectionReveal>
       )}
 
+      <SectionReveal>
       <div style={{ marginBottom: 32 }}>
         <SectionHeader accent="#00b8ff">Tournament Stats</SectionHeader>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -393,7 +442,9 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           </div>
         )}
       </div>
+      </SectionReveal>
 
+      <SectionReveal>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(360px,1fr))", gap: 20, marginBottom: 32 }}>
         {upcoming.length > 0 && (
           <div>
@@ -452,6 +503,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           </div>
         )}
       </div>
+      </SectionReveal>
 
       {phase !== "none" && groups.length > 0 && (() => {
         // Distinct categories represented by the visible groups — used to
@@ -460,6 +512,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           new Set(groups.map(g => g[0]?.category_id).filter((id): id is string => Boolean(id))),
         );
         return (
+          <SectionReveal>
           <div>
             <SectionHeader accent="#a855f7">Standings</SectionHeader>
             {/* Format summary — one line per visible category */}
@@ -530,6 +583,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
               })}
             </div>
           </div>
+          </SectionReveal>
         );
       })()}
 

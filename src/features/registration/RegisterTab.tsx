@@ -1,3 +1,4 @@
+import { motion, useReducedMotion, type Variants } from "framer-motion"; /* NEW: stagger reveal on roster */
 import * as db from "../../lib/db";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { Av } from "../../components/ui";
@@ -77,9 +78,15 @@ export function RegisterTab({
   unpaired: Player[];
   btn: (bg?: string, clr?: string) => React.CSSProperties;
 }) {
+  const reduceMotion = useReducedMotion();
   const filteredPlayers = currentCategoryId
     ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId))
     : players;
+  /* Stagger reveal variants — cards fade-up in sequence on first paint and
+     whenever the filtered list changes (re-key on category). Reduce-motion
+     gate happens at the motion.div's initial/animate props (set to false). */
+  const containerVariants: Variants = { hidden: {}, visible: { transition: { staggerChildren: 0.035 } } };
+  const itemVariants: Variants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const } } };
 
   return (
     <div>
@@ -122,12 +129,18 @@ export function RegisterTab({
       )}
 
       {/* Player list */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+      <motion.div
+        key={currentCategoryId ?? "all"} /* re-trigger stagger when category filter changes */
+        variants={containerVariants}
+        initial={reduceMotion ? false : "hidden"}
+        animate={reduceMotion ? false : "visible"}
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}
+      >
         {filteredPlayers.map((p, i) => {
           const pCats = playerCategoryMap.get(p.id);
           const isEditingCats = editingPlayerCats === p.id;
           return (
-            <div key={p.id} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14, border: "1px solid #e8ecf1", opacity: p.active ? 1 : 0.4, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", position: "relative", overflow: "hidden" }}>
+            <motion.div key={p.id} variants={itemVariants} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14, border: "1px solid #e8ecf1", opacity: p.active ? 1 : 0.4, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", position: "relative", overflow: "hidden" }}>
               <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 4, background: p.color, borderRadius: "0 4px 4px 0" }} />
               <div style={{ position: "relative", cursor: isAdmin ? "pointer" : "default", marginLeft: 4 }} onClick={() => isAdmin && fileRefs.current[p.id]?.click()}>
                 <Av name={p.name} photo={p.photo_url} sz={64} color={p.color} />
@@ -198,10 +211,10 @@ export function RegisterTab({
                   <button onClick={() => handleDeletePlayer(p.id)} style={{ ...btn("#dc2626"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Delete</button>
                 </div>
               )}
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
       {isAdmin && unpaired.length >= 2 && currentCategoryId && (
         <div style={{ textAlign: "center", marginTop: 28 }}>
           <button onClick={autoGen} style={{ ...btn("#2A9D8F"), padding: "14px 36px", fontSize: 16, borderRadius: 14 }}>🎲 Auto-Pair All Players</button>
