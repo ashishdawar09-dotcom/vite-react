@@ -1395,12 +1395,12 @@ export default function App() {
       <footer style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 16px", background: "#050d1a", borderTop: "1px solid #1a3050" }}>
         <ParticleTextEffect
           words={["Built by Ashish Dawar"]}
-          width={1000}
-          height={160}
-          fontSize={60}
+          width={800}
+          height={110}
+          fontSize={36}
           color="#00d4ff"
           pixelSteps={4}
-          pointSize={3}
+          pointSize={2}
         />
       </footer>
     </div>
