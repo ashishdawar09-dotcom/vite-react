@@ -13,6 +13,7 @@ import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
+import { ParticleTextEffect } from "./components/ui/particle-text-effect"; /* NEW: footer particle animation */
 import { toast } from "./components/Toast";
 import { AdminManager } from "./components/AdminManager";
 import { CheckInTab } from "./features/checkin/CheckInTab";
@@ -1389,8 +1390,15 @@ export default function App() {
         }
       `}</style>
 
-      <footer style={{ textAlign: "center", padding: "32px 16px", color: "#475569", fontSize: 11, background: "#050d1a", borderTop: "1px solid #1a3050", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 600 }}>
-        <span style={{ color: "#00b8ff" }}>●</span> BADMINTON LIVE · MAY THE BEST TEAM WIN
+      {/* MAKEOVER: static footer text -> ParticleTextEffect cycling "BUILT BY" → "ADAWAR" → "TECHNOLOGIES".
+          Canvas sized to fit the footer band (720x110, 50px font). Right-click + drag destroys particles. */}
+      <footer style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 16px", background: "#050d1a", borderTop: "1px solid #1a3050" }}>
+        <ParticleTextEffect
+          words={["BUILT BY", "ADAWAR", "TECHNOLOGIES"]}
+          width={720}
+          height={110}
+          fontSize={50}
+        />
       </footer>
     </div>
   );
