@@ -30,6 +30,7 @@ class Particle {
   maxSpeed = 1.0;
   maxForce = 0.1;
   particleSize = 10;
+  pointSize = 2; /* MAKEOVER: per-particle dot size when drawAsPoints; set by host. */
   isKilled = false;
 
   startColor = { r: 0, g: 0, b: 0 };
@@ -93,7 +94,7 @@ class Particle {
 
     if (drawAsPoints) {
       ctx.fillStyle = `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})`;
-      ctx.fillRect(this.pos.x, this.pos.y, 2, 2);
+      ctx.fillRect(this.pos.x, this.pos.y, this.pointSize, this.pointSize);
     } else {
       ctx.fillStyle = `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})`;
       ctx.beginPath();
@@ -153,10 +154,38 @@ export interface ParticleTextEffectProps {
   fontSize?: number;
   /** Font family. @default "Arial" */
   fontFamily?: string;
+  /**
+   * Fixed particle color as a `#rrggbb` hex string. If omitted, each word cycle
+   * picks a random RGB (original 21st.dev behaviour).
+   * @default undefined (random)
+   */
+  color?: string;
+  /**
+   * Sampling stride on the offscreen ImageData. Lower = denser particles
+   * (more readable text), higher = sparser. Original demo used 6.
+   * @default 6
+   */
+  pixelSteps?: number;
+  /**
+   * Side length of each drawn particle in px (when rendered as points).
+   * Original demo used 2.
+   * @default 2
+   */
+  pointSize?: number;
   /** Optional extra class names for the canvas. */
   className?: string;
   /** Optional inline style overrides for the canvas. */
   style?: React.CSSProperties;
+}
+
+/** Parse `#rrggbb` to an {r,g,b} object. Forgiving — handles missing `#`. */
+function parseHexColor(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace("#", "");
+  return {
+    r: parseInt(clean.substring(0, 2), 16),
+    g: parseInt(clean.substring(2, 4), 16),
+    b: parseInt(clean.substring(4, 6), 16),
+  };
 }
 
 const DEFAULT_WORDS = ["HELLO", "21st.dev", "ParticleTextEffect", "BY", "KAINXU"];
@@ -167,6 +196,9 @@ export function ParticleTextEffect({
   height = 500,
   fontSize = 100,
   fontFamily = "Arial",
+  color,
+  pixelSteps = 6,
+  pointSize = 2,
   className,
   style,
 }: ParticleTextEffectProps) {
@@ -177,7 +209,6 @@ export function ParticleTextEffect({
   const wordIndexRef = useRef(0);
   const mouseRef = useRef({ x: 0, y: 0, isPressed: false, isRightClick: false });
 
-  const pixelSteps = 6;
   const drawAsPoints = true;
 
   useEffect(() => {
@@ -214,7 +245,9 @@ export function ParticleTextEffect({
       const imageData = offscreenCtx.getImageData(0, 0, canvas.width, canvas.height);
       const pixels = imageData.data;
 
-      const newColor = {
+      /* MAKEOVER: when `color` prop is supplied, lock particles to that hue
+         (e.g. brand cyan #00d4ff). Otherwise the original random behaviour. */
+      const newColor = color ? parseHexColor(color) : {
         r: Math.random() * 255,
         g: Math.random() * 255,
         b: Math.random() * 255,
@@ -255,6 +288,7 @@ export function ParticleTextEffect({
             particle.maxSpeed = Math.random() * 6 + 4;
             particle.maxForce = particle.maxSpeed * 0.05;
             particle.particleSize = Math.random() * 6 + 6;
+            particle.pointSize = pointSize; /* MAKEOVER: inherit dot size from the host prop */
             particle.colorBlendRate = Math.random() * 0.0275 + 0.0025;
             particles.push(particle);
           }

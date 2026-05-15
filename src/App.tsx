@@ -1394,10 +1394,13 @@ export default function App() {
           Canvas sized to fit the footer band (720x110, 50px font). Right-click + drag destroys particles. */}
       <footer style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 16px", background: "#050d1a", borderTop: "1px solid #1a3050" }}>
         <ParticleTextEffect
-          words={["BUILT BY", "ADAWAR", "TECHNOLOGIES"]}
-          width={720}
-          height={110}
-          fontSize={50}
+          words={["Built by Ashish Dawar"]}
+          width={1000}
+          height={160}
+          fontSize={60}
+          color="#00d4ff"
+          pixelSteps={4}
+          pointSize={3}
         />
       </footer>
     </div>
