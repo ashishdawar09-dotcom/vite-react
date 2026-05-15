@@ -172,6 +172,15 @@ export interface ParticleTextEffectProps {
    * @default 2
    */
   pointSize?: number;
+  /**
+   * Per-frame canvas fill applied before drawing particles. This is what
+   * creates the motion-blur trail effect. Use a low-alpha color matching
+   * the surrounding container to make the canvas appear seamless against
+   * its background (e.g. `rgba(5,13,26,0.1)` for a #050d1a footer band).
+   * The original 21st.dev demo used `rgba(0,0,0,0.1)` (its bg was pure black).
+   * @default "rgba(0, 0, 0, 0.1)"
+   */
+  backgroundFade?: string;
   /** Optional extra class names for the canvas. */
   className?: string;
   /** Optional inline style overrides for the canvas. */
@@ -199,6 +208,7 @@ export function ParticleTextEffect({
   color,
   pixelSteps = 6,
   pointSize = 2,
+  backgroundFade = "rgba(0, 0, 0, 0.1)",
   className,
   style,
 }: ParticleTextEffectProps) {
@@ -315,8 +325,9 @@ export function ParticleTextEffect({
       const ctx = canvas.getContext("2d")!;
       const particles = particlesRef.current;
 
-      // Motion-blur background — gentle trail effect.
-      ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+      // Motion-blur background — gentle trail effect. Use the host-provided
+      // colour so the canvas can blend seamlessly into its container.
+      ctx.fillStyle = backgroundFade;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -392,7 +403,7 @@ export function ParticleTextEffect({
       canvas.removeEventListener("contextmenu", handleContextMenu);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, width, height, fontSize, fontFamily]);
+  }, [words, width, height, fontSize, fontFamily, color, pixelSteps, pointSize, backgroundFade]);
 
   return (
     <canvas

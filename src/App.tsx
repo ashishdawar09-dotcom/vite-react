@@ -1401,6 +1401,7 @@ export default function App() {
           color="#00d4ff"
           pixelSteps={4}
           pointSize={2}
+          backgroundFade="rgba(5, 13, 26, 0.1)"
         />
       </footer>
     </div>
