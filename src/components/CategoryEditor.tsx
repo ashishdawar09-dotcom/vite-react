@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
 import { recommendFormats, describeFormat, type FormatPlan } from "../lib/formatPlanner";
-import type { Category, Player, PlayerCategory } from "../types";
+import type { AgeBand, Category, Player, PlayerCategory } from "../types";
 
 export function CategoryEditor({
   tournamentId,
@@ -23,6 +23,8 @@ export function CategoryEditor({
   const [teamSize, setTeamSize] = useState<1 | 2>(category?.team_size ?? 2);
   const [matchMin, setMatchMin] = useState(category?.match_minutes ?? 12);
   const [startsAt, setStartsAt] = useState<string>(category?.starts_at ? toLocalInput(category.starts_at) : "");
+  const [ageBand, setAgeBand] = useState<AgeBand | null>(category?.age_band ?? null);
+  const [allowSolo, setAllowSolo] = useState<boolean>(category?.allow_solo_signup ?? false);
   const [busy, setBusy] = useState(false);
 
   // Estimated number of teams in this category — drives the format recommender.
@@ -77,7 +79,14 @@ export function CategoryEditor({
       const startsIso = startsAt ? new Date(startsAt).toISOString() : null;
       const selectedPlan = formatOptions.find(o => o.label === selectedLabel);
       if (category) {
-        const patch: Partial<Category> = { name: name.trim(), team_size: teamSize, match_minutes: matchMin, starts_at: startsIso };
+        const patch: Partial<Category> = {
+          name: name.trim(),
+          team_size: teamSize,
+          match_minutes: matchMin,
+          starts_at: startsIso,
+          age_band: ageBand,
+          allow_solo_signup: allowSolo,
+        };
         if (selectedPlan) {
           patch.groups_count = selectedPlan.groupsCount;
           patch.top_n_advance = selectedPlan.topNAdvance;
@@ -85,7 +94,10 @@ export function CategoryEditor({
         }
         await db.updateCategory(category.id, patch);
       } else {
-        await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
+        const created = await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
+        if (ageBand !== null || allowSolo) {
+          await db.updateCategory(created.id, { age_band: ageBand, allow_solo_signup: allowSolo });
+        }
       }
       onClose();
     } catch (e: any) { toast(e?.message ?? "Save failed", "error"); }
@@ -124,6 +136,33 @@ export function CategoryEditor({
         <Field label="Start time (optional)">
           <input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={inputStyle} />
         </Field>
+
+        <Field label="Age band (drives registration fee tier)">
+          <select
+            value={ageBand ?? ""}
+            onChange={e => setAgeBand((e.target.value || null) as AgeBand | null)}
+            style={inputStyle}
+          >
+            <option value="">— None —</option>
+            <option value="kid">Kid (8-12)</option>
+            <option value="teen">Teen (13-17)</option>
+            <option value="adult">Adult (18+)</option>
+          </select>
+        </Field>
+
+        {teamSize === 2 && (
+          <Field label="Allow solo signup">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", color: "#cbd5e1" }}>
+              <input
+                type="checkbox"
+                checked={allowSolo}
+                onChange={e => setAllowSolo(e.target.checked)}
+                style={{ accentColor: "#00d4ff", width: 16, height: 16 }}
+              />
+              <span>Players can register without a partner (we'll pair them)</span>
+            </label>
+          </Field>
+        )}
 
         {/* Tournament format recommender — appears once the category has assigned
             players (so the team count is known). Picking an option saves
