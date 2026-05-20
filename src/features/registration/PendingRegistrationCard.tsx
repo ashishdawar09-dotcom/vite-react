@@ -29,6 +29,21 @@ async function copy(text: string, onOk: () => void) {
   try { await navigator.clipboard.writeText(text); onOk(); } catch { /* ignore */ }
 }
 
+// Supabase error objects are NOT instances of Error. They look like
+// { message, details, hint, code }. This helper extracts a usable string
+// from any of: Error, PostgrestError, plain object with .message, or other.
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const obj = e as Record<string, unknown>;
+    const parts = [obj.message, obj.details, obj.hint, obj.code]
+      .filter((v) => typeof v === "string" && v) as string[];
+    if (parts.length) return parts.join(" · ");
+    try { return JSON.stringify(e); } catch { /* fall through */ }
+  }
+  return String(e);
+}
+
 export function PendingRegistrationCard({ reg, category, fees, onResolved }: Props) {
   const reduce = useReducedMotion();
   const toast = useToast();
@@ -52,7 +67,8 @@ export function PendingRegistrationCard({ reg, category, fees, onResolved }: Pro
       }
       onResolved(reg.id);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
+      console.error("approve failed", e);
       toast.error(`Approve failed: ${msg}`);
       setBusy(null);
     }
@@ -69,7 +85,8 @@ export function PendingRegistrationCard({ reg, category, fees, onResolved }: Pro
       toast.success("Registration rejected");
       onResolved(reg.id);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
+      console.error("reject failed", e);
       toast.error(`Reject failed: ${msg}`);
       setBusy(null);
     }
