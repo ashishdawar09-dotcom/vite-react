@@ -1,6 +1,9 @@
 import { supabase } from "./supabase";
 import { notifyCourtAllocated } from "./notifications";
-import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
+import type {
+  Category, Match, PendingRegistration, Player, PlayerCategory,
+  PublicRegistrationPayload, Team, Tournament,
+} from "../types";
 
 const PAL = ["#E63946","#457B9D","#2A9D8F","#E9C46A","#F4A261","#264653","#6A4C93","#1982C4","#FF595E","#8AC926","#FFCA3A","#6A0572","#3A86FF","#FB5607","#FF006E","#8338EC"];
 
@@ -583,4 +586,71 @@ export async function listMatchAudit(match_id: string, limit = 50): Promise<Matc
     throw error;
   }
   return (data ?? []) as MatchAuditEntry[];
+}
+
+// PENDING REGISTRATIONS (v12) -------------------------------------------
+
+export async function listPendingRegistrations(
+  tournament_id: string,
+  status: PendingRegistration["status"] = "pending",
+): Promise<PendingRegistration[]> {
+  const { data, error } = await supabase
+    .from("pending_registrations")
+    .select("*")
+    .eq("tournament_id", tournament_id)
+    .eq("status", status)
+    .order("submitted_at", { ascending: false });
+  if (error) {
+    if (/relation .* does not exist/i.test(error.message ?? "")) return [];
+    throw error;
+  }
+  return (data ?? []) as PendingRegistration[];
+}
+
+export async function approveRegistration(
+  reg_id: string,
+): Promise<{ player_id: string; partner_id: string | null; team_id: string | null }> {
+  const { data, error } = await supabase.rpc("approve_registration", { p_reg_id: reg_id });
+  if (error) throw error;
+  return data as { player_id: string; partner_id: string | null; team_id: string | null };
+}
+
+export async function rejectRegistration(reg_id: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc("reject_registration", {
+    p_reg_id: reg_id,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+// Posts to the register-player Edge Function. Used by the public form page —
+// no auth required. The apikey header is mandatory; without it the Supabase
+// gateway returns 401 even though the function itself accepts anonymous input.
+export async function submitPublicRegistration(
+  payload: PublicRegistrationPayload,
+): Promise<{ success: boolean; registrationId?: string; error?: string }> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-player`;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  const ctrl = new AbortController();
+  const timeoutId = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+    const body = (await resp.json().catch(() => ({}))) as {
+      success?: boolean; registrationId?: string; error?: string;
+    };
+    if (!resp.ok) {
+      return { success: false, error: body.error ?? `HTTP ${resp.status}` };
+    }
+    return { success: !!body.success, registrationId: body.registrationId, error: body.error };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

@@ -75,6 +75,18 @@ export function TournamentPicker({
     onChange();
   };
 
+  const copyRegistrationLink = async () => {
+    if (!current) return;
+    const url = `${window.location.origin}/register/${current.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(`Link copied — share via WhatsApp/text: ${url}`, "success");
+    } catch {
+      // Clipboard API may fail in non-secure contexts. Fall back to a prompt.
+      window.prompt("Copy this registration link:", url);
+    }
+  };
+
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
       <select
@@ -89,6 +101,7 @@ export function TournamentPicker({
         <>
           <button onClick={() => setCreating(true)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(58,134,255,0.4)", background: "rgba(58,134,255,0.2)", color: "#93c5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ New</button>
           {current && <button onClick={() => setEditing(true)} title="Edit tournament name, date, or court count" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(168,85,247,0.4)", background: "rgba(168,85,247,0.2)", color: "#c4b5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✏️ Edit</button>}
+          {current && <button onClick={copyRegistrationLink} title="Copy public registration link — share via WhatsApp/text" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(0,212,255,0.5)", background: "rgba(0,212,255,0.2)", color: "#7dd3fc", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>📋 Copy Registration Link</button>}
           {current && <button onClick={removeCurrent} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(230,57,70,0.4)", background: "rgba(230,57,70,0.2)", color: "#fca5a5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete</button>}
         </>
       )}

@@ -1,3 +1,9 @@
+export type AgeBand = "kid" | "teen" | "adult";
+
+export type TournamentFees = {
+  [band in AgeBand]?: { member: number; non_member: number };
+};
+
 export type Tournament = {
   id: string;
   name: string;
@@ -6,6 +12,17 @@ export type Tournament = {
   rounds_per_pair: number;               // legacy — use Category.rounds_per_pair
   num_courts: number;
   created_at: string;
+  // v12: public registration metadata (all nullable except fees + registration_open)
+  venue_name: string | null;
+  venue_address: string | null;
+  venue_map_url: string | null;
+  event_time: string | null;             // HH:MM:SS (Postgres time)
+  registration_deadline: string | null;  // ISO timestamp
+  contact_info: string | null;
+  e_transfer_email: string | null;
+  fees: TournamentFees;
+  registration_open: boolean;
+  terms_text: string | null;             // plain text, \n\n = paragraph break
 };
 
 export type Category = {
@@ -21,6 +38,9 @@ export type Category = {
   top_n_advance: number;      // 0 = auto-derive (qualifiers per group → knockout)
   sort_order: number;
   created_at: string;
+  // v12: public registration metadata
+  age_band: AgeBand | null;
+  allow_solo_signup: boolean;
 };
 
 export type Player = {
@@ -86,4 +106,54 @@ export type ProjectedMatch = Match & {
   projected_start_at: string | null; // wall-clock projection
   delta_min: number | null;          // signed minutes vs schedule
   delta_label: string;               // human-readable
+};
+
+// v12: public registration submission record
+export type PendingRegistration = {
+  id: string;
+  tournament_id: string;
+  category_id: string;
+  submitted_at: string;
+
+  player_name: string;
+  player_email: string;
+  player_phone: string | null;
+  player_is_member: boolean;
+
+  partner_name: string | null;
+  partner_email: string | null;
+  partner_phone: string | null;
+  partner_is_member: boolean | null;
+
+  payment_reference: string;
+  payment_paid_full_for_partner: boolean;
+  comments: string | null;
+  group_choice: "open" | "members" | null;
+
+  status: "pending" | "approved" | "rejected";
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  rejection_reason: string | null;
+
+  approved_player_id: string | null;
+  approved_partner_id: string | null;
+  approved_team_id: string | null;
+};
+
+// Payload accepted by the register-player Edge Function
+export type PublicRegistrationPayload = {
+  tournament_id: string;
+  category_id: string;
+  player_name: string;
+  player_email: string;
+  player_phone?: string;
+  player_is_member: boolean;
+  partner_name?: string;
+  partner_email?: string;
+  partner_phone?: string;
+  partner_is_member?: boolean;
+  payment_reference: string;
+  payment_paid_full_for_partner?: boolean;
+  comments?: string;
+  group_choice?: "open" | "members";
 };

@@ -3,7 +3,8 @@ import * as db from "../../lib/db";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { Av } from "../../components/ui";
 import { toast } from "../../components/Toast";
-import type { Category, Player } from "../../types";
+import type { Category, Player, Tournament } from "../../types";
+import { PendingRegistrationsPanel } from "./PendingRegistrationsPanel";
 
 /**
  * Player roster + management. Admins can add players with category
@@ -16,6 +17,7 @@ import type { Category, Player } from "../../types";
  * in a future pass.
  */
 export function RegisterTab({
+  tournament,
   categories,
   currentCategoryId,
   setCurrentCategoryId,
@@ -47,6 +49,7 @@ export function RegisterTab({
   unpaired,
   btn,
 }: {
+  tournament: Tournament | null;
   categories: Category[];
   currentCategoryId: string | null;
   setCurrentCategoryId: (id: string | null) => void;
@@ -90,6 +93,8 @@ export function RegisterTab({
 
   return (
     <div>
+      <PendingRegistrationsPanel tournament={tournament} categories={categories} isAdmin={isAdmin} />
+
       <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
 
       {/* Add player with category checkboxes */}

@@ -1080,6 +1080,7 @@ export default function App() {
 
         {current && tab === "register" && (
           <RegisterTab
+            tournament={current}
             categories={categories}
             currentCategoryId={currentCategoryId}
             setCurrentCategoryId={setCurrentCategoryId}
