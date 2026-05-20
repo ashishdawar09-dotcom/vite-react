@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AgeBand, Tournament, TournamentFees } from "../types";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
@@ -204,7 +205,7 @@ export function TournamentPicker({
           {current && <button onClick={removeCurrent} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(230,57,70,0.4)", background: "rgba(230,57,70,0.2)", color: "#fca5a5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete</button>}
         </>
       )}
-      {creating && (
+      {creating && createPortal(
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 16, backdropFilter: "blur(4px)" }} onClick={() => setCreating(false)}>
           <div style={{ background: "#fff", borderRadius: 20, padding: 28, maxWidth: 420, width: "100%", color: "#1a1a2e" }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 800 }}>🏸 New Tournament</h3>
@@ -221,9 +222,10 @@ export function TournamentPicker({
               <button onClick={create} disabled={busy || !createName.trim()} style={{ ...primaryBtn("#16a34a"), opacity: busy || !createName.trim() ? 0.6 : 1 }}>{busy ? "Creating…" : "Create"}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-      {editing && current && (
+      {editing && current && createPortal(
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 16, backdropFilter: "blur(4px)" }} onClick={() => setEditing(false)}>
           <div style={{ background: "#fff", borderRadius: 20, padding: 28, maxWidth: 560, width: "100%", color: "#1a1a2e", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 8 }}>
@@ -272,7 +274,8 @@ export function TournamentPicker({
               <button onClick={saveEdit} disabled={busy || !form.name.trim()} style={{ ...primaryBtn("#a855f7"), opacity: busy || !form.name.trim() ? 0.6 : 1 }}>{busy ? "Saving…" : "Save"}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
