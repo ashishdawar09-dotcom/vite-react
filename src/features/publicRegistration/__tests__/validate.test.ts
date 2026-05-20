@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emptyFormState, isValid, validate } from "../validate";
-import type { Category } from "../../../types";
+import { emptyFormState, hasMemberDiscount, isValid, validate } from "../validate";
+import type { Category, TournamentFees } from "../../../types";
 
 const singles: Category = {
   id: "s", tournament_id: "t", name: "Men's Singles", team_size: 1,
@@ -92,5 +92,48 @@ describe("validate", () => {
   it("rejects comments over 500 chars", () => {
     const f = { ...happyPath(), comments: "x".repeat(501) };
     expect(validate(f, singles).comments).toBe("Max 500 characters");
+  });
+
+  it("does NOT require player_is_member when requireMembership=false", () => {
+    const f = { ...emptyFormState(),
+      player_email: "a@b.co", player_name: "A", player_phone: "6041234567",
+      category_id: "s", payment_reference: "REF",
+    };
+    const errs = validate(f, singles, { requireMembership: false });
+    expect(errs.player_is_member).toBeUndefined();
+    expect(isValid(errs)).toBe(true);
+  });
+
+  it("does NOT require partner_is_member when requireMembership=false (doubles)", () => {
+    const f = { ...emptyFormState(),
+      player_email: "a@b.co", player_name: "A", player_phone: "6041234567",
+      category_id: "d", payment_reference: "REF",
+      partner_name: "P", partner_email: "p@b.co", partner_phone: "6049999999",
+    };
+    const errs = validate(f, doubles, { requireMembership: false });
+    expect(errs.partner_is_member).toBeUndefined();
+    expect(isValid(errs)).toBe(true);
+  });
+});
+
+describe("hasMemberDiscount", () => {
+  it("returns false for empty fees", () => {
+    expect(hasMemberDiscount({} as TournamentFees)).toBe(false);
+  });
+
+  it("returns false when all bands have equal member and non_member", () => {
+    const fees: TournamentFees = {
+      adult: { member: 20, non_member: 20 },
+      teen: { member: 15, non_member: 15 },
+    };
+    expect(hasMemberDiscount(fees)).toBe(false);
+  });
+
+  it("returns true when any band differs", () => {
+    const fees: TournamentFees = {
+      adult: { member: 20, non_member: 25 },
+      teen: { member: 15, non_member: 15 },
+    };
+    expect(hasMemberDiscount(fees)).toBe(true);
   });
 });

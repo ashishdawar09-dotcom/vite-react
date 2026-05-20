@@ -1,4 +1,17 @@
-import type { Category } from "../../types";
+import type { Category, TournamentFees } from "../../types";
+
+// True when at least one age band has a different member vs non_member price.
+// Drives whether the form shows the "Are you a member?" question — flat-fee
+// tournaments don't need to ask.
+export function hasMemberDiscount(fees: TournamentFees): boolean {
+  for (const band of Object.values(fees)) {
+    if (!band) continue;
+    if (typeof band.member === "number" && typeof band.non_member === "number" && band.member !== band.non_member) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export type FormState = {
   player_email: string;
@@ -38,7 +51,12 @@ export function emptyFormState(): FormState {
   };
 }
 
-export function validate(form: FormState, selectedCategory: Category | null): FormErrors {
+export function validate(
+  form: FormState,
+  selectedCategory: Category | null,
+  options: { requireMembership?: boolean } = {},
+): FormErrors {
+  const { requireMembership = true } = options;
   const errs: FormErrors = {};
 
   if (!form.player_email.trim()) errs.player_email = "Required";
@@ -50,7 +68,9 @@ export function validate(form: FormState, selectedCategory: Category | null): Fo
   if (!phoneDigits) errs.player_phone = "Required";
   else if (phoneDigits.length < 10) errs.player_phone = "At least 10 digits";
 
-  if (form.player_is_member === null) errs.player_is_member = "Please choose Yes or No";
+  if (requireMembership && form.player_is_member === null) {
+    errs.player_is_member = "Please choose Yes or No";
+  }
 
   if (!form.category_id) errs.category_id = "Please pick a category";
 
@@ -71,7 +91,9 @@ export function validate(form: FormState, selectedCategory: Category | null): Fo
       const pPhoneDigits = form.partner_phone.replace(/\D/g, "");
       if (!pPhoneDigits) errs.partner_phone = "Required";
       else if (pPhoneDigits.length < 10) errs.partner_phone = "At least 10 digits";
-      if (form.partner_is_member === null) errs.partner_is_member = "Please choose Yes or No";
+      if (requireMembership && form.partner_is_member === null) {
+        errs.partner_is_member = "Please choose Yes or No";
+      }
     } else if (partnerProvided) {
       // optional but if any partner field touched, validate the ones that exist
       if (form.partner_email.trim() && !EMAIL_RE.test(form.partner_email.trim())) {

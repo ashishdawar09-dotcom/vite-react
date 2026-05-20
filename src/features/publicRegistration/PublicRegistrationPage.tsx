@@ -8,7 +8,7 @@ import type { Category, PublicRegistrationPayload, TournamentFees } from "../../
 import { Countdown } from "./Countdown";
 import { computeFee, type PaymentSplit } from "./computeFee";
 import { usePublicTournament } from "./usePublicTournament";
-import { emptyFormState, type FormErrors, type FormState, isValid, validate } from "./validate";
+import { emptyFormState, type FormErrors, type FormState, hasMemberDiscount, isValid, validate } from "./validate";
 
 const CYAN = "#00d4ff";
 const CYAN_DARK = "#006d80";
@@ -154,7 +154,12 @@ export function PublicRegistrationPage() {
     () => categories.find((c) => c.id === form.category_id) ?? null,
     [categories, form.category_id],
   );
-  const errors = useMemo(() => validate(form, selectedCategory), [form, selectedCategory]);
+  const fees: TournamentFees = tournament?.fees ?? {};
+  const showMembershipQuestion = useMemo(() => hasMemberDiscount(fees), [fees]);
+  const errors = useMemo(
+    () => validate(form, selectedCategory, { requireMembership: showMembershipQuestion }),
+    [form, selectedCategory, showMembershipQuestion],
+  );
   const visibleErrors: FormErrors = useMemo(() => {
     const out: FormErrors = {};
     (Object.keys(errors) as Array<keyof FormState>).forEach((k) => {
@@ -163,9 +168,11 @@ export function PublicRegistrationPage() {
     return out;
   }, [errors, touched, submitStatus]);
 
-  const fees: TournamentFees = tournament?.fees ?? {};
-  const feeOwed = computeFee(fees, selectedCategory, form.player_is_member, form.payment_split);
-  const baseFee = computeFee(fees, selectedCategory, form.player_is_member, "separate");
+  // When membership question is hidden (flat-fee tournament), treat as non-member
+  // for fee calc so a value is always available.
+  const memberForFee = showMembershipQuestion ? form.player_is_member : false;
+  const feeOwed = computeFee(fees, selectedCategory, memberForFee, form.payment_split);
+  const baseFee = computeFee(fees, selectedCategory, memberForFee, "separate");
 
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: val }));
@@ -453,32 +460,14 @@ export function PublicRegistrationPage() {
                 onBlur={() => markTouched("player_phone")}
               />
             </Field>
-            <Field label="Are you a BCSK member?" required error={visibleErrors.player_is_member}>
-              <YesNoCards
-                value={form.player_is_member}
-                onChange={(v) => { set("player_is_member", v); markTouched("player_is_member"); }}
-              />
-            </Field>
-            <Field label="Group" hint="Informational — pick what applies to you">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: spacing.sm }}>
-                {(["open", "members"] as const).map((g) => {
-                  const sel = form.group_choice === g;
-                  return (
-                    <button key={g} type="button"
-                      onClick={() => set("group_choice", g)}
-                      style={{
-                        padding: "10px 12px", borderRadius: radii.md,
-                        border: `2px solid ${sel ? CYAN : colors.border.lightStrong}`,
-                        background: sel ? "rgba(0, 212, 255, 0.08)" : colors.bg.card,
-                        color: sel ? CYAN_DARK : colors.text.primaryLight,
-                        fontSize: 14, fontWeight: 700, cursor: "pointer", minHeight: 44,
-                      }}>
-                      {g === "open" ? "Open to all" : "BCSK Members"}
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
+            {showMembershipQuestion && (
+              <Field label="Are you a club member?" required hint="Determines your fee tier" error={visibleErrors.player_is_member}>
+                <YesNoCards
+                  value={form.player_is_member}
+                  onChange={(v) => { set("player_is_member", v); markTouched("player_is_member"); }}
+                />
+              </Field>
+            )}
           </Card>
 
           {/* Category section */}
@@ -489,7 +478,7 @@ export function PublicRegistrationPage() {
                 value={form.category_id}
                 onChange={(id) => { set("category_id", id); markTouched("category_id"); }}
                 fees={fees}
-                isMember={form.player_is_member}
+                isMember={memberForFee}
                 isMobile={isMobile}
               />
             </Field>
@@ -535,12 +524,14 @@ export function PublicRegistrationPage() {
                       onChange={(e) => set("partner_email", e.target.value)}
                       onBlur={() => markTouched("partner_email")} />
                   </Field>
-                  <Field label="Is your partner a BCSK member?" required={!selectedCategory.allow_solo_signup} error={visibleErrors.partner_is_member}>
-                    <YesNoCards
-                      value={form.partner_is_member}
-                      onChange={(v) => { set("partner_is_member", v); markTouched("partner_is_member"); }}
-                    />
-                  </Field>
+                  {showMembershipQuestion && (
+                    <Field label="Is your partner a club member?" required={!selectedCategory.allow_solo_signup} error={visibleErrors.partner_is_member}>
+                      <YesNoCards
+                        value={form.partner_is_member}
+                        onChange={(v) => { set("partner_is_member", v); markTouched("partner_is_member"); }}
+                      />
+                    </Field>
+                  )}
                 </Card>
               </motion.div>
             )}
