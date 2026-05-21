@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { submitPublicRegistration } from "../../lib/db";
+import { pushSupportStatus, subscribeToPush } from "../../lib/push";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, PublicRegistrationPayload, TournamentFees } from "../../types";
 import { Countdown } from "./Countdown";
@@ -149,6 +150,9 @@ export function PublicRegistrationPage() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // After successful submission, we hold the pending registration id so the
+  // success screen can attach a push subscription to it.
+  const [submittedRegistrationId, setSubmittedRegistrationId] = useState<string | null>(null);
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === form.category_id) ?? null,
@@ -226,6 +230,7 @@ export function PublicRegistrationPage() {
 
     const result = await submitPublicRegistration(payload);
     if (result.success) {
+      setSubmittedRegistrationId(result.registrationId ?? null);
       setSubmitStatus("success");
     } else {
       setSubmitStatus("error");
@@ -297,6 +302,12 @@ export function PublicRegistrationPage() {
             Thanks, {form.player_name}! An admin will verify your e-transfer reference and
             confirm your spot shortly. You'll be visible in the player roster once approved.
           </p>
+          {tournament && submittedRegistrationId && (
+            <PushOptInButton
+              tournamentId={tournament.id}
+              pendingRegistrationId={submittedRegistrationId}
+            />
+          )}
           <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 13 }}>
             Need to enter another category? Each category requires a separate submission.
           </p>
@@ -716,6 +727,111 @@ function CategoryPicker({ categories, value, onChange, fees, isMember, isMobile 
         );
       })}
     </select>
+  );
+}
+
+// ---------- PushOptInButton -------------------------------------------------
+
+type PushUiState = "idle" | "working" | "enabled" | "denied" | "unsupported" | "error";
+
+function PushOptInButton({
+  tournamentId,
+  pendingRegistrationId,
+}: { tournamentId: string; pendingRegistrationId: string }) {
+  const [state, setState] = useState<PushUiState>(() => {
+    const s = pushSupportStatus();
+    if (s === "unsupported") return "unsupported";
+    if (s === "denied") return "denied";
+    if (s === "granted") return "idle";  // can still re-subscribe silently
+    return "idle";
+  });
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  if (state === "unsupported") {
+    // Quietly hide on browsers that don't support push (e.g. iOS Safari < 16.4
+    // before installing to home screen, desktop Safari, in-app webviews).
+    return null;
+  }
+
+  const handleClick = async () => {
+    setState("working");
+    setErrMsg(null);
+    const result = await subscribeToPush(tournamentId, {
+      kind: "player",
+      pending_registration_id: pendingRegistrationId,
+    });
+    if (result.ok) {
+      setState("enabled");
+    } else if (result.reason === "denied") {
+      setState("denied");
+    } else {
+      setState("error");
+      setErrMsg(result.error ?? "Couldn't enable notifications");
+    }
+  };
+
+  if (state === "enabled") {
+    return (
+      <div style={{
+        marginTop: spacing.lg,
+        padding: spacing.md,
+        background: "rgba(0, 212, 255, 0.08)",
+        border: `1px solid ${CYAN}`,
+        borderRadius: radii.md,
+        fontSize: 14,
+        fontWeight: 700,
+        color: CYAN_DARK,
+      }}>
+        🔔 Notifications enabled — you'll get pinged when your court is ready.
+      </div>
+    );
+  }
+
+  if (state === "denied") {
+    return (
+      <div style={{
+        marginTop: spacing.lg,
+        padding: spacing.md,
+        background: colors.bg.muted,
+        borderRadius: radii.md,
+        fontSize: 13,
+        color: colors.text.mutedLight,
+        lineHeight: 1.5,
+      }}>
+        Notifications were blocked for this site. To re-enable, allow them in
+        your browser settings, then refresh.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={state === "working"}
+        onClick={() => { void handleClick(); }}
+        style={{
+          marginTop: spacing.lg,
+          padding: "14px 20px",
+          borderRadius: radii.md,
+          border: `2px solid ${CYAN}`,
+          background: colors.bg.card,
+          color: CYAN_DARK,
+          fontSize: 15,
+          fontWeight: 800,
+          cursor: state === "working" ? "wait" : "pointer",
+          minHeight: 48,
+          width: "100%",
+        }}
+      >
+        {state === "working" ? "Enabling…" : "🔔 Get notified when your court is ready"}
+      </button>
+      {state === "error" && errMsg && (
+        <div style={{ marginTop: spacing.sm, fontSize: 12, color: colors.state.live }}>
+          {errMsg}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -7,6 +7,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // injectManifest = bring-your-own service worker. We need this because
+      // the default generateSW doesn't allow adding 'push' / 'notificationclick'
+      // event handlers. Our custom SW lives at src/sw.ts.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
@@ -25,27 +31,9 @@ export default defineConfig({
           { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
-        // Precache the app shell (Workbox auto-detects build output)
+      injectManifest: {
+        // What gets precached. Workbox writes this list into self.__WB_MANIFEST.
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,webp,woff2,lottie}'],
-        // Supabase URLs must never get an HTML fallback — would break JSON parsing.
-        navigateFallbackDenylist: [/^\/api/, /supabase\.co/],
-        runtimeCaching: [
-          {
-            // Supabase REST + Auth + Storage + Realtime → always go to network
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkOnly',
-          },
-          {
-            // Lottie animations + image assets → cache-first, 30-day expiry
-            urlPattern: /\.(?:png|jpg|jpeg|svg|webp|lottie)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'images-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 },
-            },
-          },
-        ],
       },
     }),
   ],

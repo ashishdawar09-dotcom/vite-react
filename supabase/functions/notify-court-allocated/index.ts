@@ -14,6 +14,7 @@
 // switch RESEND_FROM_EMAIL to e.g. `notify@yourdomain.com`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -307,7 +308,78 @@ Good luck out there!
       }
     }
 
-    return json({ sent, skipped, failed }, 200);
+    // ========================================================================
+    // PUSH FAN-OUT — best-effort parallel channel alongside email.
+    // For every player on the match, look up active push_subscriptions and
+    // send a Web Push notification. Each push is logged to notification_log
+    // with channel='push'. Failures are caught per-sub so a single bad
+    // endpoint doesn't take down the rest.
+    // ========================================================================
+    const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
+    const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
+    const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "";
+    let pushSent = 0, pushFailed = 0;
+
+    if (VAPID_PUBLIC && VAPID_PRIVATE && VAPID_SUBJECT && recipients.length > 0) {
+      webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+
+      const recipientPlayerIds = recipients.map((r) => r.player.id);
+      const { data: subs } = await supabase
+        .from("push_subscriptions")
+        .select("id, endpoint, p256dh, auth, player_id")
+        .in("player_id", recipientPlayerIds);
+
+      for (const sub of (subs ?? []) as Array<{
+        id: string; endpoint: string; p256dh: string; auth: string; player_id: string;
+      }>) {
+        const recipient = recipients.find((r) => r.player.id === sub.player_id);
+        if (!recipient) continue;
+        const payload = JSON.stringify({
+          title: `🏸 Court ${courtNumber} is yours`,
+          body: `${tournamentName} — opponent: ${recipient.opponentLabel}`,
+          url: "/",
+          tag: `match-${matchId}`,
+          requireInteraction: true,
+        });
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload,
+          );
+          await supabase.from("notification_log").insert({
+            match_id: matchId,
+            player_id: sub.player_id,
+            channel: "push",
+            status: "sent",
+          });
+          await supabase.from("push_subscriptions")
+            .update({ last_used_at: new Date().toISOString(), last_error: null })
+            .eq("id", sub.id);
+          pushSent++;
+        } catch (e) {
+          const err = e as { statusCode?: number; body?: string; message?: string };
+          const msg = `push ${err.statusCode ?? "?"}: ${err.body ?? err.message ?? String(e)}`;
+          console.error("push failed for sub", sub.id, msg);
+          await supabase.from("notification_log").insert({
+            match_id: matchId,
+            player_id: sub.player_id,
+            channel: "push",
+            status: "failed",
+            error_message: msg.slice(0, 500),
+          });
+          await supabase.from("push_subscriptions")
+            .update({ last_error: msg.slice(0, 500) })
+            .eq("id", sub.id);
+          // 404 / 410 = endpoint dead — clean it up so we don't keep trying.
+          if (err.statusCode === 404 || err.statusCode === 410) {
+            await supabase.from("push_subscriptions").delete().eq("id", sub.id);
+          }
+          pushFailed++;
+        }
+      }
+    }
+
+    return json({ sent, skipped, failed, pushSent, pushFailed }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("notify-court-allocated error:", msg);
