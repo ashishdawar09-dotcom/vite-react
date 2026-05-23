@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import type { AgeBand, Tournament, TournamentFees } from "../types";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
@@ -62,6 +63,7 @@ export function TournamentPicker({
   isAdmin: boolean;
   onChange: () => void;
 }) {
+  const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
   // Create-only state (separate from Edit so the two flows don't stomp on each other)
@@ -202,6 +204,7 @@ export function TournamentPicker({
           <button onClick={() => setCreating(true)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(58,134,255,0.4)", background: "rgba(58,134,255,0.2)", color: "#93c5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ New</button>
           {current && <button onClick={() => setEditing(true)} title="Edit tournament settings — name, date, venue, fees, registration form" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(168,85,247,0.4)", background: "rgba(168,85,247,0.2)", color: "#c4b5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✏️ Edit</button>}
           {current && <button onClick={copyRegistrationLink} title="Copy public registration link — share via WhatsApp/text" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(0,212,255,0.5)", background: "rgba(0,212,255,0.2)", color: "#7dd3fc", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>📋 Copy Registration Link</button>}
+          {current && <button onClick={() => navigate(`/register/${current.id}`)} title="Open the public registration form in this window — useful for testing push notifications inside the PWA" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(250,204,21,0.5)", background: "rgba(250,204,21,0.2)", color: "#fde68a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🧪 Test as Player</button>}
           {current && <button onClick={removeCurrent} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(230,57,70,0.4)", background: "rgba(230,57,70,0.2)", color: "#fca5a5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete</button>}
         </>
       )}
