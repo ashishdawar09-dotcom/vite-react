@@ -53,6 +53,11 @@ jobs:
           VITE_ADMIN_EMAILS: ci@example.com
         run: npm run build
 
+      - name: Bundle-size budget check
+        # Fails if any chunk crosses its gzipped budget defined in
+        # scripts/check-bundle-size.mjs. Tighten the budget as we ship.
+        run: node scripts/check-bundle-size.mjs
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
