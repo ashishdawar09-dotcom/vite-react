@@ -1,28 +1,85 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
+type Stage = "email" | "code";
+
+// Detect installed standalone PWAs so we can hide the Google button there.
+// Google OAuth on iOS PWAs opens in SFSafariViewController (separate cookie
+// context from the PWA), so the redirect never re-enters our app. OTP works
+// reliably in the same window — no redirects at all.
+function isInstalledPwa(): boolean {
+  if (typeof window === "undefined") return false;
+  // @ts-expect-error iOS-only non-standard
+  if (navigator.standalone === true) return true;
+  return window.matchMedia?.("(display-mode: standalone)").matches ?? false;
+}
+
 export function Login({ onClose }: { onClose: () => void }) {
+  const [stage, setStage] = useState<Stage>("email");
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyOAuth, setBusyOAuth] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [resentAt, setResentAt] = useState<number | null>(null);
+  const inPwa = isInstalledPwa();
 
-  const sendMagicLink = async () => {
+  const cleanEmail = () => email.trim().toLowerCase();
+
+  const sendOtp = async () => {
     setErr(null);
-    const clean = email.trim().toLowerCase();
-    if (!clean || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+    const e = cleanEmail();
+    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
       setErr("Enter a valid email address.");
       return;
     }
     setBusy(true);
     const { error } = await supabase.auth.signInWithOtp({
-      email: clean,
+      email: e,
+      // emailRedirectTo: the magic link in the email lands here. We keep it
+      // for desktop users who prefer clicking; PWA users use the 6-digit code.
       options: { emailRedirectTo: window.location.origin },
     });
     setBusy(false);
-    if (error) setErr(error.message);
-    else setSent(true);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    setStage("code");
+    setResentAt(Date.now());
+  };
+
+  const verifyOtp = async () => {
+    setErr(null);
+    const e = cleanEmail();
+    const tok = code.replace(/\D/g, ""); // strip non-digits, just in case
+    if (tok.length !== 6) {
+      setErr("Enter the 6-digit code from your email.");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email: e,
+      token: tok,
+      type: "email",
+    });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    // Session is now established in this browser's storage. Close the modal —
+    // useAuth's onAuthStateChange will fire and surface the signed-in state.
+    onClose();
+  };
+
+  const resendCode = async () => {
+    // Throttle: 30s between resends
+    if (resentAt && Date.now() - resentAt < 30_000) {
+      setErr("Hold on a few seconds before resending.");
+      return;
+    }
+    await sendOtp();
   };
 
   const signInWithGoogle = async () => {
@@ -36,7 +93,7 @@ export function Login({ onClose }: { onClose: () => void }) {
       setBusyOAuth(false);
       setErr(error.message);
     }
-    // On success, browser is redirected — no need to clear busy.
+    // On success the browser is redirected; no need to clear busy.
   };
 
   return (
@@ -50,59 +107,112 @@ export function Login({ onClose }: { onClose: () => void }) {
       >
         <h3 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, textAlign: "center" }}>🔐 Sign In</h3>
         <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b", textAlign: "center" }}>
-          Use Google for instant access, or get a magic link by email.
+          {stage === "email"
+            ? (inPwa
+                ? "Enter your email and we'll send you a 6-digit code."
+                : "Enter your email — we'll send a 6-digit code and a magic link.")
+            : `Enter the 6-digit code we sent to ${cleanEmail()}.`}
         </p>
 
-        {sent ? (
-          <div style={{ padding: 16, background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, color: "#16a34a", textAlign: "center", fontSize: 14 }}>
-            ✓ Check your inbox at <strong>{email}</strong>
-            <div style={{ marginTop: 8, fontSize: 12, color: "#15803d" }}>
-              The link logs you in. If you're not yet an admin, ask the tournament organizer to grant access.
-            </div>
-          </div>
-        ) : (
+        {stage === "email" ? (
           <>
-            <button
-              type="button"
-              onClick={signInWithGoogle}
-              disabled={busyOAuth || busy}
-              style={{
-                width: "100%", padding: "12px 14px", background: "#fff", color: "#1f1f1f",
-                border: "1.5px solid #d0d7de", borderRadius: 10, fontWeight: 600, fontSize: 14,
-                cursor: busyOAuth ? "wait" : "pointer", display: "flex", alignItems: "center",
-                justifyContent: "center", gap: 10, marginBottom: 16,
-                opacity: busyOAuth ? 0.7 : 1,
-              }}
-              aria-label="Continue with Google"
-            >
-              <GoogleLogo />
-              {busyOAuth ? "Redirecting…" : "Continue with Google"}
-            </button>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", letterSpacing: 1 }}>OR</span>
-              <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
-            </div>
+            {/* Google sign-in only shown OUTSIDE installed PWAs because in-app
+                OAuth browsers don't return cookies to the PWA reliably */}
+            {!inPwa && (
+              <>
+                <button
+                  type="button"
+                  onClick={signInWithGoogle}
+                  disabled={busyOAuth || busy}
+                  style={{
+                    width: "100%", padding: "12px 14px", background: "#fff", color: "#1f1f1f",
+                    border: "1.5px solid #d0d7de", borderRadius: 10, fontWeight: 600, fontSize: 14,
+                    cursor: busyOAuth ? "wait" : "pointer", display: "flex", alignItems: "center",
+                    justifyContent: "center", gap: 10, marginBottom: 16,
+                    opacity: busyOAuth ? 0.7 : 1,
+                  }}
+                  aria-label="Continue with Google"
+                >
+                  <GoogleLogo />
+                  {busyOAuth ? "Redirecting…" : "Continue with Google"}
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", letterSpacing: 1 }}>OR</span>
+                  <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+                </div>
+              </>
+            )}
 
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
               placeholder="you@email.com"
               autoComplete="email"
+              autoFocus
               style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: "2px solid #e2e8f0", fontSize: 15, outline: "none", boxSizing: "border-box", marginBottom: 12 }}
             />
             {err && <div style={{ color: "#E63946", fontSize: 13, marginBottom: 12 }}>{err}</div>}
             <button
               disabled={busy || busyOAuth}
-              onClick={sendMagicLink}
+              onClick={() => void sendOtp()}
               style={{ width: "100%", padding: 14, background: "#3A86FF", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}
             >
-              {busy ? "Sending…" : "Send Magic Link"}
+              {busy ? "Sending…" : "Send Code"}
             </button>
             <p style={{ marginTop: 12, marginBottom: 0, fontSize: 11, color: "#94a3b8", textAlign: "center", lineHeight: 1.4 }}>
               Anyone can sign in. Admin powers are granted by an existing tournament admin.
+            </p>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={(e) => e.key === "Enter" && void verifyOtp()}
+              placeholder="123456"
+              autoComplete="one-time-code"
+              autoFocus
+              style={{
+                width: "100%", padding: "16px 14px", borderRadius: 10,
+                border: "2px solid #e2e8f0", fontSize: 24, outline: "none",
+                boxSizing: "border-box", marginBottom: 12, textAlign: "center",
+                letterSpacing: 8, fontFamily: "Menlo, monospace", fontWeight: 700,
+              }}
+            />
+            {err && <div style={{ color: "#E63946", fontSize: 13, marginBottom: 12 }}>{err}</div>}
+            <button
+              disabled={busy || code.length !== 6}
+              onClick={() => void verifyOtp()}
+              style={{ width: "100%", padding: 14, background: "#3A86FF", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: busy ? "wait" : "pointer", opacity: busy || code.length !== 6 ? 0.6 : 1 }}
+            >
+              {busy ? "Verifying…" : "Verify & Sign In"}
+            </button>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => { setStage("email"); setCode(""); setErr(null); }}
+                style={{ background: "transparent", border: "none", color: "#64748b", fontSize: 12, cursor: "pointer", padding: 4 }}
+              >
+                ← Use different email
+              </button>
+              <button
+                type="button"
+                onClick={() => void resendCode()}
+                disabled={busy}
+                style={{ background: "transparent", border: "none", color: "#3A86FF", fontSize: 12, cursor: "pointer", padding: 4, fontWeight: 600 }}
+              >
+                Resend code
+              </button>
+            </div>
+            <p style={{ marginTop: 16, marginBottom: 0, fontSize: 11, color: "#94a3b8", textAlign: "center", lineHeight: 1.4 }}>
+              The code is also a tappable magic link in the email — works either way.
             </p>
           </>
         )}
