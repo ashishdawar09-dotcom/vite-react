@@ -44,11 +44,29 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Isolating heavy/independent third-party libs into named vendor
+          // chunks gives long-term cache wins: when our app code changes
+          // these chunks stay byte-identical and the browser keeps them.
           if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
             return 'react-vendor';
           }
           if (id.includes('node_modules/@supabase')) {
             return 'supabase';
+          }
+          if (id.includes('node_modules/framer-motion')) {
+            return 'motion';
+          }
+          if (id.includes('node_modules/@sentry')) {
+            return 'sentry';
+          }
+          if (
+            id.includes('node_modules/@lottiefiles') ||
+            id.includes('node_modules/dotlottie')
+          ) {
+            return 'lottie';
+          }
+          if (id.includes('node_modules/canvas-confetti')) {
+            return 'confetti';
           }
         },
       },

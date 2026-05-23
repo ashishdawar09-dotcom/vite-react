@@ -14,23 +14,28 @@ import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG, Av } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
-import { ParticleTextEffect } from "./components/ui/particle-text-effect"; /* NEW: footer particle animation */
 import { NumberTicker } from "./components/ui/number-ticker"; /* NEW: count-up tickers on stats */
 import { toast } from "./components/Toast";
-import { AdminManager } from "./components/AdminManager";
-import { CheckInTab } from "./features/checkin/CheckInTab";
-import { ScoreboardTab } from "./features/scoreboard/ScoreboardTab";
-import { KnockoutTab } from "./features/knockoutstage/KnockoutTab";
-import { GroupsTab } from "./features/groupstage/GroupsTab";
-import { ProfilesTab } from "./features/profiles/ProfilesTab";
-import { RegisterTab } from "./features/registration/RegisterTab";
-import { TeamsTab } from "./features/teamformation/TeamsTab";
 import { defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import type { Match, Player, Team, Tournament } from "./types";
 
+// Lazy-loaded surfaces. Anything below the fold for a spectator's initial
+// LIVE-tab view is split out so the main bundle stays small. Suspense
+// boundary at <main> renders LottieLoader while a chunk fetches.
 const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
 const CategoriesTab = React.lazy(() => import("./components/CategoriesTab").then(m => ({ default: m.CategoriesTab })));
+const CheckInTab = React.lazy(() => import("./features/checkin/CheckInTab").then(m => ({ default: m.CheckInTab })));
+const ScoreboardTab = React.lazy(() => import("./features/scoreboard/ScoreboardTab").then(m => ({ default: m.ScoreboardTab })));
+const KnockoutTab = React.lazy(() => import("./features/knockoutstage/KnockoutTab").then(m => ({ default: m.KnockoutTab })));
+const GroupsTab = React.lazy(() => import("./features/groupstage/GroupsTab").then(m => ({ default: m.GroupsTab })));
+const ProfilesTab = React.lazy(() => import("./features/profiles/ProfilesTab").then(m => ({ default: m.ProfilesTab })));
+const RegisterTab = React.lazy(() => import("./features/registration/RegisterTab").then(m => ({ default: m.RegisterTab })));
+const TeamsTab = React.lazy(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
+const AdminManager = React.lazy(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
+// ParticleTextEffect is heavy (canvas animation loop) and only used in the
+// always-rendered footer, so it gets its own chunk + only mounts when present.
+const ParticleTextEffect = React.lazy(() => import("./components/ui/particle-text-effect").then(m => ({ default: m.ParticleTextEffect })));
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
 
@@ -1110,6 +1115,7 @@ export default function App() {
         )}
 
         {current && tab === "register" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <RegisterTab
             tournament={current}
             categories={categories}
@@ -1143,9 +1149,11 @@ export default function App() {
             unpaired={unpaired}
             btn={btn}
           />
+          </Suspense>
         )}
 
         {current && tab === "checkin" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <CheckInTab
             tournament={current}
             players={players}
@@ -1155,9 +1163,11 @@ export default function App() {
             playerCategoryMap={playerCategoryMap}
             isAdmin={isAdmin}
           />
+          </Suspense>
         )}
 
         {current && tab === "profiles" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <ProfilesTab
             categories={categories}
             currentCategoryId={currentCategoryId}
@@ -1182,9 +1192,11 @@ export default function App() {
             fileRefs={fileRefs}
             handlePhoto={handlePhoto}
           />
+          </Suspense>
         )}
 
         {current && tab === "teams" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <TeamsTab
             tournament={current}
             categories={categories}
@@ -1204,9 +1216,11 @@ export default function App() {
             resetAll={resetAll}
             btn={btn}
           />
+          </Suspense>
         )}
 
         {current && tab === "groups" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <GroupsTab
             categories={categories}
             currentCategoryId={currentCategoryId}
@@ -1222,9 +1236,11 @@ export default function App() {
             btn={btn}
             MatchCard={MatchCard}
           />
+          </Suspense>
         )}
 
         {current && tab === "knockout" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <KnockoutTab
             categories={categories}
             currentCategoryId={currentCategoryId}
@@ -1236,9 +1252,11 @@ export default function App() {
             champion={champion}
             MatchCard={MatchCard}
           />
+          </Suspense>
         )}
 
         {current && tab === "scoreboard" && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <ScoreboardTab
             categories={categories}
             currentCategoryId={currentCategoryId}
@@ -1249,11 +1267,16 @@ export default function App() {
             champion={champion}
             phase={phase}
           />
+          </Suspense>
         )}
       </main>
 
       {showLogin && <Login onClose={() => setShowLogin(false)} />}
-      {showAdminManager && isAdmin && <AdminManager currentEmail={email} onClose={() => setShowAdminManager(false)} />}
+      {showAdminManager && isAdmin && (
+        <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
+          <AdminManager currentEmail={email} onClose={() => setShowAdminManager(false)} />
+        </Suspense>
+      )}
 
       {promotePickerFor && (() => {
         // Build the eligibility-status sets fresh on each open (cheap given small N).
@@ -1446,16 +1469,22 @@ export default function App() {
         background: "#050d1a",
         borderTop: "1px solid #1a3050",
       }}>
-        <ParticleTextEffect
-          words={["Built by Ashish Dawar"]}
-          width={800}
-          height={110}
-          fontSize={36}
-          color="#00d4ff"
-          pixelSteps={4}
-          pointSize={2}
-          backgroundFade="rgba(5, 13, 26, 0.1)"
-        />
+        {/* Lazy-loaded so its canvas animation code (and bundle weight)
+            only ship to users who actually scroll the page enough to hit
+            the footer. Fallback is an invisible spacer so layout doesn't
+            shift when the chunk arrives. */}
+        <Suspense fallback={<div style={{ height: 110, width: "100%" }} />}>
+          <ParticleTextEffect
+            words={["Built by Ashish Dawar"]}
+            width={800}
+            height={110}
+            fontSize={36}
+            color="#00d4ff"
+            pixelSteps={4}
+            pointSize={2}
+            backgroundFade="rgba(5, 13, 26, 0.1)"
+          />
+        </Suspense>
       </footer>
     </div>
   );
