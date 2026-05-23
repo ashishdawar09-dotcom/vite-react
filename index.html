@@ -7,11 +7,34 @@
     <title>Badminton Tournament — Live</title>
 
     <!-- PWA: install + standalone mode on iOS/Android -->
-    <meta name="theme-color" content="#00d4ff" />
+    <!-- theme-color matches the deep navy bg so iOS draws the status bar
+         seamlessly into the header gradient (paired with the safe-area-inset
+         top padding the header applies in App.tsx). -->
+    <meta name="theme-color" content="#070F1F" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Badminton" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- iOS standalone-launch splash screens. Without these iOS shows a
+         blank white flash before the SW + app shell load. Each PNG is
+         rendered at native device pixel resolution by scripts/gen-pwa-icons.mjs;
+         iOS picks the right one using the device-width/height + DPR media
+         query. Covers iPhone XR through 17 Pro Max and modern iPads. -->
+    <link rel="apple-touch-startup-image" href="/apple-splash-1290x2796.png"
+          media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/apple-splash-1284x2778.png"
+          media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/apple-splash-1179x2556.png"
+          media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/apple-splash-1170x2532.png"
+          media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/apple-splash-1242x2688.png"
+          media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)" />
+    <link rel="apple-touch-startup-image" href="/apple-splash-2048x2732.png"
+          media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)" />
+    <link rel="apple-touch-startup-image" href="/apple-splash-1668x2388.png"
+          media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />

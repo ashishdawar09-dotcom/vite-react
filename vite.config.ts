@@ -37,6 +37,11 @@ export default defineConfig({
       injectManifest: {
         // What gets precached. Workbox writes this list into self.__WB_MANIFEST.
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,webp,woff2,lottie}'],
+        // iOS apple-touch-startup-image PNGs are large (1-2 MB each) and
+        // are loaded directly by Safari at standalone-launch via the <link>
+        // tag in index.html — the SW never needs to serve them. Excluding
+        // saves ~2 MB of first-install precache bandwidth.
+        globIgnores: ['**/apple-splash-*.png'],
       },
     }),
   ],
