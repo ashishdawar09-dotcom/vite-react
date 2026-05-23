@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { colors, radii, spacing, typography } from "../lib/theme";
+import { Button } from "./ui/Button";
+import { Modal } from "./ui/Modal";
 
 type Stage = "email" | "code";
 
@@ -98,333 +100,226 @@ export function Login({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(2, 6, 14, 0.72)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 2000,
-        // safe-area padding so the modal never sits under the notch / home
-        // indicator if the user opens it in landscape or on a notched device.
-        padding: `max(env(safe-area-inset-top, 0px), 16px) max(env(safe-area-inset-right, 0px), 16px) max(env(safe-area-inset-bottom, 0px), 16px) max(env(safe-area-inset-left, 0px), 16px)`,
-        backdropFilter: "blur(8px)",
-      }}
-      onClick={onClose}
-    >
-      <div
+    <Modal open onClose={onClose} size="sm" surface="dark" ariaLabel="Sign in" zIndex={2000}>
+      <h3
+        className="font-display"
         style={{
-          background: colors.bg.elevated,
-          border: `1px solid ${colors.brand.cyanBorder}`,
-          borderRadius: radii.xl,
-          padding: 32,
-          maxWidth: 400,
-          width: "100%",
+          margin: "0 0 6px",
+          fontSize: 24,
+          fontWeight: 700,
+          letterSpacing: 1.2,
+          textAlign: "center",
           color: colors.text.primaryDark,
-          fontFamily: typography.body,
-          boxShadow: "0 24px 64px rgba(0,0,0,0.45), 0 0 0 1px rgba(0, 212, 255, 0.05)",
+          textTransform: "uppercase",
         }}
-        onClick={(e) => e.stopPropagation()}
       >
-        <h3
-          className="font-display"
-          style={{
-            margin: "0 0 6px",
-            fontSize: 24,
-            fontWeight: 700,
-            letterSpacing: 1.2,
-            textAlign: "center",
-            color: colors.text.primaryDark,
-            textTransform: "uppercase",
-          }}
-        >
-          Sign In
-        </h3>
-        <p
-          style={{
-            margin: "0 0 24px",
-            fontSize: 13,
-            color: colors.text.mutedDark,
-            textAlign: "center",
-            lineHeight: 1.5,
-          }}
-        >
-          {stage === "email"
-            ? "Sign in to manage your tournament. Players: registration links don't require an account."
-            : <>Enter the verification code we sent to <strong style={{ color: colors.brand.cyan }}>{cleanEmail()}</strong>.</>}
-        </p>
+        Sign In
+      </h3>
+      <p
+        style={{
+          margin: "0 0 24px",
+          fontSize: 13,
+          color: colors.text.mutedDark,
+          textAlign: "center",
+          lineHeight: 1.5,
+          fontFamily: typography.body,
+        }}
+      >
+        {stage === "email"
+          ? "Sign in to manage your tournament. Players: registration links don't require an account."
+          : <>Enter the verification code we sent to <strong style={{ color: colors.brand.cyan }}>{cleanEmail()}</strong>.</>}
+      </p>
 
-        {stage === "email" ? (
-          <>
-            {/* Google sign-in only shown OUTSIDE installed PWAs because in-app
-                OAuth browsers don't return cookies to the PWA reliably */}
-            {!inPwa && (
-              <>
-                <button
-                  type="button"
-                  onClick={signInWithGoogle}
-                  disabled={busyOAuth || busy}
-                  style={{
-                    width: "100%",
-                    minHeight: 52,
-                    padding: "14px 16px",
-                    background: "#fff",
-                    color: "#1f1f1f",
-                    border: "1.5px solid #d0d7de",
-                    borderRadius: radii.md,
-                    fontWeight: 600,
-                    fontSize: 14,
-                    cursor: busyOAuth ? "wait" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 10,
-                    marginBottom: 16,
-                    opacity: busyOAuth ? 0.7 : 1,
-                  }}
-                  aria-label="Continue with Google"
-                >
-                  {busyOAuth ? <Spinner color="#1f1f1f" /> : <GoogleLogo />}
-                  {busyOAuth ? "Redirecting…" : "Continue with Google"}
-                </button>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-                  <div style={{ flex: 1, height: 1, background: colors.border.dark }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: colors.text.mutedDark, letterSpacing: 1.5 }}>OR</span>
-                  <div style={{ flex: 1, height: 1, background: colors.border.dark }} />
-                </div>
-              </>
-            )}
-
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
-              placeholder="you@email.com"
-              autoComplete="email"
-              autoFocus
-              style={{
-                width: "100%",
-                // 56px keeps the input above iOS 44pt minimum and gives a
-                // calm, premium rhythm; 16px font prevents iOS auto-zoom.
-                height: 56,
-                padding: "0 16px",
-                borderRadius: radii.md,
-                border: `2px solid ${colors.border.darkStrong}`,
-                background: colors.bg.surface,
-                color: colors.text.primaryDark,
-                fontSize: 16,
-                outline: "none",
-                boxSizing: "border-box",
-                marginBottom: 12,
-              }}
-            />
-            {err && (
-              <div style={{ color: colors.state.live, fontSize: 13, marginBottom: 12 }}>
-                {err}
-              </div>
-            )}
-            <button
-              disabled={busy || busyOAuth}
-              onClick={() => void sendOtp()}
-              style={{
-                width: "100%",
-                minHeight: 56,
-                padding: "16px",
-                background: colors.gradient.brandCta,
-                color: "#fff",
-                border: "none",
-                borderRadius: radii.md,
-                fontWeight: 800,
-                fontSize: 15,
-                letterSpacing: 0.5,
-                cursor: busy ? "wait" : "pointer",
-                opacity: busy ? 0.7 : 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-                boxShadow: "0 8px 24px rgba(0, 184, 255, 0.35)",
-              }}
-            >
-              {busy && <Spinner color="#fff" />}
-              {busy ? "Sending…" : "Send Code"}
-            </button>
-            <p
-              style={{
-                marginTop: 14,
-                marginBottom: 0,
-                fontSize: 11,
-                color: colors.text.mutedDark,
-                textAlign: "center",
-                lineHeight: 1.5,
-              }}
-            >
-              Anyone can sign in. Admin powers are granted by an existing tournament admin.
-            </p>
-          </>
-        ) : (
-          <>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={10}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
-              onKeyDown={(e) => e.key === "Enter" && void verifyOtp()}
-              placeholder="Code from email"
-              autoComplete="one-time-code"
-              autoFocus
-              style={{
-                width: "100%",
-                height: 64,
-                padding: "0 16px",
-                borderRadius: radii.md,
-                border: `2px solid ${colors.brand.cyanBorder}`,
-                background: colors.bg.surface,
-                color: colors.text.primaryDark,
-                fontSize: 24,
-                outline: "none",
-                boxSizing: "border-box",
-                marginBottom: 12,
-                textAlign: "center",
-                letterSpacing: 6,
-                fontFamily: "Menlo, monospace",
-                fontWeight: 700,
-              }}
-            />
-            {err && (
-              <div style={{ color: colors.state.live, fontSize: 13, marginBottom: 12 }}>
-                {err}
-              </div>
-            )}
-            <button
-              disabled={busy || code.length < 6}
-              onClick={() => void verifyOtp()}
-              style={{
-                width: "100%",
-                minHeight: 56,
-                padding: "16px",
-                background: colors.gradient.brandCta,
-                color: "#fff",
-                border: "none",
-                borderRadius: radii.md,
-                fontWeight: 800,
-                fontSize: 15,
-                letterSpacing: 0.5,
-                cursor: busy ? "wait" : "pointer",
-                opacity: busy || code.length < 6 ? 0.5 : 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-                boxShadow: "0 8px 24px rgba(0, 184, 255, 0.35)",
-              }}
-            >
-              {busy && <Spinner color="#fff" />}
-              {busy ? "Verifying…" : "Verify & Sign In"}
-            </button>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}>
-              <button
+      {stage === "email" ? (
+        <>
+          {/* Google sign-in only shown OUTSIDE installed PWAs because in-app
+              OAuth browsers don't return cookies to the PWA reliably */}
+          {!inPwa && (
+            <>
+              <Button
                 type="button"
-                onClick={() => { setStage("email"); setCode(""); setErr(null); }}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: colors.text.mutedDark,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  padding: spacing.sm,
-                  minHeight: 44,
-                }}
-              >
-                ← Use different email
-              </button>
-              <button
-                type="button"
-                onClick={() => void resendCode()}
+                onClick={() => void signInWithGoogle()}
                 disabled={busy}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: colors.brand.cyan,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  padding: spacing.sm,
-                  minHeight: 44,
-                  fontWeight: 700,
-                  letterSpacing: 0.5,
-                }}
+                loading={busyOAuth}
+                variant="secondary"
+                size="lg"
+                fullWidth
+                leftIcon={busyOAuth ? undefined : <GoogleLogo />}
+                style={{ marginBottom: 16, color: "#1f1f1f" }}
+                aria-label="Continue with Google"
               >
-                Resend code
-              </button>
+                {busyOAuth ? "Redirecting…" : "Continue with Google"}
+              </Button>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                <div style={{ flex: 1, height: 1, background: colors.border.dark }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: colors.text.mutedDark, letterSpacing: 1.5 }}>OR</span>
+                <div style={{ flex: 1, height: 1, background: colors.border.dark }} />
+              </div>
+            </>
+          )}
+
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
+            placeholder="you@email.com"
+            autoComplete="email"
+            autoFocus
+            style={{
+              width: "100%",
+              // 56px keeps the input above iOS 44pt minimum and gives a calm,
+              // premium rhythm; 16px font prevents iOS auto-zoom.
+              height: 56,
+              padding: "0 16px",
+              borderRadius: radii.md,
+              border: `2px solid ${colors.border.darkStrong}`,
+              background: colors.bg.surface,
+              color: colors.text.primaryDark,
+              fontSize: 16,
+              outline: "none",
+              boxSizing: "border-box",
+              marginBottom: 12,
+              fontFamily: typography.body,
+            }}
+          />
+          {err && (
+            <div style={{ color: colors.state.live, fontSize: 13, marginBottom: 12 }}>
+              {err}
             </div>
-            <p
+          )}
+          <Button
+            disabled={busyOAuth}
+            loading={busy}
+            onClick={() => void sendOtp()}
+            variant="primary"
+            size="lg"
+            fullWidth
+          >
+            {busy ? "Sending…" : "Send Code"}
+          </Button>
+          <p
+            style={{
+              marginTop: 14,
+              marginBottom: 0,
+              fontSize: 11,
+              color: colors.text.mutedDark,
+              textAlign: "center",
+              lineHeight: 1.5,
+              fontFamily: typography.body,
+            }}
+          >
+            Anyone can sign in. Admin powers are granted by an existing tournament admin.
+          </p>
+        </>
+      ) : (
+        <>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={10}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
+            onKeyDown={(e) => e.key === "Enter" && void verifyOtp()}
+            placeholder="Code from email"
+            autoComplete="one-time-code"
+            autoFocus
+            style={{
+              width: "100%",
+              height: 64,
+              padding: "0 16px",
+              borderRadius: radii.md,
+              border: `2px solid ${colors.brand.cyanBorder}`,
+              background: colors.bg.surface,
+              color: colors.text.primaryDark,
+              fontSize: 24,
+              outline: "none",
+              boxSizing: "border-box",
+              marginBottom: 12,
+              textAlign: "center",
+              letterSpacing: 6,
+              fontFamily: "Menlo, monospace",
+              fontWeight: 700,
+            }}
+          />
+          {err && (
+            <div style={{ color: colors.state.live, fontSize: 13, marginBottom: 12 }}>
+              {err}
+            </div>
+          )}
+          <Button
+            disabled={code.length < 6}
+            loading={busy}
+            onClick={() => void verifyOtp()}
+            variant="primary"
+            size="lg"
+            fullWidth
+          >
+            {busy ? "Verifying…" : "Verify & Sign In"}
+          </Button>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={() => { setStage("email"); setCode(""); setErr(null); }}
               style={{
-                marginTop: 14,
-                marginBottom: 0,
-                fontSize: 11,
+                background: "transparent",
+                border: "none",
                 color: colors.text.mutedDark,
-                textAlign: "center",
-                lineHeight: 1.5,
+                fontSize: 12,
+                cursor: "pointer",
+                padding: spacing.sm,
+                minHeight: 44,
+                fontFamily: typography.body,
               }}
             >
-              The code is also a tappable magic link in the email — works either way.
-            </p>
-          </>
-        )}
-        <button
-          onClick={onClose}
-          style={{
-            width: "100%",
-            marginTop: 14,
-            minHeight: 44,
-            padding: 12,
-            background: "transparent",
-            border: `1px solid ${colors.border.dark}`,
-            color: colors.text.mutedDark,
-            cursor: "pointer",
-            fontSize: 13,
-            borderRadius: radii.sm,
-          }}
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Spinner({ color }: { color: string }) {
-  // Small inline animated SVG; rotates via CSS keyframes registered in
-  // src/index.css (`spin`). Lightweight — no framer-motion dependency
-  // because Login can be opened pre-Suspense-boundary if a chunk fails.
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 50 50"
-      style={{ animation: "spin 0.85s linear infinite", flexShrink: 0 }}
-      aria-hidden="true"
-    >
-      <circle
-        cx="25" cy="25" r="20"
-        fill="none"
-        stroke={color}
-        strokeOpacity="0.25"
-        strokeWidth="5"
-      />
-      <path
-        d="M25 5 a20 20 0 0 1 20 20"
-        fill="none"
-        stroke={color}
-        strokeWidth="5"
-        strokeLinecap="round"
-      />
-    </svg>
+              ← Use different email
+            </button>
+            <button
+              type="button"
+              onClick={() => void resendCode()}
+              disabled={busy}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: colors.brand.cyan,
+                fontSize: 12,
+                cursor: "pointer",
+                padding: spacing.sm,
+                minHeight: 44,
+                fontWeight: 700,
+                letterSpacing: 0.5,
+                fontFamily: typography.body,
+              }}
+            >
+              Resend code
+            </button>
+          </div>
+          <p
+            style={{
+              marginTop: 14,
+              marginBottom: 0,
+              fontSize: 11,
+              color: colors.text.mutedDark,
+              textAlign: "center",
+              lineHeight: 1.5,
+              fontFamily: typography.body,
+            }}
+          >
+            The code is also a tappable magic link in the email — works either way.
+          </p>
+        </>
+      )}
+      <Button
+        onClick={onClose}
+        variant="ghost"
+        size="md"
+        fullWidth
+        style={{ marginTop: 14 }}
+      >
+        Close
+      </Button>
+    </Modal>
   );
 }
 
