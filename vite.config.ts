@@ -24,7 +24,10 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        // start_url intentionally omitted — iOS will use the URL that was
+        // open when the user added the page to home screen. This means
+        // installing from /register/<id> opens the form directly; admins
+        // installing from / open the admin app. Best UX for both audiences.
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
