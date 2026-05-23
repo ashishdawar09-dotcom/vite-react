@@ -653,8 +653,16 @@ export function PublicRegistrationPage() {
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      minHeight: "100vh", background: colors.bg.page,
-      fontFamily: typography.body, color: colors.text.primaryLight,
+      // dvh + safe-area padding so the form looks right whether opened in
+      // mobile Safari, an installed PWA, or a desktop browser.
+      minHeight: "100dvh",
+      background: colors.bg.page,
+      fontFamily: typography.body,
+      color: colors.text.primaryLight,
+      paddingTop: "env(safe-area-inset-top, 0px)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      paddingLeft: "env(safe-area-inset-left, 0px)",
+      paddingRight: "env(safe-area-inset-right, 0px)",
     }}>
       <div style={{ maxWidth: 560, margin: "0 auto", padding: `0 ${spacing.md}px` }}>
         {children}

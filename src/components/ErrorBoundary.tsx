@@ -26,13 +26,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return (
       <div
         style={{
-          minHeight: "100vh",
+          // dvh = dynamic viewport height — correct for iOS PWA where vh
+          // includes safe-area zones. Safari 15.4+/iOS 17 all support it.
+          minHeight: "100dvh",
           background: "#0a1628",
           color: "#fff",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: 24,
+          padding: "max(env(safe-area-inset-top, 0px), 24px) 24px max(env(safe-area-inset-bottom, 0px), 24px)",
         }}
       >
         <div

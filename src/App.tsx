@@ -910,11 +910,27 @@ export default function App() {
   const showDataLoader = dataLoading && currentId;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter','Segoe UI',system-ui,-apple-system,sans-serif" }}>
+    <div style={{ minHeight: "100dvh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter','Segoe UI',system-ui,-apple-system,sans-serif" }}>
       {/* NEW: cat overlay during tournament-data refetch (e.g. switching tournament from the
           dropdown). Renders on top of everything via fullScreen variant (z-index: 9999). */}
       {showDataLoader && <LottieLoader fullScreen label="Loading tournament data…" />}
-      <header style={{ background: "linear-gradient(135deg,#050d1a 0%,#0a1628 50%,#0d1f3a 100%)", color: "#fff", padding: 0, position: "relative", overflow: "hidden", borderBottom: "1px solid #1a3050" }}>
+      <header style={{
+        background: "linear-gradient(135deg,#050d1a 0%,#0a1628 50%,#0d1f3a 100%)",
+        color: "#fff",
+        padding: 0,
+        position: "relative",
+        overflow: "hidden",
+        borderBottom: "1px solid #1a3050",
+        // iOS PWA: push tappable content below the Dynamic Island / notch.
+        // viewport-fit=cover (index.html) puts content under the OS status bar
+        // in standalone mode; without this padding the Admin Sign In button is
+        // physically rendered inside the OS-reserved zone and taps are
+        // consumed by the Dynamic Island rather than reaching the web view.
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        // Side insets matter in landscape on notched devices.
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}>
         {/* Athlete photo on the right with diagonal cutout */}
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "55%", clipPath: "polygon(20% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden", zIndex: 0 }}>
           <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B6.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
@@ -1351,7 +1367,18 @@ export default function App() {
               exit={{ y: "100%" }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onClick={e => e.stopPropagation()}
-              style={{ width: "100%", background: "#0a1628", borderTop: "1px solid #1a3050", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "12px 16px 24px", maxHeight: "70vh", overflowY: "auto" }}
+              style={{
+                width: "100%",
+                background: "#0a1628",
+                borderTop: "1px solid #1a3050",
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                // Top 12, sides 16, bottom = 24 + safe-area so the last button
+                // clears the iOS home indicator on iPhone 14+/15+/16/17.
+                padding: "12px 16px calc(env(safe-area-inset-bottom, 0px) + 24px)",
+                maxHeight: "70vh",
+                overflowY: "auto",
+              }}
             >
               <div style={{ width: 40, height: 4, background: "#475569", borderRadius: 2, margin: "0 auto 16px" }} />
               <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 12, padding: "0 4px" }}>More Tabs</div>
@@ -1409,7 +1436,16 @@ export default function App() {
 
       {/* MAKEOVER: static footer text -> ParticleTextEffect cycling "BUILT BY" → "ADAWAR" → "TECHNOLOGIES".
           Canvas sized to fit the footer band (720x110, 50px font). Right-click + drag destroys particles. */}
-      <footer style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "8px 16px", background: "#050d1a", borderTop: "1px solid #1a3050" }}>
+      <footer style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        // Top 8, sides 16, bottom = 8 + safe-area so the home indicator
+        // doesn't crop the footer (and so iPad-landscape side gestures don't).
+        padding: "8px max(env(safe-area-inset-right, 0px), 16px) calc(env(safe-area-inset-bottom, 0px) + 8px) max(env(safe-area-inset-left, 0px), 16px)",
+        background: "#050d1a",
+        borderTop: "1px solid #1a3050",
+      }}>
         <ParticleTextEffect
           words={["Built by Ashish Dawar"]}
           width={800}
