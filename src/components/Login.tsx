@@ -53,8 +53,8 @@ export function Login({ onClose }: { onClose: () => void }) {
     setErr(null);
     const e = cleanEmail();
     const tok = code.replace(/\D/g, ""); // strip non-digits, just in case
-    if (tok.length !== 6) {
-      setErr("Enter the 6-digit code from your email.");
+    if (tok.length < 6) {
+      setErr("Enter the full code from your email (usually 6–8 digits).");
       return;
     }
     setBusy(true);
@@ -109,9 +109,9 @@ export function Login({ onClose }: { onClose: () => void }) {
         <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b", textAlign: "center" }}>
           {stage === "email"
             ? (inPwa
-                ? "Enter your email and we'll send you a 6-digit code."
-                : "Enter your email — we'll send a 6-digit code and a magic link.")
-            : `Enter the 6-digit code we sent to ${cleanEmail()}.`}
+                ? "Enter your email and we'll send you a verification code."
+                : "Enter your email — we'll send a verification code and a magic link.")
+            : `Enter the verification code we sent to ${cleanEmail()}.`}
         </p>
 
         {stage === "email" ? (
@@ -172,23 +172,23 @@ export function Login({ onClose }: { onClose: () => void }) {
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              maxLength={6}
+              maxLength={10}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
               onKeyDown={(e) => e.key === "Enter" && void verifyOtp()}
-              placeholder="123456"
+              placeholder="Code from email"
               autoComplete="one-time-code"
               autoFocus
               style={{
                 width: "100%", padding: "16px 14px", borderRadius: 10,
-                border: "2px solid #e2e8f0", fontSize: 24, outline: "none",
+                border: "2px solid #e2e8f0", fontSize: 22, outline: "none",
                 boxSizing: "border-box", marginBottom: 12, textAlign: "center",
-                letterSpacing: 8, fontFamily: "Menlo, monospace", fontWeight: 700,
+                letterSpacing: 4, fontFamily: "Menlo, monospace", fontWeight: 700,
               }}
             />
             {err && <div style={{ color: "#E63946", fontSize: 13, marginBottom: 12 }}>{err}</div>}
             <button
-              disabled={busy || code.length !== 6}
+              disabled={busy || code.length < 6}
               onClick={() => void verifyOtp()}
               style={{ width: "100%", padding: 14, background: "#3A86FF", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: busy ? "wait" : "pointer", opacity: busy || code.length !== 6 ? 0.6 : 1 }}
             >
