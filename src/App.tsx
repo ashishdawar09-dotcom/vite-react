@@ -18,6 +18,7 @@ import { NumberTicker } from "./components/ui/number-ticker"; /* NEW: count-up t
 import { toast } from "./components/Toast";
 import { defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
+import { colors } from "./lib/theme";
 import type { Match, Player, Team, Tournament } from "./types";
 
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
@@ -920,7 +921,7 @@ export default function App() {
           dropdown). Renders on top of everything via fullScreen variant (z-index: 9999). */}
       {showDataLoader && <LottieLoader fullScreen label="Loading tournament data…" />}
       <header style={{
-        background: "linear-gradient(135deg,#050d1a 0%,#0a1628 50%,#0d1f3a 100%)",
+        background: colors.gradient.headerSurface,
         color: "#fff",
         padding: 0,
         position: "relative",
@@ -962,12 +963,72 @@ export default function App() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {isAdmin ? (
               <>
-                <span style={{ fontSize: 11, color: "#00d4ff", background: "rgba(0,184,255,0.1)", padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(0,184,255,0.3)", fontWeight: 600, letterSpacing: 0.5 }}>● {email}</span>
-                <button onClick={() => setShowAdminManager(true)} title="Manage admins" style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>👥 ADMINS</button>
-                <button onClick={signOut} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>SIGN OUT</button>
+                <span style={{
+                  fontSize: 11,
+                  color: colors.brand.cyan,
+                  background: colors.brand.cyanSubtle,
+                  // 12px vertical padding lifts the chip from a non-tappable
+                  // 23px tall pill to a 44pt-tall iOS-conformant target. The
+                  // chip is itself non-interactive but matches sibling sizes.
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.brand.cyanBorder}`,
+                  fontWeight: 600,
+                  letterSpacing: 0.5,
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}>● {email}</span>
+                <button
+                  onClick={() => setShowAdminManager(true)}
+                  title="Manage admins"
+                  style={{
+                    padding: "10px 14px",
+                    minHeight: 44,
+                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    background: "transparent",
+                    color: "#cbd5e1",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                  }}>👥 ADMINS</button>
+                <button
+                  onClick={signOut}
+                  style={{
+                    padding: "10px 16px",
+                    minHeight: 44,
+                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    background: "transparent",
+                    color: "#cbd5e1",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                  }}>SIGN OUT</button>
               </>
             ) : (
-              <button onClick={() => setShowLogin(true)} style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: "linear-gradient(135deg,#00b8ff,#0066ff)", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", boxShadow: "0 2px 12px rgba(0,184,255,0.4)" }}>Admin Sign In</button>
+              <button
+                onClick={() => setShowLogin(true)}
+                style={{
+                  // iOS HIG minimum touch target = 44pt; previously 8px×18px
+                  // padding gave ~30px height. Bumped to 12px×22px for a
+                  // 44pt-tall target that's still visually balanced.
+                  padding: "12px 22px",
+                  minHeight: 44,
+                  borderRadius: 8,
+                  border: "none",
+                  background: colors.gradient.brandCta,
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  boxShadow: "0 2px 12px rgba(0,184,255,0.4)",
+                }}>Admin Sign In</button>
             )}
           </div>
         </div>

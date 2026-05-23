@@ -34,3 +34,9 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* Inline spinner used by Login button busy state. Kept in global CSS so it
+   works even before framer-motion's chunk has loaded. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

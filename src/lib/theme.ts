@@ -31,6 +31,14 @@ export const colors = {
     primary: "#3A86FF",
     primaryHover: "#1E5BC8",
     primarySubtle: "rgba(58, 134, 255, 0.16)",
+    // Cyan family — the dominant on-screen accent (broadcast/sports-TV
+    // aesthetic). Used in header gradients, LIVE-tab highlights, the
+    // particle footer, and the Admin Sign In CTA.
+    cyan: "#00d4ff",
+    cyanHover: "#00b8ff",
+    cyanDeep: "#0066ff",
+    cyanSubtle: "rgba(0, 212, 255, 0.12)",
+    cyanBorder: "rgba(0, 184, 255, 0.3)",
   },
   // Match state machine — DO NOT change semantics.
   state: {
@@ -43,9 +51,14 @@ export const colors = {
     completed: "#16A34A",
     completedSubtle: "rgba(22, 163, 74, 0.12)",
   },
-  // Aurora gradient — restricted to the login CTA only.
   gradient: {
+    // Aurora — premium accent, used sparingly.
     aurora: "linear-gradient(123deg, #18011F 7%, #B600A8 37%, #7621B0 72%, #BE4C00 100%)",
+    // Cyan CTA — the primary "do it" button across the broadcast surfaces
+    // (Admin Sign In in header, hero CTAs in LIVE tab, login submit).
+    brandCta: "linear-gradient(135deg,#00b8ff,#0066ff)",
+    // Header / hero surface — deep-blue cascade behind logo + admin chip.
+    headerSurface: "linear-gradient(135deg,#050d1a 0%,#0a1628 50%,#0d1f3a 100%)",
   },
 } as const;
 
