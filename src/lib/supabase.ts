@@ -1,11 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || "";
+const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || "";
 
-if (!url || !key) {
+// In vitest (MODE === "test") the supabase client is never actually called —
+// only pure helpers are tested — so a missing env should not throw and abort
+// the whole test run. In every other mode (dev / production / Vercel build)
+// missing env is a real bug we want to surface immediately.
+const isTest = import.meta.env.MODE === "test";
+if (!isTest && (!url || !key)) {
   throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY");
 }
+
+// Stub values used ONLY when running under vitest with no env configured.
+// The resulting client cannot actually connect to anything, which is fine
+// because tests never call it.
+const clientUrl = url || "https://stub.invalid.supabase.co";
+const clientKey = key || "stub-key-for-tests";
 
 // Custom fetch with timeout + transient-error retry. Wraps the global fetch
 // so every Supabase HTTP call gets resilience for free.
@@ -45,7 +56,7 @@ async function resilientFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   throw lastErr;
 }
 
-export const supabase = createClient(url, key, {
+export const supabase = createClient(clientUrl, clientKey, {
   auth: { persistSession: true, autoRefreshToken: true },
   global: { fetch: resilientFetch },
 });
