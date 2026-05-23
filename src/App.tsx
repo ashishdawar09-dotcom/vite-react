@@ -21,6 +21,7 @@ import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { ScoreInput } from "./components/ScoreInput";
 import { AppFooter } from "./components/AppFooter";
 import { MoreDrawer, type TabId } from "./components/MoreDrawer";
+import { PartnerPickerModal } from "./components/PartnerPickerModal";
 import { colors } from "./lib/theme";
 import type { Match, Player, Team, Tournament } from "./types";
 
@@ -1355,31 +1356,13 @@ export default function App() {
         );
       })()}
 
-      {partnerPicker && (() => {
-        const me = playerById[partnerPicker];
-        const choices = unpaired.filter(p => p.id !== partnerPicker);
-        return (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1500, padding: 16, backdropFilter: "blur(4px)" }} onClick={() => setPartnerPicker(null)}>
-            <div style={{ background: "#fff", borderRadius: 20, padding: 28, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.25)" }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ margin: "0 0 6px", fontSize: 20, fontWeight: 800, textAlign: "center" }}>🤝 Choose Partner</h3>
-              <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b", textAlign: "center" }}>Pair {me?.name} with...</p>
-              {choices.length === 0 ? (
-                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>No available players to pair with.</div>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 10 }}>
-                  {choices.map(p => (
-                    <button key={p.id} onClick={() => assignPartner(partnerPicker, p.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, border: "2px solid #e2e8f0", background: "#fff", cursor: "pointer", textAlign: "left", transition: "all .15s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "#3A86FF"; e.currentTarget.style.background = "#eff6ff"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.background = "#fff"; }}>
-                      <Av name={p.name} photo={p.photo_url} sz={36} color={p.color} />
-                      <span style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setPartnerPicker(null)} style={{ width: "100%", marginTop: 18, padding: 12, background: "#e2e8f0", color: "#475569", border: "none", borderRadius: 10, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-            </div>
-          </div>
-        );
-      })()}
+      <PartnerPickerModal
+        open={partnerPicker !== null}
+        me={partnerPicker ? playerById[partnerPicker] ?? null : null}
+        choices={partnerPicker ? unpaired.filter(p => p.id !== partnerPicker) : []}
+        onPick={(partnerId) => { if (partnerPicker) assignPartner(partnerPicker, partnerId); }}
+        onClose={() => setPartnerPicker(null)}
+      />
 
       {pickingCourtFor && (
         <CourtPicker
