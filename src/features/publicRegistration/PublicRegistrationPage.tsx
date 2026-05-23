@@ -302,11 +302,25 @@ export function PublicRegistrationPage() {
             Thanks, {form.player_name}! An admin will verify your e-transfer reference and
             confirm your spot shortly. You'll be visible in the player roster once approved.
           </p>
-          {tournament && submittedRegistrationId && (
-            <PushOptInButton
-              tournamentId={tournament.id}
-              pendingRegistrationId={submittedRegistrationId}
-            />
+          {/* Push opt-in surface — always renders something so users on
+              cached pages or with malformed responses still see status */}
+          {tournament && (
+            submittedRegistrationId ? (
+              <PushOptInButton
+                tournamentId={tournament.id}
+                pendingRegistrationId={submittedRegistrationId}
+              />
+            ) : (
+              <div style={{
+                marginTop: spacing.lg, padding: spacing.md,
+                background: colors.bg.muted, borderRadius: radii.md,
+                fontSize: 13, color: colors.text.mutedLight, lineHeight: 1.5,
+              }}>
+                🔔 Couldn't get your registration ID from the server. Please
+                refresh the page and re-submit — then you'll be able to enable
+                push notifications on the next success screen.
+              </div>
+            )
           )}
           <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 13 }}>
             Need to enter another category? Each category requires a separate submission.
