@@ -734,6 +734,29 @@ function CategoryPicker({ categories, value, onChange, fees, isMember, isMobile 
 
 type PushUiState = "idle" | "working" | "enabled" | "denied" | "unsupported" | "error";
 
+// Detailed support detection — separated so we can show ALL diagnostics on
+// the screen when the user can't get push to work. iOS Safari has subtle
+// failure modes (PushManager missing, not installed to home screen, < 16.4)
+// that previously silently hid the button. Now we always render and tell
+// the user exactly what's missing.
+function pushDiagnostics(): { ok: boolean; missing: string[]; standalone: boolean } {
+  const missing: string[] = [];
+  if (typeof window === "undefined") missing.push("window (SSR)");
+  else {
+    if (!("Notification" in window)) missing.push("Notification API");
+    if (!("serviceWorker" in navigator)) missing.push("Service Worker");
+    if (!("PushManager" in window)) missing.push("PushManager");
+  }
+  // iOS standalone detection — Apple-specific property + general matchMedia
+  const standalone =
+    typeof navigator !== "undefined" &&
+    // @ts-expect-error iOS-only non-standard property
+    (navigator.standalone === true ||
+      (typeof window !== "undefined" &&
+        window.matchMedia?.("(display-mode: standalone)").matches));
+  return { ok: missing.length === 0, missing, standalone };
+}
+
 function PushOptInButton({
   tournamentId,
   pendingRegistrationId,
@@ -742,16 +765,13 @@ function PushOptInButton({
     const s = pushSupportStatus();
     if (s === "unsupported") return "unsupported";
     if (s === "denied") return "denied";
-    if (s === "granted") return "idle";  // can still re-subscribe silently
     return "idle";
   });
   const [errMsg, setErrMsg] = useState<string | null>(null);
-
-  if (state === "unsupported") {
-    // Quietly hide on browsers that don't support push (e.g. iOS Safari < 16.4
-    // before installing to home screen, desktop Safari, in-app webviews).
-    return null;
-  }
+  const diag = pushDiagnostics();
+  // iOS PWAs report Mac UA in standalone — easier to detect via standalone flag
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent ?? "") ||
+    (navigator.platform === "MacIntel" && (navigator.maxTouchPoints ?? 0) > 1);
 
   const handleClick = async () => {
     setState("working");
@@ -766,44 +786,60 @@ function PushOptInButton({
       setState("denied");
     } else {
       setState("error");
-      setErrMsg(result.error ?? "Couldn't enable notifications");
+      setErrMsg(`${result.reason}: ${result.error ?? "Couldn't enable notifications"}`);
     }
   };
 
+  // ---- ENABLED state (success) ----
   if (state === "enabled") {
     return (
       <div style={{
-        marginTop: spacing.lg,
-        padding: spacing.md,
+        marginTop: spacing.lg, padding: spacing.md,
         background: "rgba(0, 212, 255, 0.08)",
-        border: `1px solid ${CYAN}`,
-        borderRadius: radii.md,
-        fontSize: 14,
-        fontWeight: 700,
-        color: CYAN_DARK,
+        border: `1px solid ${CYAN}`, borderRadius: radii.md,
+        fontSize: 14, fontWeight: 700, color: CYAN_DARK,
       }}>
         🔔 Notifications enabled — you'll get pinged when your court is ready.
       </div>
     );
   }
 
+  // ---- DENIED state ----
   if (state === "denied") {
     return (
       <div style={{
-        marginTop: spacing.lg,
-        padding: spacing.md,
-        background: colors.bg.muted,
-        borderRadius: radii.md,
-        fontSize: 13,
-        color: colors.text.mutedLight,
-        lineHeight: 1.5,
+        marginTop: spacing.lg, padding: spacing.md,
+        background: colors.bg.muted, borderRadius: radii.md,
+        fontSize: 13, color: colors.text.mutedLight, lineHeight: 1.5,
       }}>
         Notifications were blocked for this site. To re-enable, allow them in
-        your browser settings, then refresh.
+        your browser/iOS Settings → Notifications → Badminton, then refresh.
       </div>
     );
   }
 
+  // ---- UNSUPPORTED state — show helpful instructions ----
+  if (state === "unsupported") {
+    let helper: string;
+    if (isIOS && !diag.standalone) {
+      helper = "On iPhone, push notifications require installing the app. Tap the Share button ⬆️ then 'Add to Home Screen', then open the new icon and submit again.";
+    } else if (isIOS && diag.standalone) {
+      helper = "Web Push on iPhone needs iOS 16.4 or later. Update iOS, then re-submit. (Missing: " + diag.missing.join(", ") + ")";
+    } else {
+      helper = "Your browser doesn't support web push notifications. Try Chrome, Edge, or Firefox. (Missing: " + diag.missing.join(", ") + ")";
+    }
+    return (
+      <div style={{
+        marginTop: spacing.lg, padding: spacing.md,
+        background: colors.bg.muted, borderRadius: radii.md,
+        fontSize: 13, color: colors.text.mutedLight, lineHeight: 1.5,
+      }}>
+        🔔 {helper}
+      </div>
+    );
+  }
+
+  // ---- IDLE / WORKING / ERROR — render the button ----
   return (
     <>
       <button
@@ -811,23 +847,18 @@ function PushOptInButton({
         disabled={state === "working"}
         onClick={() => { void handleClick(); }}
         style={{
-          marginTop: spacing.lg,
-          padding: "14px 20px",
-          borderRadius: radii.md,
-          border: `2px solid ${CYAN}`,
-          background: colors.bg.card,
-          color: CYAN_DARK,
-          fontSize: 15,
-          fontWeight: 800,
+          marginTop: spacing.lg, padding: "14px 20px",
+          borderRadius: radii.md, border: `2px solid ${CYAN}`,
+          background: colors.bg.card, color: CYAN_DARK,
+          fontSize: 15, fontWeight: 800,
           cursor: state === "working" ? "wait" : "pointer",
-          minHeight: 48,
-          width: "100%",
+          minHeight: 48, width: "100%",
         }}
       >
         {state === "working" ? "Enabling…" : "🔔 Get notified when your court is ready"}
       </button>
       {state === "error" && errMsg && (
-        <div style={{ marginTop: spacing.sm, fontSize: 12, color: colors.state.live }}>
+        <div style={{ marginTop: spacing.sm, fontSize: 12, color: colors.state.live, lineHeight: 1.4 }}>
           {errMsg}
         </div>
       )}
