@@ -19,6 +19,7 @@ import { toast } from "./components/Toast";
 import { defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { ScoreInput } from "./components/ScoreInput";
+import { AppFooter } from "./components/AppFooter";
 import { colors } from "./lib/theme";
 import type { Match, Player, Team, Tournament } from "./types";
 
@@ -35,9 +36,6 @@ const ProfilesTab = React.lazy(() => import("./features/profiles/ProfilesTab").t
 const RegisterTab = React.lazy(() => import("./features/registration/RegisterTab").then(m => ({ default: m.RegisterTab })));
 const TeamsTab = React.lazy(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
 const AdminManager = React.lazy(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
-// ParticleTextEffect is heavy (canvas animation loop) and only used in the
-// always-rendered footer, so it gets its own chunk + only mounts when present.
-const ParticleTextEffect = React.lazy(() => import("./components/ui/particle-text-effect").then(m => ({ default: m.ParticleTextEffect })));
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
 
@@ -1480,35 +1478,7 @@ export default function App() {
         }
       `}</style>
 
-      {/* MAKEOVER: static footer text -> ParticleTextEffect cycling "BUILT BY" → "ADAWAR" → "TECHNOLOGIES".
-          Canvas sized to fit the footer band (720x110, 50px font). Right-click + drag destroys particles. */}
-      <footer style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        // Top 8, sides 16, bottom = 8 + safe-area so the home indicator
-        // doesn't crop the footer (and so iPad-landscape side gestures don't).
-        padding: "8px max(env(safe-area-inset-right, 0px), 16px) calc(env(safe-area-inset-bottom, 0px) + 8px) max(env(safe-area-inset-left, 0px), 16px)",
-        background: "#050d1a",
-        borderTop: "1px solid #1a3050",
-      }}>
-        {/* Lazy-loaded so its canvas animation code (and bundle weight)
-            only ship to users who actually scroll the page enough to hit
-            the footer. Fallback is an invisible spacer so layout doesn't
-            shift when the chunk arrives. */}
-        <Suspense fallback={<div style={{ height: 110, width: "100%" }} />}>
-          <ParticleTextEffect
-            words={["Built by Ashish Dawar"]}
-            width={800}
-            height={110}
-            fontSize={36}
-            color="#00d4ff"
-            pixelSteps={4}
-            pointSize={2}
-            backgroundFade="rgba(5, 13, 26, 0.1)"
-          />
-        </Suspense>
-      </footer>
+      <AppFooter />
     </div>
   );
 }
