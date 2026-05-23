@@ -32,6 +32,13 @@ jobs:
         continue-on-error: true
 
       - name: Test
+        env:
+          # Same build-time stubs as the Build step — supabase.ts throws at
+          # module-import time if these are missing, which aborts vitest
+          # before it can run notifications.test.ts.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-stub-key
+          VITE_ADMIN_EMAILS: ci@example.com
         run: npm test --if-present
 
       - name: Build
