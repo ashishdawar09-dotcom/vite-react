@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import * as Sentry from "@sentry/react";
 import { supabase } from "../lib/supabase";
 import * as db from "../lib/db";
 import type { Category, Match, Player, PlayerCategory, Team } from "../types";
@@ -150,8 +151,22 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         // listPlayerCategories() already scopes via inner-join on players.tournament_id.
         .on("postgres_changes", { event: "*", schema: "public", table: "player_categories" }, () => {
           debouncedLoadPlayerCategories.current();
-        })
-        .subscribe();
+        });
+      // subscribe() can throw synchronously if WebSocket is unusable in this
+      // runtime (browser extension monkey-patching, blocked CSP, etc.). Catch
+      // and degrade — admin loses live updates but the rest of the UI works.
+      try {
+        pgChannel.subscribe();
+      } catch (err) {
+        Sentry.addBreadcrumb({
+          category: "realtime",
+          level: "warning",
+          message: "admin tournament channel subscribe failed",
+          data: { tournamentId, error: String(err) },
+        });
+        // eslint-disable-next-line no-console
+        console.warn("[realtime] admin subscribe failed; manual refresh required for live updates", err);
+      }
 
       return () => {
         cancelled = true;

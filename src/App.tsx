@@ -1,5 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion"; /* NEW: makeover motion */
+import * as Sentry from "@sentry/react";
 import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./hooks/useIsMobile"; /* NEW: mobile IA detection */
 import { useTournamentData } from "./hooks/useTournamentData";
@@ -129,8 +130,22 @@ export default function App() {
 
   useEffect(() => {
     const ch = supabase.channel("tournaments-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, reloadTournaments)
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, reloadTournaments);
+    // subscribe() can throw synchronously if the runtime's WebSocket is
+    // unusable (browser extension monkey-patching, blocked CSP, etc.). Catch
+    // and degrade gracefully — page still works, realtime updates just don't.
+    try {
+      ch.subscribe();
+    } catch (err) {
+      Sentry.addBreadcrumb({
+        category: "realtime",
+        level: "warning",
+        message: "tournaments-list subscribe failed",
+        data: { error: String(err) },
+      });
+      // eslint-disable-next-line no-console
+      console.warn("[realtime] tournaments-list subscribe failed; manual refresh required for live updates", err);
+    }
     return () => { supabase.removeChannel(ch); };
   }, []);
 

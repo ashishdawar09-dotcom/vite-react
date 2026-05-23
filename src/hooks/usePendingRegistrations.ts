@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/react";
 import { listPendingRegistrations } from "../lib/db";
 import { supabase } from "../lib/supabase";
 import type { PendingRegistration } from "../types";
@@ -59,8 +60,22 @@ export function usePendingRegistrations(
           if (debounceRef.current) window.clearTimeout(debounceRef.current);
           debounceRef.current = window.setTimeout(() => { void load(); }, 300);
         },
-      )
-      .subscribe();
+      );
+    // subscribe() can throw synchronously if WebSocket is broken in this
+    // runtime (browser extension, blocked CSP, etc.). Catch and degrade —
+    // pending list still works via manual refetch.
+    try {
+      channel.subscribe();
+    } catch (err) {
+      Sentry.addBreadcrumb({
+        category: "realtime",
+        level: "warning",
+        message: "pending-registrations subscribe failed",
+        data: { tournamentId, error: String(err) },
+      });
+      // eslint-disable-next-line no-console
+      console.warn("[realtime] pending-registrations subscribe failed; refresh manually to see new entries", err);
+    }
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       void supabase.removeChannel(channel);
