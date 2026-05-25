@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
+import { Modal } from "./ui/Modal";
 
 export function AdminManager({ currentEmail, onClose }: { currentEmail: string | null; onClose: () => void }) {
   const [admins, setAdmins] = useState<db.TournamentAdmin[]>([]);
@@ -50,15 +51,8 @@ export function AdminManager({ currentEmail, onClose }: { currentEmail: string |
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 16, backdropFilter: "blur(6px)" }}
-      onClick={onClose}
-    >
-      <div
-        style={{ background: "#0f1e36", borderRadius: 14, padding: 28, maxWidth: 500, width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: "1px solid #1a3050", color: "#fff" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+    <Modal open onClose={onClose} size="md" surface="dark" zIndex={2000} ariaLabel="Manage admins">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
           <div style={{ width: 4, height: 22, background: "#00d4ff", borderRadius: 1 }} />
           <h3 className="font-display" style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }}>
             Manage Admins
@@ -134,14 +128,13 @@ export function AdminManager({ currentEmail, onClose }: { currentEmail: string |
           )}
         </div>
 
-        <button
-          onClick={onClose}
-          className="font-display"
-          style={{ width: "100%", marginTop: 18, padding: "10px 14px", borderRadius: 8, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontWeight: 700, fontSize: 12, letterSpacing: 1, textTransform: "uppercase", cursor: "pointer" }}
-        >
-          Close
-        </button>
-      </div>
-    </div>
+      <button
+        onClick={onClose}
+        className="font-display"
+        style={{ width: "100%", marginTop: 18, padding: "10px 14px", borderRadius: 8, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontWeight: 700, fontSize: 12, letterSpacing: 1, textTransform: "uppercase", cursor: "pointer", minHeight: 44 }}
+      >
+        Close
+      </button>
+    </Modal>
   );
 }

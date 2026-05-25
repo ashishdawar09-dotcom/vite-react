@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Modal } from "./ui/Modal";
 import type { Player, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -98,65 +99,57 @@ export function PromoteTeamPicker({
     : (t.name ?? "(team)");
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 16, backdropFilter: "blur(6px)" }}
-      onClick={onClose}
-    >
-      <div
-        style={{ background: "#0f1e36", borderRadius: 14, padding: 24, maxWidth: 560, width: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: "1px solid #1a3050", color: "#fff" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <div style={{ width: 4, height: 22, background: "#a855f7", borderRadius: 1 }} />
-          <h3 className="font-display" style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }}>{title}</h3>
-        </div>
-        {subtitle && <p style={{ margin: "0 0 14px 14px", fontSize: 12, color: "#94a3b8" }}>{subtitle}</p>}
-
-        <input
-          type="search"
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          placeholder="Filter teams…"
-          autoFocus
-          style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #1a3050", background: "#0a1628", color: "#fff", fontSize: 13, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
-        />
-
-        <div style={{ flex: 1, overflowY: "auto", borderRadius: 8, border: "1px solid #1a3050", background: "#0a1628" }}>
-          {rows.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: "#64748b", fontSize: 13 }}>No teams match.</div>
-          ) : rows.map(({ team: t, status }) => {
-            const meta = STATUS_META[status];
-            const isBusy = busyId === t.id;
-            const disabled = isBusy;
-            return (
-              <button
-                key={t.id}
-                onClick={() => handlePick(t.id, status)}
-                disabled={disabled}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid #11243f", background: "transparent", color: "#fff", textAlign: "left", cursor: disabled ? "wait" : "pointer", opacity: status === "eliminated" || status === "in-bracket" ? 0.6 : 1, transition: "background .12s" }}
-                onMouseEnter={e => { e.currentTarget.style.background = "#11243f"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(t)}</div>
-                </div>
-                <span className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, padding: "3px 8px", border: `1px solid ${meta.color}55`, background: `${meta.color}10`, color: meta.color, borderRadius: 4, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                  {meta.icon} {meta.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={onClose}
-          className="font-display"
-          style={{ marginTop: 14, padding: "10px 14px", borderRadius: 8, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontWeight: 700, fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer" }}
-        >
-          Cancel
-        </button>
+    <Modal open onClose={onClose} size="lg" surface="dark" zIndex={2000} ariaLabel={title}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+        <div style={{ width: 4, height: 22, background: "#a855f7", borderRadius: 1 }} />
+        <h3 className="font-display" style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase" }}>{title}</h3>
       </div>
-    </div>
+      {subtitle && <p style={{ margin: "0 0 14px 14px", fontSize: 12, color: "#94a3b8" }}>{subtitle}</p>}
+
+      <input
+        type="search"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Filter teams…"
+        autoFocus
+        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #1a3050", background: "#0a1628", color: "#fff", fontSize: 13, outline: "none", marginBottom: 12, boxSizing: "border-box" }}
+      />
+
+      <div style={{ overflowY: "auto", borderRadius: 8, border: "1px solid #1a3050", background: "#0a1628", maxHeight: 360 }}>
+        {rows.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center", color: "#64748b", fontSize: 13 }}>No teams match.</div>
+        ) : rows.map(({ team: t, status }) => {
+          const meta = STATUS_META[status];
+          const isBusy = busyId === t.id;
+          const disabled = isBusy;
+          return (
+            <button
+              key={t.id}
+              onClick={() => handlePick(t.id, status)}
+              disabled={disabled}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", border: "none", borderBottom: "1px solid #11243f", background: "transparent", color: "#fff", textAlign: "left", cursor: disabled ? "wait" : "pointer", opacity: status === "eliminated" || status === "in-bracket" ? 0.6 : 1, transition: "background .12s" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#11243f"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(t)}</div>
+              </div>
+              <span className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, padding: "3px 8px", border: `1px solid ${meta.color}55`, background: `${meta.color}10`, color: meta.color, borderRadius: 4, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                {meta.icon} {meta.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={onClose}
+        className="font-display"
+        style={{ marginTop: 14, padding: "10px 14px", borderRadius: 8, border: "1px solid #1a3050", background: "transparent", color: "#94a3b8", fontWeight: 700, fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", cursor: "pointer", width: "100%", minHeight: 44 }}
+      >
+        Cancel
+      </button>
+    </Modal>
   );
 }
 
