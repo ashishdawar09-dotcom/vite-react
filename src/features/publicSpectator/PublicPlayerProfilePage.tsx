@@ -12,9 +12,10 @@ import type { Player, Tournament } from "../../types";
  * Public player profile — /p/:id
  *
  * Two-step fetch: the player row tells us which tournament they belong to,
- * then we load that tournament via usePublicTournament. The same
- * PlayerProfileView the admin uses powers the page — passing isAdmin=false
- * disables the email-edit affordance for anonymous viewers.
+ * then we load that tournament directly by id (bypassing the slug-first
+ * usePublicTournament hook so this route also works pre-v15 migration). The
+ * same PlayerProfileView the admin uses powers the page — passing
+ * isAdmin=false disables the email-edit affordance for anonymous viewers.
  */
 export function PublicPlayerProfilePage() {
   const { id } = useParams<{ id: string }>();
