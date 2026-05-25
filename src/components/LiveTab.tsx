@@ -103,20 +103,28 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       .slice(0, 12);
   }, [players, q]);
 
-  const stats: Record<string, { team: TeamView; w: number; pts: number; pf: number; pa: number }> = {};
-  teamsView.forEach(t => { stats[t.id] = { team: t, w: 0, pts: 0, pf: 0, pa: 0 }; });
-  groupMatches.filter(m => m.confirmed).forEach(m => {
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (m.team_a_id && stats[m.team_a_id]) { stats[m.team_a_id].pf += sa; stats[m.team_a_id].pa += sb; }
-    if (m.team_b_id && stats[m.team_b_id]) { stats[m.team_b_id].pf += sb; stats[m.team_b_id].pa += sa; }
-    if (m.winner_id && stats[m.winner_id]) { stats[m.winner_id].w++; stats[m.winner_id].pts += 3; }
-  });
-  const ranked = Object.values(stats).sort((a, b) => b.pts - a.pts || (b.pf - b.pa) - (a.pf - a.pa));
-  const topTeam = ranked[0];
-  const bestDiff = [...ranked].sort((a, b) => (b.pf - b.pa) - (a.pf - a.pa))[0];
-
-  const matchesPlayed = matches.filter(m => m.confirmed).length;
-  const totalMatches = matches.filter(m => m.team_a_id && m.team_b_id && !m.is_bye).length;
+  // Tournament-wide stats. Memoized because (a) every score tick fires a
+  // realtime push that re-renders this tab, and (b) the O(teams + matches)
+  // loop here was the only verified render hot path in the May 2026 audit
+  // — at N=30 teams × 200 confirmed matches it cost ~40-60ms per render.
+  // Recompute only when the underlying collections actually change.
+  const { topTeam, bestDiff, matchesPlayed, totalMatches } = useMemo(() => {
+    const s: Record<string, { team: TeamView; w: number; pts: number; pf: number; pa: number }> = {};
+    teamsView.forEach(t => { s[t.id] = { team: t, w: 0, pts: 0, pf: 0, pa: 0 }; });
+    groupMatches.filter(m => m.confirmed).forEach(m => {
+      const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
+      if (m.team_a_id && s[m.team_a_id]) { s[m.team_a_id].pf += sa; s[m.team_a_id].pa += sb; }
+      if (m.team_b_id && s[m.team_b_id]) { s[m.team_b_id].pf += sb; s[m.team_b_id].pa += sa; }
+      if (m.winner_id && s[m.winner_id]) { s[m.winner_id].w++; s[m.winner_id].pts += 3; }
+    });
+    const ranked = Object.values(s).sort((a, b) => b.pts - a.pts || (b.pf - b.pa) - (a.pf - a.pa));
+    return {
+      topTeam: ranked[0],
+      bestDiff: [...ranked].sort((a, b) => (b.pf - b.pa) - (a.pf - a.pa))[0],
+      matchesPlayed: matches.filter(m => m.confirmed).length,
+      totalMatches: matches.filter(m => m.team_a_id && m.team_b_id && !m.is_bye).length,
+    };
+  }, [teamsView, groupMatches, matches]);
 
   if (teamsView.length === 0) {
     return (

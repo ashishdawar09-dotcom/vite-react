@@ -1,9 +1,15 @@
 import { supabase } from "./supabase";
 import { notifyCourtAllocated } from "./notifications";
+import type { Database } from "./database.types";
 import type {
   Category, Match, PendingRegistration, Player, PlayerCategory,
   PublicRegistrationPayload, Team, Tournament,
 } from "../types";
+
+// Bridge alias: the generated Insert type the typed Supabase client expects
+// for `matches`. Different from `Partial<Match>` because the DB requires the
+// non-null columns (category_id, tournament_id, stage, slot_idx) on every row.
+type MatchInsert = Database["public"]["Tables"]["matches"]["Insert"];
 
 const PAL = ["#E63946","#457B9D","#2A9D8F","#E9C46A","#F4A261","#264653","#6A4C93","#1982C4","#FF595E","#8AC926","#FFCA3A","#6A0572","#3A86FF","#FB5607","#FF006E","#8338EC"];
 
@@ -80,13 +86,17 @@ export async function createTournament(name: string, eventDate: string | null, s
   if (error) throw error;
   if (seedPlayers) {
     const rows = SEED.map((s, i) => {
-      const obj = typeof s === "string" ? { name: s } : s;
+      // SEED entries are either plain names or `{ name, note }`. Narrow via
+      // typeof so we don't have to escape-hatch the union with `as any`.
+      const isObj = typeof s !== "string";
+      const name = isObj ? s.name : s;
+      const note = isObj ? (s.note ?? null) : null;
       return {
         tournament_id: t.id,
-        name: obj.name,
-        note: (obj as any).note ?? null,
+        name,
+        note,
         color: PAL[i % PAL.length],
-        active: !(obj as any).note,
+        active: !note,
         sort_order: i,
       };
     });
@@ -312,11 +322,17 @@ export async function deleteTeamsContainingPlayer(player_id: string, category_id
 
 // MATCHES ----------------------------------------------------------------
 
-// Match inserts: rows may omit fields with DB defaults (extended_minutes,
-// scheduled_at, court_number, queue_position, etc.) so we accept Partial.
+// Match inserts: callers fill the DB-required fields (category_id,
+// tournament_id, stage, slot_idx) and may omit anything with a DB default
+// (extended_minutes, scheduled_at, court_number, queue_position, etc.).
+// We accept `Partial<Match>[]` to keep call sites concise but bridge to the
+// generated Insert shape so PostgREST accepts the payload. The typed client
+// would otherwise complain that `Partial<Match>` allows undefined where the
+// DB demands a string — a real schema contract worth surfacing at the
+// boundary, not at every call site.
 export async function insertMatches(rows: Partial<Match>[]) {
   if (!rows.length) return;
-  const { error } = await supabase.from("matches").insert(rows);
+  const { error } = await supabase.from("matches").insert(rows as MatchInsert[]);
   if (error) throw error;
 }
 
@@ -448,7 +464,9 @@ export async function extendMatch(id: string, extraMinutes: number) {
   if (error) {
     if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
       const { data } = await supabase.from("matches").select("extended_minutes").eq("id", id).single();
-      const current = (data as any)?.extended_minutes ?? 0;
+      // Typed client narrows this to `{ extended_minutes: number } | null` —
+      // no escape-hatch cast needed any more.
+      const current = data?.extended_minutes ?? 0;
       const { error: e } = await supabase.from("matches").update({ extended_minutes: current + extraMinutes }).eq("id", id);
       if (e) throw e;
       return;

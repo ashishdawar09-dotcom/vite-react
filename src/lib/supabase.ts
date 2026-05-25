@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
 const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || "";
 const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || "";
@@ -56,7 +57,12 @@ async function resilientFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   throw lastErr;
 }
 
-export const supabase = createClient(clientUrl, clientKey, {
+// The `<Database>` generic flows row shapes from `./database.types.ts` into
+// every `.from('players').select()` / `.from('matches').update()` call, so
+// the manual `(data as Player[])` casts that used to live in `db.ts` become
+// compile-time guaranteed. Regenerate types after any schema migration via
+// `supabase gen types typescript --project-id <id>` (see header of types file).
+export const supabase = createClient<Database>(clientUrl, clientKey, {
   auth: { persistSession: true, autoRefreshToken: true },
   global: { fetch: resilientFetch },
 });
