@@ -1,0 +1,8 @@
+# Allow all crawlers to index the public surfaces. The admin shell at /
+# is fine to crawl too — it just shows the spectator LIVE tab for anyone
+# without an authenticated session.
+User-agent: *
+Allow: /
+
+# Public spectator + share URLs are the high-value pages for indexing.
+# Sitemap is generated at deploy time (TODO: ship sitemap.xml later).

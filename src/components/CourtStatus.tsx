@@ -46,7 +46,10 @@ export const CourtStatus = React.memo(function CourtStatus({
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <div style={{ width: 4, height: 18, background: "#00d4ff", borderRadius: 1 }} />
-        <h3 className="font-display" style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>Court Status</h3>
+        {/* h2 (not h3) so the heading hierarchy on the spectator page goes
+            h1 (PublicPageShell tournament name) -> h2 (this section) without
+            skipping h2. Same visual styling. */}
+        <h2 className="font-display" style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>Court Status</h2>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill,minmax(${courts.length === 1 ? 200 : 240}px,1fr))`, gap: 10 }}>
         {courts.map(n => {
@@ -125,7 +128,11 @@ export const CourtStatus = React.memo(function CourtStatus({
                   )}
                 </>
               ) : (
-                <div style={{ fontSize: 12, color: "#475569", fontStyle: "italic", marginTop: 4 }}>Available for next match</div>
+                // Color bumped from #475569 to #94A3B8 in the 2026-05-25 perf
+                // pass — Lighthouse flagged the prior value as 2.2:1 contrast
+                // (italic 12px on the #0f1e36 elevated surface). #94A3B8 gives
+                // ~5.8:1 and still reads as a "muted hint".
+                <div style={{ fontSize: 12, color: "#94A3B8", fontStyle: "italic", marginTop: 4 }}>Available for next match</div>
               )}
             </div>
           );
