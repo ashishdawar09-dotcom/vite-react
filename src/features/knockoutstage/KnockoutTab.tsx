@@ -12,8 +12,8 @@ import type { Category, Match, TeamWithPlayers } from "../../types";
  * closes over App-level state — keeping it inside App.tsx avoids
  * threading 15+ props through every tab that uses it.
  */
-function roundName(numRounds: number, i: number): string {
-  if (i === numRounds - 1) return "🏆 Final";
+function roundName(numRounds: number, i: number, hasBronze: boolean): string {
+  if (i === numRounds - 1) return hasBronze ? "🏆 Final · 🥉 3rd Place" : "🏆 Final";
   if (i === numRounds - 2) return "Semi-Final";
   if (i === numRounds - 3) return "Quarter-Final";
   return `Round ${i + 1}`;
@@ -76,31 +76,53 @@ export function KnockoutTab({
          drawing itself round by round on first paint. Reduced-motion: static. */}
       <div style={{ overflowX: "auto", paddingBottom: 20 }}>
         <div style={{ display: "flex", gap: 0, minWidth: knockout.length * 290 }}>
-          {knockout.map((round, ri) => (
-            <motion.div
-              key={ri}
-              initial={reduceMotion ? false : { opacity: 0, x: -16 }}
-              animate={reduceMotion ? false : { opacity: 1, x: 0 }}
-              transition={reduceMotion ? undefined : { duration: 0.45, ease: [0.16, 1, 0.3, 1] as const, delay: ri * 0.12 }}
-              style={{ flex: 1, minWidth: 270, display: "flex", flexDirection: "column" }}
-            >
-              <div style={{ textAlign: "center", fontWeight: 800, color: "#1a1a2e", fontSize: 13, textTransform: "uppercase", letterSpacing: 1, padding: "10px 12px", background: "linear-gradient(90deg,#e0e7ff,#ede9fe,#e0e7ff)", borderRadius: 10, margin: "0 8px 16px" }}>
-                {roundName(knockout.length, ri)}
-              </div>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", gap: 14, padding: "0 8px" }}>
-                {round.map((m, mi) => (
-                  <motion.div
-                    key={m.id}
-                    initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-                    animate={reduceMotion ? false : { opacity: 1, y: 0 }}
-                    transition={reduceMotion ? undefined : { duration: 0.35, ease: [0.16, 1, 0.3, 1] as const, delay: ri * 0.12 + 0.18 + mi * 0.04 }}
-                  >
-                    <MatchCard match={m} editable={!m.is_bye} matchMinutes={currentCategory?.match_minutes} />
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          ))}
+          {knockout.map((round, ri) => {
+            const isFinalRound = ri === knockout.length - 1;
+            const hasBronze = round.some(m => m.is_bronze);
+            return (
+              <motion.div
+                key={ri}
+                initial={reduceMotion ? false : { opacity: 0, x: -16 }}
+                animate={reduceMotion ? false : { opacity: 1, x: 0 }}
+                transition={reduceMotion ? undefined : { duration: 0.45, ease: [0.16, 1, 0.3, 1] as const, delay: ri * 0.12 }}
+                style={{ flex: 1, minWidth: 270, display: "flex", flexDirection: "column" }}
+              >
+                <div style={{ textAlign: "center", fontWeight: 800, color: "#1a1a2e", fontSize: 13, textTransform: "uppercase", letterSpacing: 1, padding: "10px 12px", background: "linear-gradient(90deg,#e0e7ff,#ede9fe,#e0e7ff)", borderRadius: 10, margin: "0 8px 16px" }}>
+                  {roundName(knockout.length, ri, hasBronze)}
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", gap: 14, padding: "0 8px" }}>
+                  {round.map((m, mi) => {
+                    // Per-card subtitle for the final round when bronze is present;
+                    // distinguishes 🏆 Final from 🥉 3rd Place at a glance.
+                    const subtitle = isFinalRound && hasBronze
+                      ? (m.is_bronze ? "🥉 3RD PLACE" : "🏆 FINAL")
+                      : null;
+                    return (
+                      <motion.div
+                        key={m.id}
+                        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                        animate={reduceMotion ? false : { opacity: 1, y: 0 }}
+                        transition={reduceMotion ? undefined : { duration: 0.35, ease: [0.16, 1, 0.3, 1] as const, delay: ri * 0.12 + 0.18 + mi * 0.04 }}
+                      >
+                        {subtitle && (
+                          <div style={{
+                            textAlign: "center",
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: 1.5,
+                            color: m.is_bronze ? "#b45309" : "#f59e0b",
+                            marginBottom: 6,
+                            textTransform: "uppercase",
+                          }}>{subtitle}</div>
+                        )}
+                        <MatchCard match={m} editable={!m.is_bye} matchMinutes={currentCategory?.match_minutes} />
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </div>

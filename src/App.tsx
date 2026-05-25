@@ -472,6 +472,19 @@ export default function App() {
       }
       prevCount = cnt;
     }
+    // Bronze / 3rd-place playoff. Only inserted when the category opts in
+    // AND the bracket actually has semi-finals (slots >= 4 → rds >= 2). Lives
+    // in the same round_idx as the Final (last round) at slot_idx=1; the two
+    // SF losers are routed here by propagateWinner.
+    if (cat.has_bronze_match && slots >= 4) {
+      rows.push({
+        tournament_id: current.id, category_id: currentCategoryId, stage: "knockout",
+        group_idx: null, round_idx: rds - 1, slot_idx: 1,
+        team_a_id: null, team_b_id: null, score_a: null, score_b: null, winner_id: null,
+        confirmed: false, is_bye: false, status: "pending", started_at: null,
+        is_walkover: false, is_bronze: true,
+      });
+    }
     await db.insertMatches(rows);
     await db.setCategoryPhase(currentCategoryId, "knockout");
     setTab("knockout");
@@ -622,20 +635,50 @@ export default function App() {
     if (m.stage !== "knockout" || m.round_idx == null || !winner_id) return;
     const nextRound = knockout[m.round_idx + 1];
     if (!nextRound) return;
+    // The Final / next-round target. Bronze lives in the same final round at
+    // slot_idx=1, but never gets winners pushed to it through this branch —
+    // it's handled by the dedicated isSemiFinal block below. Skip bronze
+    // explicitly so `find` returns the actual bracket-tree target.
     const ni = Math.floor(m.slot_idx / 2);
-    const nm = nextRound[ni];
-    if (!nm) return;
-    const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
-    const patch: Partial<Match> = { [side]: winner_id };
-    if (nm.winner_id && (nm.team_a_id === m.winner_id || nm.team_b_id === m.winner_id)) {
-      patch.winner_id = null;
-      patch.confirmed = false;
-      patch.score_a = null;
-      patch.score_b = null;
-      patch.status = "pending";
-      patch.confirmed_at = null;
+    const nm = nextRound.find(x => !x.is_bronze && x.slot_idx === ni) ?? null;
+    if (nm) {
+      const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
+      const patch: Partial<Match> = { [side]: winner_id };
+      if (nm.winner_id && (nm.team_a_id === m.winner_id || nm.team_b_id === m.winner_id)) {
+        patch.winner_id = null;
+        patch.confirmed = false;
+        patch.score_a = null;
+        patch.score_b = null;
+        patch.status = "pending";
+        patch.confirmed_at = null;
+      }
+      await db.updateMatch(nm.id, patch);
     }
-    await db.updateMatch(nm.id, patch);
+
+    // Bronze / 3rd-place playoff. When the SF resolves, the LOSER (not the
+    // winner) goes to the bronze match in the final round. SF slot 0 →
+    // bronze.team_a_id; SF slot 1 → bronze.team_b_id. Only runs when bronze
+    // exists for this bracket (category opt-in + slots ≥ 4 at gen time).
+    const finalRoundIdx = knockout.length - 1;
+    const isSemiFinal = m.round_idx === finalRoundIdx - 1;
+    if (isSemiFinal) {
+      const bronze = nextRound.find(x => x.is_bronze);
+      if (bronze) {
+        const loserId = m.team_a_id === winner_id ? m.team_b_id : m.team_a_id;
+        const bronzeSide = m.slot_idx === 0 ? "team_a_id" : "team_b_id";
+        const bronzePatch: Partial<Match> = { [bronzeSide]: loserId ?? null };
+        const currentBronzeSideTeam = bronzeSide === "team_a_id" ? bronze.team_a_id : bronze.team_b_id;
+        if (bronze.confirmed && currentBronzeSideTeam !== loserId) {
+          bronzePatch.winner_id = null;
+          bronzePatch.confirmed = false;
+          bronzePatch.score_a = null;
+          bronzePatch.score_b = null;
+          bronzePatch.status = "pending";
+          bronzePatch.confirmed_at = null;
+        }
+        await db.updateMatch(bronze.id, bronzePatch);
+      }
+    }
   };
   const confirmInline = async (m: Match) => {
     if (!guard()) return;

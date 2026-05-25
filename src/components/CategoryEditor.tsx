@@ -25,6 +25,7 @@ export function CategoryEditor({
   const [startsAt, setStartsAt] = useState<string>(category?.starts_at ? toLocalInput(category.starts_at) : "");
   const [ageBand, setAgeBand] = useState<AgeBand | null>(category?.age_band ?? null);
   const [allowSolo, setAllowSolo] = useState<boolean>(category?.allow_solo_signup ?? false);
+  const [hasBronze, setHasBronze] = useState<boolean>(category?.has_bronze_match ?? false);
   const [busy, setBusy] = useState(false);
 
   // Estimated number of teams in this category — drives the format recommender.
@@ -86,6 +87,7 @@ export function CategoryEditor({
           starts_at: startsIso,
           age_band: ageBand,
           allow_solo_signup: allowSolo,
+          has_bronze_match: hasBronze,
         };
         if (selectedPlan) {
           patch.groups_count = selectedPlan.groupsCount;
@@ -95,8 +97,8 @@ export function CategoryEditor({
         await db.updateCategory(category.id, patch);
       } else {
         const created = await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
-        if (ageBand !== null || allowSolo) {
-          await db.updateCategory(created.id, { age_band: ageBand, allow_solo_signup: allowSolo });
+        if (ageBand !== null || allowSolo || hasBronze) {
+          await db.updateCategory(created.id, { age_band: ageBand, allow_solo_signup: allowSolo, has_bronze_match: hasBronze });
         }
       }
       onClose();
@@ -163,6 +165,21 @@ export function CategoryEditor({
             </label>
           </Field>
         )}
+
+        <Field label="3rd-place playoff">
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", color: "#cbd5e1" }}>
+            <input
+              type="checkbox"
+              checked={hasBronze}
+              onChange={e => setHasBronze(e.target.checked)}
+              style={{ accentColor: "#f59e0b", width: 16, height: 16 }}
+            />
+            <span>Add a bronze match — the two semi-final losers play for 3rd place.</span>
+          </label>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+            Only takes effect once the bracket has semi-finals (4 or more qualifiers).
+          </div>
+        </Field>
 
         {/* Tournament format recommender — appears once the category has assigned
             players (so the team count is known). Picking an option saves
