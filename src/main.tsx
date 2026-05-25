@@ -1,4 +1,4 @@
-import { lazy, StrictMode, Suspense, useEffect } from 'react'
+import { StrictMode, Suspense, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
@@ -7,14 +7,18 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { IosInstallHint } from './components/IosInstallHint'
 import { LottieLoader } from './components/ui/lottie-loader'
 import { ToastProvider, ToastBridge } from './components/Toast'
+import { clearChunkReloadGuard, lazyWithReload } from './lib/lazyWithReload'
 
 // Reset scroll to top whenever the URL changes. Without this, navigating
 // from a half-scrolled /t/:slug spectator view to /p/:id leaves the new
 // page scrolled to wherever the previous one was — feels broken on iOS.
+// Also clears the chunk-reload guard once we've successfully mounted — that
+// proves chunks loaded fine, so the next deploy gets its own one-shot retry.
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
     window.scrollTo(0, 0);
+    clearChunkReloadGuard();
   }, [pathname]);
   return null;
 }
@@ -23,28 +27,28 @@ function ScrollToTop() {
 // route-split so a visitor to /register/:id, /t/:slug, or /p/:id never
 // downloads the admin code, and the admin shell isn't blocking the first
 // paint on /.
-const App = lazy(() => import('./App'))
-const PublicRegistrationPage = lazy(() =>
+const App = lazyWithReload(() => import('./App'))
+const PublicRegistrationPage = lazyWithReload(() =>
   import('./features/publicRegistration/PublicRegistrationPage').then((m) => ({
     default: m.PublicRegistrationPage,
   })),
 )
-const PublicSpectatorPage = lazy(() =>
+const PublicSpectatorPage = lazyWithReload(() =>
   import('./features/publicSpectator/PublicSpectatorPage').then((m) => ({
     default: m.PublicSpectatorPage,
   })),
 )
-const VenueTvPage = lazy(() =>
+const VenueTvPage = lazyWithReload(() =>
   import('./features/publicSpectator/VenueTvPage').then((m) => ({
     default: m.VenueTvPage,
   })),
 )
-const ResultsPage = lazy(() =>
+const ResultsPage = lazyWithReload(() =>
   import('./features/publicSpectator/ResultsPage').then((m) => ({
     default: m.ResultsPage,
   })),
 )
-const PublicPlayerProfilePage = lazy(() =>
+const PublicPlayerProfilePage = lazyWithReload(() =>
   import('./features/publicSpectator/PublicPlayerProfilePage').then((m) => ({
     default: m.PublicPlayerProfilePage,
   })),
