@@ -39,11 +39,11 @@ const BUDGETS_KB = {
   "react-vendor-": 80,
   // Sentry — eager-loaded would dominate; lazy-loaded chunk OK. Current: ~27 KB.
   "sentry-": 50,
-  // Lottie player (@lottiefiles/dotlottie-react). Lazy-loaded.
-  // Current: ~37 KB. Could be slimmer if we ship raw lottie-web instead,
-  // but the dotlottie player accepts both lottie.json + .lottie bundles
-  // which is a real ergonomic win. Hold the line; revisit if it grows.
-  "lottie-": 45,
+  // Lottie chunk removed in the 2026-05-25 perf pass — `LottieLoader` now
+  // renders a hand-rolled SVG ring + ShuttleSVG (CSS-keyframe animated) and
+  // weighs ~0.5 KB inlined into the App chunk. The dotlottie player dep is
+  // gone from package.json. Re-add a "lottie-" budget here only if you
+  // intentionally re-introduce a JSON-driven animation library.
   // Public registration page. Current: ~8 KB.
   "PublicRegistrationPage-": 25,
   // Heavy admin tab. Current: ~22 KB.

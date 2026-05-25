@@ -36,7 +36,10 @@ export default defineConfig({
       },
       injectManifest: {
         // What gets precached. Workbox writes this list into self.__WB_MANIFEST.
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,webp,woff2,lottie}'],
+        // `.lottie` removed in the 2026-05-25 perf pass — the previous cat
+        // loader was replaced with a hand-rolled SVG/CSS spinner, so there
+        // are no `.lottie` files to precache.
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,webp,woff2}'],
         // iOS apple-touch-startup-image PNGs are large (1-2 MB each) and
         // are loaded directly by Safari at standalone-launch via the <link>
         // tag in index.html — the SW never needs to serve them. Excluding
@@ -64,12 +67,8 @@ export default defineConfig({
           if (id.includes('node_modules/@sentry')) {
             return 'sentry';
           }
-          if (
-            id.includes('node_modules/@lottiefiles') ||
-            id.includes('node_modules/dotlottie')
-          ) {
-            return 'lottie';
-          }
+          // `lottie` chunk removed 2026-05-25: dotlottie player is no longer
+          // a dependency. LottieLoader now uses hand-rolled SVG + CSS keyframes.
           if (id.includes('node_modules/canvas-confetti')) {
             return 'confetti';
           }
