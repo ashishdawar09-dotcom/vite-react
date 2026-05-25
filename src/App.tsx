@@ -1,10 +1,10 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion"; /* NEW: makeover motion */
 import * as Sentry from "@sentry/react";
 import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./hooks/useIsMobile"; /* NEW: mobile IA detection */
 import { useTournamentData } from "./hooks/useTournamentData";
-import { useScheduling } from "./hooks/useScheduling";
+import { useTournamentDerived } from "./hooks/useTournamentDerived";
 import * as db from "./lib/db";
 import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
@@ -128,112 +128,35 @@ export default function App() {
     });
   }, [categories, currentId]);
 
-  const currentCategory = categories.find(c => c.id === currentCategoryId) ?? null;
-  const phase: "none" | "group" | "knockout" = currentCategory?.phase
-    ?? (categories.find(c => c.phase !== "none")?.phase ?? "none");
-
-  // ALL teams including singles (p2 may be null)
-  const playerById = useMemo(() => Object.fromEntries(players.map(p => [p.id, p])), [players]);
-  const allTeamsView: TeamView[] = useMemo(
-    () => teams.map(t => {
-      const p1 = playerById[t.p1_id];
-      const p2 = t.p2_id ? playerById[t.p2_id] : null;
-      return { ...t, p1, p2 } as TeamView;
-    }).filter(t => t.p1) as TeamView[],
-    [teams, playerById]
-  );
-  const allTeamById = useMemo(() => Object.fromEntries(allTeamsView.map(t => [t.id, t])), [allTeamsView]);
-
-  // Scoped to currentCategory (or all when null)
-  const teamsView: TeamView[] = useMemo(
-    () => currentCategoryId ? allTeamsView.filter(t => t.category_id === currentCategoryId) : allTeamsView,
-    [allTeamsView, currentCategoryId]
-  );
-  const teamById = useMemo(() => Object.fromEntries(teamsView.map(t => [t.id, t])), [teamsView]);
-
-  const categoryMatches = useMemo(() => currentCategoryId ? matches.filter(m => m.category_id === currentCategoryId) : matches, [matches, currentCategoryId]);
-  // Stable sort: tie-break on id so cards never swap positions between
-  // snapshot polls while a user is editing a score.
-  const groupMatches = useMemo(() =>
-    categoryMatches.filter(m => m.stage === "group").sort((a, b) =>
-      (a.group_idx! - b.group_idx!) ||
-      (a.slot_idx - b.slot_idx) ||
-      a.id.localeCompare(b.id)
-    ),
-  [categoryMatches]);
-  const knockoutMatches = useMemo(() =>
-    categoryMatches.filter(m => m.stage === "knockout").sort((a, b) =>
-      (a.round_idx! - b.round_idx!) ||
-      (a.slot_idx - b.slot_idx) ||
-      a.id.localeCompare(b.id)
-    ),
-  [categoryMatches]);
-
-  // Schedule projection across all categories (for Live + Matches tabs)
-  const numCourts = current?.num_courts ?? 2;
-  const { projected: projectedMatches, byId: projectedById, tournamentDeltaMin, tournamentDeltaLabel, liveByCourt } = useScheduling(matches, categories, numCourts);
-
-  const groups: TeamView[][] = useMemo(() => {
-    const map = new Map<number, Set<string>>();
-    groupMatches.forEach(m => {
-      if (m.group_idx == null) return;
-      if (!map.has(m.group_idx)) map.set(m.group_idx, new Set());
-      const s = map.get(m.group_idx)!;
-      if (m.team_a_id) s.add(m.team_a_id);
-      if (m.team_b_id) s.add(m.team_b_id);
-    });
-    return [...map.keys()].sort((a, b) => a - b).map(gi => [...map.get(gi)!].map(id => teamById[id]).filter(Boolean) as TeamView[]);
-  }, [groupMatches, teamById]);
-
-  const knockout: Match[][] = useMemo(() => {
-    const map = new Map<number, Match[]>();
-    knockoutMatches.forEach(m => {
-      if (m.round_idx == null) return;
-      if (!map.has(m.round_idx)) map.set(m.round_idx, []);
-      map.get(m.round_idx)!.push(m);
-    });
-    return [...map.keys()].sort((a, b) => a - b).map(ri => map.get(ri)!.sort((a, b) => a.slot_idx - b.slot_idx));
-  }, [knockoutMatches]);
-
-  // Map each player to the set of categories they're assigned to (via junction table)
-  const playerCategoryMap = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const pc of playerCategories) {
-      if (!map.has(pc.player_id)) map.set(pc.player_id, new Set());
-      map.get(pc.player_id)!.add(pc.category_id);
-    }
-    return map;
-  }, [playerCategories]);
-
-  // Active players in the *current category* (or all if no filter). This is
-  // the source of truth for who's eligible to be paired here. Without this
-  // filter, Auto-Pair / Partner-Picker pull in players from other categories
-  // and tag the resulting teams with the wrong category_id.
-  const active = useMemo(() => {
-    const all = players.filter(p => p.active);
-    if (!currentCategoryId) return all;
-    return all.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId));
-  }, [players, currentCategoryId, playerCategoryMap]);
-  const paired = useMemo(
-    () => new Set(teamsView.flatMap(t => [t.p1_id, t.p2_id]).filter((id): id is string => id !== null)),
-    [teamsView],
-  );
-  const unpaired = useMemo(
-    () => active.filter(p => !paired.has(p.id)),
-    [active, paired],
-  );
-
-  // Teams currently in the viewed category whose players don't all belong to
-  // this category — leftovers from the pre-fix Auto-Pair bug. Surfaced via
-  // the "Clean up" button on the Teams tab.
-  const invalidTeamsInCategory = useMemo(() => {
-    if (!currentCategoryId) return [];
-    return teamsView.filter(t => {
-      const p1Ok = playerCategoryMap.get(t.p1_id)?.has(currentCategoryId) ?? false;
-      const p2Ok = !t.p2_id || (playerCategoryMap.get(t.p2_id)?.has(currentCategoryId) ?? false);
-      return !p1Ok || !p2Ok;
-    });
-  }, [teamsView, currentCategoryId, playerCategoryMap]);
+  // All read-only data derivations are now centralized in useTournamentDerived
+  // so App.tsx stays focused on stateful behaviour (modals, mutations, form
+  // state) — data shaping lives in its own hook. ~110 lines of inline useMemo
+  // chains moved out 2026-05-25.
+  const {
+    currentCategory,
+    phase,
+    playerById,
+    catById,
+    playerCategoryMap,
+    allTeamsView,
+    allTeamById,
+    teamsView,
+    teamById,
+    groupMatches,
+    knockoutMatches,
+    groups,
+    knockout,
+    active,
+    paired,
+    unpaired,
+    invalidTeamsInCategory,
+    numCourts,
+    projectedMatches,
+    projectedById,
+    tournamentDeltaMin,
+    tournamentDeltaLabel,
+    liveByCourt,
+  } = useTournamentDerived(current, players, teams, matches, categories, playerCategories, currentCategoryId);
 
   // Sync the in-progress inline category-edit set with the underlying map.
   // - Open editor: seed local set from current memberships
@@ -246,8 +169,6 @@ export default function App() {
       setPendingPlayerCats(null);
     }
   }, [editingPlayerCats, playerCategoryMap]);
-
-  const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
 
   const guard = () => { if (!isAdmin) { setShowLogin(true); return false; } return true; };
 
