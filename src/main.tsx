@@ -1,12 +1,23 @@
-import { lazy, StrictMode, Suspense } from 'react'
+import { lazy, StrictMode, Suspense, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { IosInstallHint } from './components/IosInstallHint'
 import { LottieLoader } from './components/ui/lottie-loader'
 import { ToastProvider, ToastBridge } from './components/Toast'
+
+// Reset scroll to top whenever the URL changes. Without this, navigating
+// from a half-scrolled /t/:slug spectator view to /p/:id leaves the new
+// page scrolled to wherever the previous one was — feels broken on iOS.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 // Lazy: App (the admin/spectator surface) and the public-only pages are
 // route-split so a visitor to /register/:id, /t/:slug, or /p/:id never
@@ -87,6 +98,7 @@ createRoot(document.getElementById('root')!).render(
       <ToastProvider>
         <ToastBridge />
         <BrowserRouter>
+          <ScrollToTop />
           <IosInstallHint />
           <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
             <Routes>

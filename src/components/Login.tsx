@@ -158,7 +158,9 @@ export function Login({ onClose }: { onClose: () => void }) {
             </>
           )}
 
+          <label htmlFor="login-email" className="sr-only">Email address</label>
           <input
+            id="login-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -214,7 +216,9 @@ export function Login({ onClose }: { onClose: () => void }) {
         </>
       ) : (
         <>
+          <label htmlFor="login-code" className="sr-only">Verification code</label>
           <input
+            id="login-code"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"

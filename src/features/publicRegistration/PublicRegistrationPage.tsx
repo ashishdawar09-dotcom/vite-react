@@ -864,12 +864,35 @@ function PushOptInButton({
   // ---- IDLE / WORKING / ERROR — render the button ----
   return (
     <>
+      {/* Two-line explainer above the CTA. Earlier copy ("Get notified when
+          your court is ready") buried the value prop in the button label.
+          Lifting it into a dedicated explainer + a tighter button label
+          measurably moves opt-in rates on signup forms. */}
+      <p style={{
+        marginTop: spacing.lg,
+        marginBottom: spacing.sm,
+        fontSize: 13,
+        fontWeight: 600,
+        color: colors.text.primaryLight,
+        lineHeight: 1.4,
+      }}>
+        Never miss your call — we'll push you the moment your court opens.
+      </p>
+      <p style={{
+        marginTop: 0,
+        marginBottom: 0,
+        fontSize: 12,
+        color: colors.text.mutedLight,
+        lineHeight: 1.4,
+      }}>
+        Works on iPhone (when installed to home screen), Android, and desktop.
+      </p>
       <button
         type="button"
         disabled={state === "working"}
         onClick={() => { void handleClick(); }}
         style={{
-          marginTop: spacing.lg, padding: "14px 20px",
+          marginTop: spacing.md, padding: "14px 20px",
           borderRadius: radii.md, border: `2px solid ${CYAN}`,
           background: colors.bg.card, color: CYAN_DARK,
           fontSize: 15, fontWeight: 800,
@@ -877,7 +900,7 @@ function PushOptInButton({
           minHeight: 48, width: "100%",
         }}
       >
-        {state === "working" ? "Enabling…" : "🔔 Get notified when your court is ready"}
+        {state === "working" ? "Enabling…" : "🔔 Turn on push notifications"}
       </button>
       {state === "error" && errMsg && (
         <div style={{ marginTop: spacing.sm, fontSize: 12, color: colors.state.live, lineHeight: 1.4 }}>

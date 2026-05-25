@@ -1,4 +1,10 @@
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+  /* Suppress the iOS grey flash on tap. Our own :focus-visible ring + the
+     in-component active/hover states already communicate the press, so the
+     default highlight just adds noise to the otherwise native PWA feel. */
+  -webkit-tap-highlight-color: transparent;
+}
 html, body, #root { margin: 0; padding: 0; min-height: 100vh; min-height: 100dvh; }
 body {
   font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -10,6 +16,21 @@ body {
      visually disorienting (the browser tries to refresh a PWA shell that
      doesn't need refreshing). `contain` keeps the gesture inside the app. */
   overscroll-behavior: contain;
+}
+
+/* Visually-hidden label — keeps form inputs accessible to screen readers
+   without altering the visual layout. Use for placeholder-only inputs that
+   should still announce themselves via `aria-labelledby`. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .font-display {
   font-family: 'Oswald', 'Inter', system-ui, sans-serif;
