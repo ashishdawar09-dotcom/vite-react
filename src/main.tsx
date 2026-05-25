@@ -8,13 +8,34 @@ import { IosInstallHint } from './components/IosInstallHint'
 import { LottieLoader } from './components/ui/lottie-loader'
 import { ToastProvider, ToastBridge } from './components/Toast'
 
-// Lazy: App (the admin/spectator surface) and PublicRegistrationPage are
-// route-split so a visitor to /register/:id never downloads the admin code,
-// and the admin shell isn't blocking the first paint on /.
+// Lazy: App (the admin/spectator surface) and the public-only pages are
+// route-split so a visitor to /register/:id, /t/:slug, or /p/:id never
+// downloads the admin code, and the admin shell isn't blocking the first
+// paint on /.
 const App = lazy(() => import('./App'))
 const PublicRegistrationPage = lazy(() =>
   import('./features/publicRegistration/PublicRegistrationPage').then((m) => ({
     default: m.PublicRegistrationPage,
+  })),
+)
+const PublicSpectatorPage = lazy(() =>
+  import('./features/publicSpectator/PublicSpectatorPage').then((m) => ({
+    default: m.PublicSpectatorPage,
+  })),
+)
+const VenueTvPage = lazy(() =>
+  import('./features/publicSpectator/VenueTvPage').then((m) => ({
+    default: m.VenueTvPage,
+  })),
+)
+const ResultsPage = lazy(() =>
+  import('./features/publicSpectator/ResultsPage').then((m) => ({
+    default: m.ResultsPage,
+  })),
+)
+const PublicPlayerProfilePage = lazy(() =>
+  import('./features/publicSpectator/PublicPlayerProfilePage').then((m) => ({
+    default: m.PublicPlayerProfilePage,
   })),
 )
 
@@ -70,6 +91,12 @@ createRoot(document.getElementById('root')!).render(
           <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
             <Routes>
               <Route path="/register/:tournamentId" element={<PublicRegistrationPage />} />
+              {/* Public share surfaces — anonymous read of tournament state.
+                  Specific sub-paths must come BEFORE the bare /t/:slug match. */}
+              <Route path="/t/:slug/tv" element={<VenueTvPage />} />
+              <Route path="/t/:slug/results" element={<ResultsPage />} />
+              <Route path="/t/:slug" element={<PublicSpectatorPage />} />
+              <Route path="/p/:id" element={<PublicPlayerProfilePage />} />
               <Route path="*" element={<App />} />
             </Routes>
           </Suspense>
