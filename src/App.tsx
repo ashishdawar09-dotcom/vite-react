@@ -740,7 +740,7 @@ export default function App() {
           gap: 6,
           position: "relative",                           /* NEW: anchors motion.div indicator */
           transition: "color .15s",
-          fontFamily: "'Inter', system-ui, sans-serif",   /* MAKEOVER: dropped font-display (Oswald) per Section 3 spec */
+          fontFamily: "'Inter Variable', system-ui, sans-serif",   /* MAKEOVER: dropped font-display (Oswald) per Section 3 spec */
         }}
       >
         <span style={{ fontSize: 14 }}>{icon}</span>
@@ -803,7 +803,7 @@ export default function App() {
   const showDataLoader = dataLoading && currentId;
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter','Segoe UI',system-ui,-apple-system,sans-serif" }}>
+    <div style={{ minHeight: "100dvh", background: "#0a1628", color: "#1a1a2e", fontFamily: "'Inter Variable','Segoe UI',system-ui,-apple-system,sans-serif" }}>
       {/* NEW: cat overlay during tournament-data refetch (e.g. switching tournament from the
           dropdown). Renders on top of everything via fullScreen variant (z-index: 9999). */}
       {showDataLoader && <LottieLoader fullScreen label="Loading tournament data…" />}
@@ -855,7 +855,7 @@ export default function App() {
                 gap: 6,
                 position: "relative",
                 transition: "color .15s",
-                fontFamily: "'Inter', system-ui, sans-serif",
+                fontFamily: "'Inter Variable', system-ui, sans-serif",
               }}
             >
               <span style={{ fontSize: 14 }}>⋯</span>MORE

@@ -260,7 +260,7 @@ export function ResultsPage() {
 const pageStyle: React.CSSProperties = {
   minHeight: "100dvh",
   background: "#f8fafc",
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "'Inter Variable', system-ui, sans-serif",
 };
 
 const tableStyle: React.CSSProperties = {

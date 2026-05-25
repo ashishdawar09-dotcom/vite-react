@@ -177,7 +177,7 @@ const fullScreenStyle: React.CSSProperties = {
   minHeight: "100dvh",
   background: "linear-gradient(180deg,#070F1F 0%,#0a1628 100%)",
   color: "#fff",
-  fontFamily: "'Inter', system-ui, sans-serif",
+  fontFamily: "'Inter Variable', system-ui, sans-serif",
 };
 
 function BlockHeader({ accent, label, right }: { accent: string; label: string; right?: string }) {

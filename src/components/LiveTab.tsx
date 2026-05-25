@@ -219,7 +219,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
               return `🔴 LIVE · COURT ${courtNum} · ${a} ${sa} – ${sb} ${b}`;
             })}
             speed={45}
-            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, padding: "10px 16px", color: "#fecaca", fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", fontFamily: "'Oswald', 'Inter', sans-serif", marginBottom: 16 }}
+            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, padding: "10px 16px", color: "#fecaca", fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", fontFamily: "'Oswald Variable', 'Inter Variable', sans-serif", marginBottom: 16 }}
           />
         </SectionReveal>
       )}

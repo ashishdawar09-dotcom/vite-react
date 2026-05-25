@@ -121,8 +121,12 @@ export const motion = {
 } as const;
 
 export const typography = {
-  body: "'Inter', system-ui, 'Segoe UI', Roboto, sans-serif",
-  display: "'Oswald', 'Inter', system-ui, sans-serif",
+  // Family names match the self-hosted variable fonts loaded via
+  // @fontsource-variable/inter and @fontsource-variable/oswald (see
+  // src/index.css imports). System-ui falls back during the brief swap
+  // window if the woff2 isn't in the page cache yet.
+  body: "'Inter Variable', system-ui, 'Segoe UI', Roboto, sans-serif",
+  display: "'Oswald Variable', 'Inter Variable', system-ui, sans-serif",
   // Spread into style={{ ...typography.tabular }} on score/stat numerals.
   tabular: { fontVariantNumeric: "tabular-nums" as const },
   // Font-size scale — historic drift had 11/12/13/14/16/18 scattered as
