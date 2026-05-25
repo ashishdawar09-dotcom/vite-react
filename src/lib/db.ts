@@ -21,6 +21,56 @@ export async function listTournaments(): Promise<Tournament[]> {
   return (data ?? []) as Tournament[];
 }
 
+/**
+ * Resolve a tournament by its slug. Used by the public spectator URL /t/:slug
+ * and the player profile /p/:id flow (to discover the tournament a player
+ * belongs to). Returns null when no row matches — caller renders a 404 page.
+ * Anonymous-readable: tournaments.SELECT is public per schema_v14.
+ */
+export async function getTournamentBySlug(slug: string): Promise<Tournament | null> {
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) {
+    // Pre-v15 the slug column doesn't exist; treat as not-found so the public
+    // page can show a graceful 404 without a Sentry-worthy crash.
+    if (/column .* does not exist/i.test(error.message ?? "")) return null;
+    throw error;
+  }
+  return (data as Tournament | null) ?? null;
+}
+
+/**
+ * Fetch a single player by id along with the tournament they belong to. Used
+ * by the public player-profile URL /p/:id. Public read per RLS.
+ */
+export async function getPlayerById(id: string): Promise<Player | null> {
+  const { data, error } = await supabase
+    .from("players")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Player | null) ?? null;
+}
+
+/**
+ * Direct tournament lookup by id — avoids pulling the entire list when the
+ * caller already knows the id (e.g. resolving a player's tournament so we
+ * can hand its slug to usePublicTournament).
+ */
+export async function getTournamentById(id: string): Promise<Tournament | null> {
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Tournament | null) ?? null;
+}
+
 export async function createTournament(name: string, eventDate: string | null, seedPlayers: boolean): Promise<Tournament> {
   const { data: t, error } = await supabase
     .from("tournaments")

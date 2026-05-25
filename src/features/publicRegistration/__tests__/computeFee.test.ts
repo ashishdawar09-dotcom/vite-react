@@ -12,7 +12,7 @@ const cat = (overrides: Partial<Category> = {}): Category => ({
   id: "c", tournament_id: "t", name: "X", team_size: 1, match_minutes: 12,
   starts_at: null, phase: "none", rounds_per_pair: 1, groups_count: 0,
   top_n_advance: 0, sort_order: 0, created_at: "", age_band: "adult",
-  allow_solo_signup: false, ...overrides,
+  allow_solo_signup: false, has_bronze_match: false, ...overrides,
 });
 
 describe("computeFee", () => {

@@ -23,6 +23,9 @@ export type Tournament = {
   fees: TournamentFees;
   registration_open: boolean;
   terms_text: string | null;             // plain text, \n\n = paragraph break
+  // v15: share surface — public spectator URL /t/:slug. Auto-generated on
+  // insert by a DB trigger if the client doesn't supply one (current behavior).
+  slug: string;
 };
 
 export type Category = {
@@ -41,6 +44,10 @@ export type Category = {
   // v12: public registration metadata
   age_band: AgeBand | null;
   allow_solo_signup: boolean;
+  // v15: when on, knockout generation adds a 3rd-place playoff match for
+  // the two semi-final losers. Only effective when the bracket has SFs
+  // (slots >= 4); ignored otherwise.
+  has_bronze_match: boolean;
 };
 
 export type Player = {
@@ -91,6 +98,9 @@ export type Match = {
   court_allocated_at: string | null;
   queue_position: number | null;
   extended_minutes: number;
+  // v15: true on the extra match generated for the 3rd-place playoff. Lives in
+  // the same round_idx as the Final (last round) at slot_idx=1; Final is slot 0.
+  is_bronze: boolean;
 };
 
 export type PlayerCategory = {

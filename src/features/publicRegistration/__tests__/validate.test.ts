@@ -6,7 +6,7 @@ const singles: Category = {
   id: "s", tournament_id: "t", name: "Men's Singles", team_size: 1,
   match_minutes: 12, starts_at: null, phase: "none", rounds_per_pair: 1,
   groups_count: 0, top_n_advance: 0, sort_order: 0, created_at: "",
-  age_band: "adult", allow_solo_signup: false,
+  age_band: "adult", allow_solo_signup: false, has_bronze_match: false,
 };
 const doubles: Category = { ...singles, id: "d", name: "MD", team_size: 2 };
 const doublesSolo: Category = { ...doubles, id: "ds", allow_solo_signup: true };
