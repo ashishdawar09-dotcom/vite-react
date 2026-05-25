@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import * as Sentry from "@sentry/react";
 import { supabase } from "../lib/supabase";
 import { isEmailAdmin } from "../lib/db";
 
@@ -21,22 +22,18 @@ export function useAuth() {
   }, []);
 
   // Tell Sentry who the user is (or clear identity on logout) so error
-  // breadcrumbs are filterable by user in the Sentry UI. Lazy-imports
-  // @sentry/react so this code-path doesn't force-load the Sentry chunk
-  // any earlier than necessary — it already initializes via idleCallback.
+  // breadcrumbs are filterable by user in the Sentry UI. Static import —
+  // a dynamic `await import("@sentry/react")` here breaks tree-shaking
+  // and dumps the whole Sentry SDK into the chunk (146 KB vs 26 KB).
+  // Sentry is already in the App chunk graph via lib/sentry.ts and
+  // ErrorBoundary, so this adds zero bundle weight.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const Sentry = await import("@sentry/react");
-        if (cancelled) return;
-        if (email) Sentry.setUser({ email });
-        else Sentry.setUser(null);
-      } catch {
-        // Sentry isn't critical to app function; swallow.
-      }
-    })();
-    return () => { cancelled = true; };
+    try {
+      if (email) Sentry.setUser({ email });
+      else Sentry.setUser(null);
+    } catch {
+      // Sentry isn't critical to app function; swallow.
+    }
   }, [email]);
 
   // Re-check admin status whenever the email changes (login / logout).
