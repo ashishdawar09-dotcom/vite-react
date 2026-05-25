@@ -3,7 +3,9 @@ import { motion } from "framer-motion"; /* NEW: makeover motion for check-mark d
 import * as db from "../../lib/db";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { Av } from "../../components/ui";
+import { Pill } from "../../components/ui/Pill";
 import { toast } from "../../components/Toast";
+import { colors } from "../../lib/theme";
 import type { Category, Player, Tournament } from "../../types";
 
 /* NEW: SVG check mark that draws its stroke when `checked` flips to true,
@@ -120,29 +122,6 @@ export function CheckInTab({
     }
   };
 
-  const pill = (label: string, value: typeof filter, color: string) => (
-    <button
-      key={value}
-      onClick={() => setFilter(value)}
-      className="font-display"
-      style={{
-        padding: "8px 16px",
-        borderRadius: 20,
-        border: filter === value ? `2px solid ${color}` : "1px solid #e2e8f0",
-        background: filter === value ? `${color}1A` : "#fff",
-        color: filter === value ? color : "#64748b",
-        fontWeight: 700,
-        fontSize: 12,
-        letterSpacing: 0.8,
-        cursor: "pointer",
-        textTransform: "uppercase",
-        transition: "all .15s",
-      }}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div>
       <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
@@ -160,11 +139,14 @@ export function CheckInTab({
         </div>
       </div>
 
-      {/* Toolbar: filter pills + search + admin bulk actions */}
+      {/* Toolbar: filter pills + search + admin bulk actions.
+          Pills migrated from local inline factory to shared <Pill> primitive
+          so the border-radius, hover/active states, and a11y semantics stay
+          aligned with the rest of the design system. */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        {pill("All", "all", "#3A86FF")}
-        {pill(`Checked In · ${checkedCount}`, "checked", "#16a34a")}
-        {pill(`Missing · ${missingCount}`, "missing", "#dc2626")}
+        <Pill surface="light" accent={colors.brand.primary} active={filter === "all"} onClick={() => setFilter("all")}>All</Pill>
+        <Pill surface="light" accent={colors.state.completed} active={filter === "checked"} count={checkedCount} onClick={() => setFilter("checked")}>Checked In</Pill>
+        <Pill surface="light" accent={colors.state.live} active={filter === "missing"} count={missingCount} onClick={() => setFilter("missing")}>Missing</Pill>
         <div style={{ position: "relative", flex: "1 1 200px", maxWidth: 320, marginLeft: 4 }}>
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#94a3b8", pointerEvents: "none" }}>🔍</span>
           <input

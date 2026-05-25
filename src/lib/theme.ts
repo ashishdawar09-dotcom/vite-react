@@ -125,6 +125,27 @@ export const typography = {
   display: "'Oswald', 'Inter', system-ui, sans-serif",
   // Spread into style={{ ...typography.tabular }} on score/stat numerals.
   tabular: { fontVariantNumeric: "tabular-nums" as const },
+  // Font-size scale — historic drift had 11/12/13/14/16/18 scattered as
+  // literals across feature tabs. New work should reference these tokens;
+  // existing literals get migrated as their files are touched.
+  scale: {
+    xs: 11,     // pill labels, micro-meta
+    sm: 13,     // body text in dense tables / standings
+    md: 14,     // default body
+    lg: 16,     // emphasised body, primary inputs
+    xl: 20,     // section headings
+    xxl: 24,    // page titles
+    display: 28, // hero / broadcast numerals
+  },
+  // Weight scale — the codebase uses 500-900 organically; tokens make the
+  // intent explicit. Inter ships a variable font so any 100-step works.
+  weight: {
+    regular: 500,
+    medium: 600,
+    bold: 700,
+    heavy: 800,
+    black: 900,
+  },
 } as const;
 
 export const theme = {
