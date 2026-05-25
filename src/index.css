@@ -5,6 +5,11 @@ body {
   -webkit-font-smoothing: antialiased;
   /* MAKEOVER: refined to bg.deep token (#070F1F) — see src/lib/theme.ts */
   background: #070F1F;
+  /* Suppress iOS rubber-band pull-to-refresh — the realtime data layer
+     auto-updates, so the native gesture is at best confusing and at worst
+     visually disorienting (the browser tries to refresh a PWA shell that
+     doesn't need refreshing). `contain` keeps the gesture inside the app. */
+  overscroll-behavior: contain;
 }
 .font-display {
   font-family: 'Oswald', 'Inter', system-ui, sans-serif;

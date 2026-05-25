@@ -64,6 +64,56 @@ export function Modal({
     return () => { document.body.style.overflow = prev; };
   }, [open]);
 
+  // Focus trap. Keyboard Tab/Shift+Tab cycles within the sheet so accessibility
+  // users don't end up tabbing onto controls behind the backdrop. Hand-rolled
+  // (no react-focus-lock dep) using a single keydown listener + the standard
+  // tab-stops query. Also moves initial focus to the first interactive element
+  // for keyboard users — sighted touch users still get autoFocus on inputs.
+  useEffect(() => {
+    if (!open) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+
+    const prevActive = document.activeElement as HTMLElement | null;
+
+    const focusables = () => Array.from(
+      sheet.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => el.offsetParent !== null);
+
+    // Move focus to the first focusable if no input already grabbed it
+    // (Login's email input uses autoFocus and is the desired first stop).
+    setTimeout(() => {
+      if (!sheet.contains(document.activeElement)) {
+        focusables()[0]?.focus();
+      }
+    }, 0);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      // Restore focus to wherever it was before the modal opened so the
+      // user lands back on the button that triggered it.
+      prevActive?.focus?.();
+    };
+  }, [open]);
+
   if (!open) return null;
 
   const dark = surface === "dark";

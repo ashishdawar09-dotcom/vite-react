@@ -20,6 +20,25 @@ export function useAuth() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Tell Sentry who the user is (or clear identity on logout) so error
+  // breadcrumbs are filterable by user in the Sentry UI. Lazy-imports
+  // @sentry/react so this code-path doesn't force-load the Sentry chunk
+  // any earlier than necessary — it already initializes via idleCallback.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const Sentry = await import("@sentry/react");
+        if (cancelled) return;
+        if (email) Sentry.setUser({ email });
+        else Sentry.setUser(null);
+      } catch {
+        // Sentry isn't critical to app function; swallow.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [email]);
+
   // Re-check admin status whenever the email changes (login / logout).
   // Source of truth is the tournament_admins table — not env vars.
   const refreshAdmin = useCallback(async () => {

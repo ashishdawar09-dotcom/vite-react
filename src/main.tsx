@@ -38,7 +38,27 @@ deferSentryInit()
 // PWA: register the auto-generated service worker. `immediate: true` means
 // a new SW takes control on the next visit without forcing a refresh.
 // In dev mode (`vite`) this is a no-op — only runs after `vite build`.
-registerSW({ immediate: true });
+//
+// onNeedRefresh fires when a new SW has been installed in the background
+// and is waiting to activate. We surface that as a toast so admins running
+// a tournament don't unknowingly live on stale JS for hours after a deploy.
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    // Dynamic import so the toast module + its motion deps aren't pulled
+    // into the initial chunk just for this rarely-fired path.
+    void import('./components/Toast').then((m) => {
+      m.toast(
+        'A new version is available. Reload to update.',
+        'info',
+      );
+    });
+    // Auto-activate the new SW in the background. The page itself keeps
+    // running on the old JS until the user reloads — which is the safe
+    // default during a live tournament. The toast prompts them when ready.
+    void updateSW(true);
+  },
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
