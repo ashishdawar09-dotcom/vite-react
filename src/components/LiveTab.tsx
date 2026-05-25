@@ -33,8 +33,11 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 }) {
   const isMobile = useIsMobile();
   const reduceMotion = useReducedMotion(); /* NEW: respect prefers-reduced-motion globally */
-  const teamById = Object.fromEntries(teamsView.map(t => [t.id, t]));
-  const catById = Object.fromEntries(categories.map(c => [c.id, c]));
+  // Memoized lookups — every score-tick re-renders this tab, and rebuilding
+  // these objects (small but allocating) per render adds up over a long live
+  // session. Keys are stable until teamsView/categories change.
+  const teamById = useMemo(() => Object.fromEntries(teamsView.map(t => [t.id, t])), [teamsView]);
+  const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
 
   // Heartbeat for warm-up-elapsed display in Up Next rows. The projection's
   // wall-clock already updates via useScheduling's own 15s tick; this one is

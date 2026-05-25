@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: live-court pulse */
 import type { Category, ProjectedMatch, Team, Player } from "../types";
 import { fmtElapsed } from "../hooks/useScheduling";
@@ -35,8 +35,11 @@ export const CourtStatus = React.memo(function CourtStatus({
     return () => clearInterval(id);
   }, []);
 
-  const catById = Object.fromEntries(categories.map(c => [c.id, c]));
-  const courts = Array.from({ length: Math.max(1, numCourts) }, (_, i) => i + 1);
+  const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
+  const courts = useMemo(
+    () => Array.from({ length: Math.max(1, numCourts) }, (_, i) => i + 1),
+    [numCourts],
+  );
   const warming = warmingByCourt ?? {};
 
   return (

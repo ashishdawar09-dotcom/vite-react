@@ -38,6 +38,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Preconnect to the Supabase project so the first API round-trip
+         (live_snapshot RPC for spectators, getSession for admins) doesn't
+         pay the DNS+TCP+TLS cost in the critical path. Saves ~100-200ms
+         on cold loads, more on mobile networks. crossorigin attribute is
+         REQUIRED for fetch + CORS preconnects, otherwise the browser opens
+         a separate non-CORS connection and the warmup is wasted. -->
+    <link rel="preconnect" href="https://wdqooznwzesmjdvlcrxw.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://wdqooznwzesmjdvlcrxw.supabase.co" />
   </head>
   <body>
     <div id="root"></div>

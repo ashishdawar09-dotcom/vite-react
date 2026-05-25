@@ -98,7 +98,7 @@ export function MatchesTab({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const catById = Object.fromEntries(categories.map(c => [c.id, c]));
+  const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
 
   // Matches currently in the warm-up state (court allocated, scoring not yet
   // begun). Keyed by court number, mirroring liveByCourt's shape. A court can

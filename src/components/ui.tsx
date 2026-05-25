@@ -10,8 +10,19 @@ export const ShuttleSVG = ({ sz = 40, color = "#fff", opacity = 0.12, style = {}
   </svg>
 );
 
-export function Av({ name, photo, sz = 40, color }: { name: string; photo?: string | null; sz?: number; color?: string }) {
+/**
+ * Av (avatar) — circular player photo or initials. Rendered in dozens of
+ * places per page (player roster cards, match cards, profile headers, search
+ * results). Wrapped in React.memo because:
+ *   - Props are all primitives (string / number / nullable string), so the
+ *     default shallow equality is correct.
+ *   - The parent surfaces re-render frequently (live scoreboard, scoreboard
+ *     ticks, court status, match list) and most of those renders don't
+ *     change avatar props — the memo skips needless re-renders entirely.
+ * Net: smoother scrolling and ticker updates on LIVE / Matches tabs.
+ */
+export const Av = React.memo(function Av({ name, photo, sz = 40, color }: { name: string; photo?: string | null; sz?: number; color?: string }) {
   if (photo) return <img src={photo} alt={name} style={{ width: sz, height: sz, borderRadius: "50%", objectFit: "cover", border: `2px solid ${color || "#457B9D"}` }} />;
   const ini = name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
   return <div style={{ width: sz, height: sz, borderRadius: "50%", background: `linear-gradient(135deg, ${color || "#457B9D"}, ${color || "#457B9D"}dd)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: sz * 0.38, flexShrink: 0, boxShadow: `0 2px 8px ${color || "#457B9D"}44` }}>{ini}</div>;
-}
+});

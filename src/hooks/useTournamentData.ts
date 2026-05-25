@@ -14,7 +14,12 @@ function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T & { 
   return debounced as T & { cancel(): void };
 }
 
-const SPECTATOR_POLL_MS = 5_000;
+// Spectator polling cadence: 5s when something is live so scores feel
+// real-time; 15s when nothing is live (between matches, before tournament
+// starts, after all matches done). Saves ~3-5 Supabase round-trips/min on
+// idle tabs without sacrificing perceived freshness when it matters.
+const SPECTATOR_POLL_LIVE_MS = 5_000;
+const SPECTATOR_POLL_IDLE_MS = 15_000;
 
 export function useTournamentData(tournamentId: string | null, isAdmin = false) {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -26,6 +31,11 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
 
   const tidRef = useRef(tournamentId);
   tidRef.current = tournamentId;
+
+  // Tracks whether anything is currently live for the spectator poll loop.
+  // A ref (not state) because the loop reads it inside a setTimeout closure
+  // and we don't want a re-render every time the value changes.
+  const hasLiveRef = useRef(false);
 
   // If the live_snapshot RPC is not deployed, fall back to per-table fetches.
   const snapshotUnavailableRef = useRef(false);
@@ -178,19 +188,50 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         supabase.removeChannel(pgChannel);
       };
     } else {
-      // Spectators: single live_snapshot RPC every 5s — one round-trip,
-      // server-side aggregation. Skips ticks while tab is hidden to save BW.
-      const tick = () => { if (!cancelled && !document.hidden) loadAllSnapshot(); };
-      const pollId = setInterval(tick, SPECTATOR_POLL_MS);
-      const onVisibility = () => { if (!document.hidden) tick(); };
+      // Spectators: single live_snapshot RPC, adaptive interval. 5s when
+      // matches are live (scores need to feel real-time); 15s when nothing's
+      // live (between matches / pre-event / post-event). Skips ticks while
+      // the tab is hidden to save bandwidth. setTimeout chain (not interval)
+      // so we can adjust the delay between cycles.
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const scheduleNext = (delay: number) => {
+        if (cancelled) return;
+        timeoutId = setTimeout(async () => {
+          if (cancelled) return;
+          if (!document.hidden) {
+            await loadAllSnapshot();
+          }
+          if (cancelled) return;
+          scheduleNext(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS);
+        }, delay);
+      };
+      scheduleNext(SPECTATOR_POLL_LIVE_MS); // first cycle always 5s in case something is live now
+      // Visibility flip → force an immediate tick so coming back to the tab
+      // gives a fresh snapshot. Reset the cycle so the next interval honours
+      // the current live state.
+      const onVisibility = () => {
+        if (cancelled || document.hidden) return;
+        if (timeoutId) clearTimeout(timeoutId);
+        void loadAllSnapshot().finally(() => {
+          if (!cancelled) {
+            scheduleNext(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS);
+          }
+        });
+      };
       document.addEventListener("visibilitychange", onVisibility);
       return () => {
         cancelled = true;
-        clearInterval(pollId);
+        if (timeoutId) clearTimeout(timeoutId);
         document.removeEventListener("visibilitychange", onVisibility);
       };
     }
   }, [tournamentId, isAdmin, loadAllLegacy, loadAllSnapshot, loadPlayerCategories]);
+
+  // Keep the hasLive ref in sync with the live matches state — the
+  // spectator poll closure reads this ref to choose its next interval.
+  useEffect(() => {
+    hasLiveRef.current = matches.some(m => m.status === "live");
+  }, [matches]);
 
   return { players, teams, matches, categories, playerCategories, loading };
 }
