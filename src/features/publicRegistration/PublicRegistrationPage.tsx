@@ -1,9 +1,10 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { submitPublicRegistration } from "../../lib/db";
 import { pushSupportStatus, subscribeToPush } from "../../lib/push";
+import { captureError } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, PublicRegistrationPayload, TournamentFees } from "../../types";
 import { Countdown } from "./Countdown";
@@ -767,7 +768,11 @@ function pushDiagnostics(): { ok: boolean; missing: string[]; standalone: boolea
   else {
     if (!("Notification" in window)) missing.push("Notification API");
     if (!("serviceWorker" in navigator)) missing.push("Service Worker");
-    if (!("PushManager" in window)) missing.push("PushManager");
+    
+    const hasPushManager =
+      "PushManager" in window ||
+      (typeof ServiceWorkerRegistration !== "undefined" && "pushManager" in ServiceWorkerRegistration.prototype);
+    if (!hasPushManager) missing.push("PushManager");
   }
   // iOS standalone detection — Apple-specific property + general matchMedia
   const standalone =
@@ -791,6 +796,24 @@ function PushOptInButton({
   });
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const diag = pushDiagnostics();
+
+  // Report unsupported-in-PWA exactly once per mount. `diag.missing` is a
+  // fresh array every render, so listing it in deps would refire each render;
+  // a ref guard keeps this strictly one-shot.
+  const reportedRef = useRef(false);
+  useEffect(() => {
+    if (reportedRef.current) return;
+    if (state === "unsupported" && diag.standalone) {
+      reportedRef.current = true;
+      captureError(new Error("Push unsupported in PWA standalone mode"), {
+        missing: diag.missing,
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        maxTouchPoints: navigator.maxTouchPoints,
+      });
+    }
+  }, [state, diag.standalone, diag.missing]);
+
   // iOS PWAs report Mac UA in standalone — easier to detect via standalone flag
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent ?? "") ||
     (navigator.platform === "MacIntel" && (navigator.maxTouchPoints ?? 0) > 1);
@@ -846,7 +869,11 @@ function PushOptInButton({
     if (isIOS && !diag.standalone) {
       helper = "On iPhone, push notifications require installing the app. Tap the Share button ⬆️ then 'Add to Home Screen', then open the new icon and submit again.";
     } else if (isIOS && diag.standalone) {
-      helper = "Web Push on iPhone needs iOS 16.4 or later. Update iOS, then re-submit. (Missing: " + diag.missing.join(", ") + ")";
+      if (diag.missing.includes("PushManager")) {
+        helper = "Web Push on iPhone is supported, but PushManager is not active. Please ensure you are running iOS 16.4 or later and launched the app from the Home Screen icon.";
+      } else {
+        helper = "Web Push on iPhone is not supported on this device. (Missing: " + diag.missing.join(", ") + ")";
+      }
     } else {
       helper = "Your browser doesn't support web push notifications. Try Chrome, Edge, or Firefox. (Missing: " + diag.missing.join(", ") + ")";
     }

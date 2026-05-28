@@ -16,7 +16,12 @@ export function pushSupportStatus(): PushSupportStatus {
   if (typeof window === "undefined") return "unsupported";
   if (!("Notification" in window)) return "unsupported";
   if (!("serviceWorker" in navigator)) return "unsupported";
-  if (!("PushManager" in window)) return "unsupported";
+  
+  const hasPushManager =
+    "PushManager" in window ||
+    (typeof ServiceWorkerRegistration !== "undefined" && "pushManager" in ServiceWorkerRegistration.prototype);
+  if (!hasPushManager) return "unsupported";
+  
   return Notification.permission as PushSupportStatus;
 }
 
