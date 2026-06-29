@@ -196,7 +196,9 @@ export function PlayerProfileView({
         </div>
       </div>
 
-      {/* Contact */}
+      {/* Contact — admin-only. Holds the player's email (PII); the public
+          /p/:id profile passes isAdmin=false, so spectators never see it. */}
+      {isAdmin && (
       <div style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1px solid #e8ecf1", marginBottom: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 18 }}>✉️</span>
@@ -258,6 +260,7 @@ export function PlayerProfileView({
           </div>
         )}
       </div>
+      )}
 
       {/* Upcoming */}
       {upcoming.length > 0 && (

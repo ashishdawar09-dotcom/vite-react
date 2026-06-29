@@ -19,6 +19,13 @@ const SEED = [
   "Kham","Jas","Ashish","Rony","Amit","Raghav","Raghav's Partner",
 ];
 
+// Non-PII player columns readable by every client role. players.email is
+// admin-only as of schema_v16 — read full rows (incl. email) via the
+// admin_players RPC instead. Typed as `string` so the typed client doesn't try
+// to parse it as a literal column list; callers cast the result to Player.
+const SAFE_PLAYER_COLUMNS: string =
+  "id,tournament_id,name,color,photo_url,note,active,sort_order,created_at,checked_in_at";
+
 // TOURNAMENTS ------------------------------------------------------------
 
 export async function listTournaments(): Promise<Tournament[]> {
@@ -55,7 +62,7 @@ export async function getTournamentBySlug(slug: string): Promise<Tournament | nu
 export async function getPlayerById(id: string): Promise<Player | null> {
   const { data, error } = await supabase
     .from("players")
-    .select("*")
+    .select(SAFE_PLAYER_COLUMNS)
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -183,11 +190,40 @@ export async function setCategoryRoundsPerPair(id: string, rounds: number) {
 
 // PLAYERS ----------------------------------------------------------------
 
+/**
+ * Fetch the players for a tournament. Admins get full rows (incl. email) via
+ * the admin-only `admin_players` RPC (SECURITY DEFINER, is_admin()-gated);
+ * spectators/anon get a non-PII column subset, because players.email is no
+ * longer readable by client roles (schema_v16). Falls back to a direct select
+ * if the RPC isn't deployed yet (pre-migration, where email is still granted).
+ */
+export async function fetchPlayers(tournament_id: string, isAdmin: boolean): Promise<Player[]> {
+  if (isAdmin) {
+    const { data, error } = await supabase.rpc("admin_players", { p_tournament_id: tournament_id });
+    if (error) {
+      if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+        const { data: d2, error: e2 } = await supabase
+          .from("players").select("*").eq("tournament_id", tournament_id).order("sort_order");
+        if (e2) throw e2;
+        return (d2 ?? []) as Player[];
+      }
+      throw error;
+    }
+    return (data as Player[] | null) ?? [];
+  }
+  const { data, error } = await supabase
+    .from("players").select(SAFE_PLAYER_COLUMNS).eq("tournament_id", tournament_id).order("sort_order");
+  if (error) throw error;
+  // `data` is typed as the client's error-placeholder shape because the column
+  // list is a runtime string, not a literal; the rows are correct at runtime.
+  return (data ?? []) as unknown as Player[];
+}
+
 export async function addPlayer(tournament_id: string, name: string, sort_order: number): Promise<Player> {
   const color = PAL[Math.floor(Math.random() * PAL.length)];
-  const { data, error } = await supabase.from("players").insert({ tournament_id, name, color, active: true, sort_order }).select().single();
+  const { data, error } = await supabase.from("players").insert({ tournament_id, name, color, active: true, sort_order }).select(SAFE_PLAYER_COLUMNS).single();
   if (error) throw error;
-  return data as Player;
+  return data as unknown as Player;
 }
 
 export async function deletePlayer(id: string) {

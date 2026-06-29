@@ -707,6 +707,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_players: { Args: { p_tournament_id: string }; Returns: Json }
       approve_registration: { Args: { p_reg_id: string }; Returns: Json }
       extend_match: {
         Args: { p_extra_minutes: number; p_match_id: string }

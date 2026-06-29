@@ -42,9 +42,10 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
 
   const loadPlayers = useCallback(async () => {
     if (!tidRef.current) return;
-    const { data } = await supabase.from("players").select("*").eq("tournament_id", tidRef.current).order("sort_order");
-    setPlayers((data ?? []) as Player[]);
-  }, []);
+    // Admins read full rows (incl. email) via the admin_players RPC; spectators
+    // get the non-PII subset. players.email is column-locked as of schema_v16.
+    setPlayers(await db.fetchPlayers(tidRef.current, isAdmin));
+  }, [isAdmin]);
 
   const loadTeams = useCallback(async () => {
     if (!tidRef.current) return;
@@ -74,18 +75,18 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
     if (!tidRef.current) return;
     const tid = tidRef.current;
     const [p, t, m, c, pc] = await Promise.all([
-      supabase.from("players").select("*").eq("tournament_id", tid).order("sort_order"),
+      db.fetchPlayers(tid, isAdmin),
       supabase.from("teams").select("*").eq("tournament_id", tid).order("sort_order"),
       supabase.from("matches").select("*").eq("tournament_id", tid).order("slot_idx"),
       supabase.from("categories").select("*").eq("tournament_id", tid).order("sort_order"),
       db.listPlayerCategories(tid),
     ]);
-    setPlayers((p.data ?? []) as Player[]);
+    setPlayers(p);
     setTeams((t.data ?? []) as Team[]);
     setMatches((m.data ?? []) as Match[]);
     setCategories((c.data ?? []) as Category[]);
     setPlayerCategories(pc);
-  }, []);
+  }, [isAdmin]);
 
   // Single-RPC snapshot for spectators. Falls back to legacy multi-fetch
   // if the live_snapshot RPC isn't deployed yet.
