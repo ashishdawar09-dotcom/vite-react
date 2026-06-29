@@ -44,7 +44,18 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const body = (await req.json().catch(() => ({}))) as Partial<Payload>;
+    // Cap raw body size before parsing — prevents oversized payloads from
+    // bloating storage or exhausting memory. ~8 KB is generous for this form.
+    const rawBody = await req.text();
+    if (rawBody.length > 8192) {
+      return json({ success: false, error: "Payload too large" }, 413);
+    }
+    let body: Partial<Payload> = {};
+    try {
+      body = rawBody ? (JSON.parse(rawBody) as Partial<Payload>) : {};
+    } catch {
+      return json({ success: false, error: "Invalid JSON" }, 400);
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -67,6 +78,20 @@ Deno.serve(async (req: Request) => {
     }
     if (typeof body.player_is_member !== "boolean") {
       return json({ success: false, error: "player_is_member must be boolean" }, 400);
+    }
+
+    // ---- Validation: per-field length caps (flood / abuse guard) ----
+    const lenCaps: Partial<Record<keyof Payload, number>> = {
+      tournament_id: 64, category_id: 64,
+      player_name: 80, player_email: 120, player_phone: 30,
+      partner_name: 80, partner_email: 120, partner_phone: 30,
+      payment_reference: 100, comments: 500, group_choice: 16,
+    };
+    for (const k of Object.keys(lenCaps) as (keyof Payload)[]) {
+      const v = body[k];
+      if (typeof v === "string" && v.length > (lenCaps[k] as number)) {
+        return json({ success: false, error: `Field too long: ${k}` }, 400);
+      }
     }
 
     const playerEmail = body.player_email!.trim().toLowerCase();
@@ -140,6 +165,21 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // ---- Flood guard: cap total registrations per email per tournament ----
+    // The per-category dedup above is trivially bypassed by varying the
+    // category; this bounds how many rows one email can create overall.
+    const { count: emailCount } = await supabase
+      .from("pending_registrations")
+      .select("id", { count: "exact", head: true })
+      .eq("tournament_id", body.tournament_id)
+      .ilike("player_email", playerEmail);
+    if ((emailCount ?? 0) >= 8) {
+      return json(
+        { success: false, error: "Too many registrations for this email" },
+        429,
+      );
+    }
+
     // ---- Insert ----
     const { data: ins, error: insErr } = await supabase
       .from("pending_registrations")
@@ -159,7 +199,19 @@ Deno.serve(async (req: Request) => {
         payment_paid_full_for_partner: !!body.payment_paid_full_for_partner,
         comments: body.comments?.trim() || null,
         group_choice: body.group_choice ?? null,
-        raw_payload: body,
+        // Store a bounded, validated subset rather than the raw request body
+        // (previously persisted verbatim and unbounded).
+        raw_payload: {
+          player_name: body.player_name!.trim(),
+          player_email: playerEmail,
+          player_phone: body.player_phone?.trim() || null,
+          partner_name: body.partner_name?.trim() || null,
+          partner_email: partnerEmail,
+          partner_phone: body.partner_phone?.trim() || null,
+          payment_reference: body.payment_reference!.trim(),
+          comments: body.comments?.trim() || null,
+          group_choice: body.group_choice ?? null,
+        },
       })
       .select("id")
       .single();

@@ -34,6 +34,37 @@ type Payload = {
   admin_email?: string;
 };
 
+// Verify the caller is a tournament admin (used only for kind="admin"
+// subscriptions). Validates the Authorization bearer token to resolve the
+// user's email, then checks `tournament_admins` with the service-role client.
+// Returns the admin email, or null when the caller isn't a valid admin.
+async function requireAdmin(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  try {
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user?.email) return null;
+    const email = user.email.toLowerCase();
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data } = await admin
+      .from("tournament_admins")
+      .select("email")
+      .eq("email", email)
+      .maybeSingle();
+    return data ? email : null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -81,6 +112,46 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (!t) {
       return json({ success: false, error: "Tournament not found" }, 404);
+    }
+
+    // ---- Identity verification ----
+    // Admin subscriptions must prove they're an admin; we derive admin_email
+    // from the verified token and never trust the client-supplied value.
+    // Player subscriptions are anonymous (no session), but we refuse forged or
+    // orphaned identities by confirming the referenced row exists and belongs
+    // to this tournament.
+    if (body.kind === "admin") {
+      const adminEmail = await requireAdmin(req);
+      if (!adminEmail) {
+        return json({ success: false, error: "forbidden" }, 403);
+      }
+      body.admin_email = adminEmail;
+      body.player_id = undefined;
+      body.pending_registration_id = undefined;
+    } else {
+      if (body.pending_registration_id) {
+        const { data: pr } = await supabase
+          .from("pending_registrations")
+          .select("id")
+          .eq("id", body.pending_registration_id)
+          .eq("tournament_id", body.tournament_id)
+          .maybeSingle();
+        if (!pr) return json({ success: false, error: "Invalid registration" }, 400);
+      } else if (body.player_id) {
+        const { data: pl } = await supabase
+          .from("players")
+          .select("id")
+          .eq("id", body.player_id)
+          .eq("tournament_id", body.tournament_id)
+          .maybeSingle();
+        if (!pl) return json({ success: false, error: "Invalid player" }, 400);
+      } else {
+        return json(
+          { success: false, error: "Player subscriptions require a player_id or pending_registration_id" },
+          400,
+        );
+      }
+      body.admin_email = undefined;
     }
 
     // Upsert by endpoint — same browser re-subscribing just overwrites
