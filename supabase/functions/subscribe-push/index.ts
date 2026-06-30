@@ -15,8 +15,16 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
+// Allowed browser origins: the production app + this project's Vercel domains
+// (default + preview deploys). Anything else gets the prod origin echoed back,
+// which the browser then blocks. CORS is a browser-only control — server-side
+// callers ignore it — so the real protection is the auth/validation below.
+const ALLOWED_ORIGIN =
+  /^https:\/\/(badminton\.adawar\.org|badminton-ad\.vercel\.app|vite-react-[a-z0-9-]+\.vercel\.app)$/;
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  // Access-Control-Allow-Origin is overwritten per-request by the wrapper in Deno.serve.
+  "Access-Control-Allow-Origin": "https://badminton.adawar.org",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -66,6 +74,17 @@ async function requireAdmin(req: Request): Promise<string | null> {
 }
 
 Deno.serve(async (req: Request) => {
+  const res = await handle(req);
+  const origin = req.headers.get("Origin") ?? "";
+  res.headers.set(
+    "Access-Control-Allow-Origin",
+    ALLOWED_ORIGIN.test(origin) ? origin : "https://badminton.adawar.org",
+  );
+  res.headers.set("Vary", "Origin");
+  return res;
+});
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -187,7 +206,7 @@ Deno.serve(async (req: Request) => {
     console.error("subscribe-push error:", msg);
     return json({ success: false, error: msg }, 500);
   }
-});
+}
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
