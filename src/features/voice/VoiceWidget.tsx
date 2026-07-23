@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useReducedMotion } from "framer-motion";
 import { useVoiceAgent } from "@cloudflare/voice/react";
@@ -41,7 +41,6 @@ function VoiceCall({ tournamentId, playerId, onClose }: {
   onClose: () => void;
 }) {
   const reduce = useReducedMotion();
-  const startedRef = useRef(false);
   const {
     status, transcript, interimTranscript, connected, error,
     startCall, endCall, toggleMute, isMuted,
@@ -54,19 +53,16 @@ function VoiceCall({ tournamentId, playerId, onClose }: {
     },
   });
 
-  // Auto-start the mic once connected (the user opened the assistant expecting
-  // to talk). Guarded so it fires once.
-  useEffect(() => {
-    if (connected && !startedRef.current) {
-      startedRef.current = true;
-      void startCall();
-    }
-  }, [connected, startCall]);
-
+  // Do NOT auto-start the mic: iOS Safari only grants microphone access when
+  // getUserMedia is called directly inside a user gesture. Starting it from an
+  // effect after the async WebSocket connect loses that gesture and the mic is
+  // blocked ("failed to start"). Instead, the user taps "Start listening",
+  // which calls startCall() synchronously within the tap.
   const hangUp = () => { endCall(); onClose(); };
 
   const label = STATUS_LABEL[status] ?? status;
   const listening = status === "listening";
+  const inCall = status !== "idle";
 
   return createPortal(
     <div
@@ -148,37 +144,47 @@ function VoiceCall({ tournamentId, playerId, onClose }: {
         </div>
       )}
 
-      {/* Controls */}
+      {/* Controls. When idle, a single "Start listening" button requests the
+          mic INSIDE the tap (required by iOS Safari). Once in a call, show
+          Mute + End. */}
       <div style={{ display: "flex", gap: spacing.sm, padding: spacing.md, borderTop: `1px solid ${colors.border.dark}` }}>
-        <button
-          onClick={toggleMute}
-          disabled={!connected}
-          style={ctrlStyle(false)}
-        >
-          {isMuted ? "Unmute" : "Mute"}
-        </button>
-        <button onClick={hangUp} style={ctrlStyle(true)}>
-          End
-        </button>
+        {!inCall ? (
+          <button
+            onClick={() => { void startCall(); }}
+            disabled={!connected}
+            style={ctrlStyle("primary")}
+          >
+            {connected ? "🎤 Start listening" : "Connecting…"}
+          </button>
+        ) : (
+          <>
+            <button onClick={toggleMute} style={ctrlStyle("neutral")}>
+              {isMuted ? "Unmute" : "Mute"}
+            </button>
+            <button onClick={hangUp} style={ctrlStyle("danger")}>
+              End
+            </button>
+          </>
+        )}
       </div>
     </div>,
     document.body,
   );
 }
 
-function ctrlStyle(danger: boolean): CSSProperties {
-  return {
+function ctrlStyle(kind: "primary" | "neutral" | "danger"): CSSProperties {
+  const base: CSSProperties = {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: radii.md,
-    border: `1px solid ${danger ? colors.state.live : colors.border.darkStrong}`,
-    background: danger ? colors.state.liveSubtle : "transparent",
-    color: danger ? colors.state.live : colors.text.primaryDark,
     fontWeight: typography.weight.bold,
     fontSize: typography.scale.sm,
     cursor: "pointer",
     fontFamily: typography.body,
   };
+  if (kind === "primary") return { ...base, border: "none", background: colors.gradient.brandCta, color: "#fff", boxShadow: "0 4px 16px rgba(0,184,255,0.32)" };
+  if (kind === "danger") return { ...base, border: `1px solid ${colors.state.live}`, background: colors.state.liveSubtle, color: colors.state.live };
+  return { ...base, border: `1px solid ${colors.border.darkStrong}`, background: "transparent", color: colors.text.primaryDark };
 }
 
 export default function VoiceWidget() {
