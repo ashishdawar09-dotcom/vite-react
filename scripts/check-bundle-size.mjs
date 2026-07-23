@@ -48,6 +48,9 @@ const BUDGETS_KB = {
   "PublicRegistrationPage-": 25,
   // Heavy admin tab. Current: ~22 KB.
   "MatchesTab-": 40,
+  // Voice assistant client (@cloudflare/voice + partysocket), lazy-loaded only
+  // when the widget opens — never on first paint.
+  "voice-": 40,
 };
 
 const ANSI = { red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m", reset: "\x1b[0m", bold: "\x1b[1m" };

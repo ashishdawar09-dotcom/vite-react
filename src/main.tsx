@@ -53,6 +53,9 @@ const PublicPlayerProfilePage = lazyWithReload(() =>
     default: m.PublicPlayerProfilePage,
   })),
 )
+// Global voice-assistant widget — lazy so its @cloudflare/voice + partysocket
+// deps stay out of the first-paint chunk. Mounted once for every route.
+const VoiceWidget = lazyWithReload(() => import('./features/voice/VoiceWidget'))
 
 // Sentry deferred to idle — its bundle (~80 KB) shouldn't block first paint.
 // Errors during the first ~100ms of boot are rare; the cost-benefit favors
@@ -104,6 +107,9 @@ createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <ScrollToTop />
           <IosInstallHint />
+          <Suspense fallback={null}>
+            <VoiceWidget />
+          </Suspense>
           <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
             <Routes>
               <Route path="/register/:tournamentId" element={<PublicRegistrationPage />} />

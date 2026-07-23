@@ -715,6 +715,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       live_snapshot: { Args: { p_tournament_id: string }; Returns: Json }
+      my_player: { Args: { p_tournament_id: string }; Returns: Json }
       reject_registration: {
         Args: { p_reason: string; p_reg_id: string }
         Returns: undefined

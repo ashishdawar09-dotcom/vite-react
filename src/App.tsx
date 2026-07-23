@@ -6,6 +6,7 @@ import { useIsMobile } from "./hooks/useIsMobile"; /* NEW: mobile IA detection *
 import { useTournamentData } from "./hooks/useTournamentData";
 import { useTournamentDerived } from "./hooks/useTournamentDerived";
 import * as db from "./lib/db";
+import { setActiveTournament } from "./lib/activeTournament";
 import { supabase } from "./lib/supabase";
 import { Login } from "./components/Login";
 import { LiveTab } from "./components/LiveTab";
@@ -115,6 +116,9 @@ export default function App() {
   }, []);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
+  // Publish the active tournament so the global voice widget (mounted outside
+  // <Routes> in main.tsx) knows what to answer about on the app shell route.
+  useEffect(() => { setActiveTournament(currentId); }, [currentId]);
   const { players, teams, matches, categories, playerCategories, loading: dataLoading } = useTournamentData(currentId, isAdmin); /* NEW: dataLoading for the cat loader during tournament switch / data refetch */
 
   // Default to "All" (null). Only auto-select first category if none exists yet and we need one for team operations.

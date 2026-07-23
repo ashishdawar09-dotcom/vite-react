@@ -72,6 +72,12 @@ export default defineConfig({
           if (id.includes('node_modules/canvas-confetti')) {
             return 'confetti';
           }
+          // Voice assistant client (@cloudflare/voice + partysocket). Isolated
+          // so it only loads when the lazy VoiceWidget mounts, and never bloats
+          // the first-paint index chunk.
+          if (id.includes('node_modules/@cloudflare/voice') || id.includes('node_modules/partysocket')) {
+            return 'voice';
+          }
         },
       },
     },

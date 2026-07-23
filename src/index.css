@@ -72,6 +72,13 @@ body {
   50% { opacity: 0.4; }
 }
 
+/* Cyan glow pulse — used by the global voice-assistant widget (which mounts
+   outside App, so this must be global) and by App's live indicators. */
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(0,184,255,0.4); }
+  50% { box-shadow: 0 0 24px rgba(0,184,255,0.8); }
+}
+
 /* Inline spinner used by Login button busy state. Kept in global CSS so it
    works even before framer-motion's chunk has loaded. */
 @keyframes spin {
