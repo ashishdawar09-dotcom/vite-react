@@ -296,8 +296,10 @@ async function handle(req: Request): Promise<Response> {
           },
         }],
         metadata: meta,
-        // No statement_descriptor_suffix: Stripe rejects it while Managed
-        // Payments is the account default.
+        // Ordinary card payment, not Stripe Managed Payments (merchant of
+        // record for digital goods, +3.5% per transaction), which is the
+        // account default.
+        managed_payments: { enabled: false },
         payment_intent_data: { metadata: meta },
         success_url: `${back}?payment=success&reg=${ins.id}`,
         cancel_url: `${back}?payment=cancelled`,
