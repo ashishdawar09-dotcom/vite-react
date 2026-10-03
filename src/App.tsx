@@ -14,7 +14,7 @@ import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
 import { toast } from "./components/Toast";
-import { defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
+import { byeAdvances, defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { AppFooter } from "./components/AppFooter";
 import { MoreDrawer, type TabId } from "./components/MoreDrawer";
@@ -385,13 +385,16 @@ export default function App() {
         status: bye ? "completed" : "pending", started_at: null, is_walkover: false,
       });
     }
+    // Byes are decided at creation, so their teams start in round 2.
+    const advanced = byeAdvances(seeded);
     let prevCount = slots / 2;
     for (let r = 1; r < rds; r++) {
       const cnt = prevCount / 2;
       for (let i = 0; i < cnt; i++) {
+        const pre = r === 1 ? advanced[i] : undefined;
         rows.push({
           tournament_id: current.id, category_id: currentCategoryId, stage: "knockout", group_idx: null, round_idx: r, slot_idx: i,
-          team_a_id: null, team_b_id: null, score_a: null, score_b: null, winner_id: null, confirmed: false, is_bye: false,
+          team_a_id: pre?.a?.id ?? null, team_b_id: pre?.b?.id ?? null, score_a: null, score_b: null, winner_id: null, confirmed: false, is_bye: false,
           status: "pending", started_at: null, is_walkover: false,
         });
       }

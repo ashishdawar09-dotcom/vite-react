@@ -12,7 +12,7 @@ import type { Category, TeamWithPlayers, Tournament } from "../../types";
  *   2. Teams grid — one card per team, X-button to remove (admin),
  *      category badge when "All" filter is active.
  *   3. Format chooser (admin, phase==="none", >=2 teams) — three
- *      cards (Recommended / More games / Compact) leading to a
+ *      cards (Recommended / More games / Compact / Super / Ultra Compact) leading to a
  *      "Start Group Stage" CTA.
  *
  * Plus a "Reset This Tournament" admin button at the bottom.
@@ -60,7 +60,9 @@ export function TeamsTab({
   const matchMinutes = currentCategory?.match_minutes ?? 12;
   const accentFor = (label: FormatPlan["label"]) =>
     label === "Recommended" ? "#84cc16" :
-    label === "More games" ? "#a855f7" : "#3b82f6";
+    label === "More games" ? "#a855f7" :
+    label === "Super Compact" ? "#f59e0b" :
+    label === "Ultra Compact" ? "#f43f5e" : "#3b82f6";
 
   const handleStart = () => {
     if (!selectedPlan) return onStartGroupStage();
