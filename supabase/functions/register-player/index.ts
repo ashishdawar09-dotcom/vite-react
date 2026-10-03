@@ -296,7 +296,9 @@ async function handle(req: Request): Promise<Response> {
           },
         }],
         metadata: meta,
-        payment_intent_data: { metadata: meta, statement_descriptor_suffix: "BADMINTON" },
+        // No statement_descriptor_suffix: Stripe rejects it while Managed
+        // Payments is the account default.
+        payment_intent_data: { metadata: meta },
         success_url: `${back}?payment=success&reg=${ins.id}`,
         cancel_url: `${back}?payment=cancelled`,
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
