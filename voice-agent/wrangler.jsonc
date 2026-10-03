@@ -1,0 +1,38 @@
+// Badminton voice assistant (Cloudflare Worker + Durable Object).
+// Mirrors the production Worker as deployed on 23 July 2026.
+// SUPABASE_ANON_KEY is a secret: `wrangler secret put SUPABASE_ANON_KEY [--env staging]`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "badminton-voice-agent",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-07-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "ai": { "binding": "AI" },
+  "durable_objects": {
+    "bindings": [{ "name": "BadmintonVoiceAgent", "class_name": "BadmintonVoiceAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BadmintonVoiceAgent"] }],
+  "vars": {
+    "SUPABASE_URL": "https://wdqooznwzesmjdvlcrxw.supabase.co",
+    "DEFAULT_TOURNAMENT_ID": ""
+  },
+  "env": {
+    // Separate Worker for testing changes before they reach production.
+    "staging": {
+      "name": "badminton-voice-agent-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "ai": { "binding": "AI" },
+      "durable_objects": {
+        "bindings": [{ "name": "BadmintonVoiceAgent", "class_name": "BadmintonVoiceAgent" }]
+      },
+      "vars": {
+        "SUPABASE_URL": "https://wdqooznwzesmjdvlcrxw.supabase.co",
+        "DEFAULT_TOURNAMENT_ID": ""
+      }
+    }
+  }
+}
