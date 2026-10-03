@@ -1,17 +1,4 @@
-import type { Category, TournamentFees } from "../../types";
-
-// True when at least one age band has a different member vs non_member price.
-// Drives whether the form shows the "Are you a member?" question — flat-fee
-// tournaments don't need to ask.
-export function hasMemberDiscount(fees: TournamentFees): boolean {
-  for (const band of Object.values(fees)) {
-    if (!band) continue;
-    if (typeof band.member === "number" && typeof band.non_member === "number" && band.member !== band.non_member) {
-      return true;
-    }
-  }
-  return false;
-}
+import type { Category } from "../../types";
 
 export type FormState = {
   player_email: string;

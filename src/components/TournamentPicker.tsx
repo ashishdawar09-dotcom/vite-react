@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import type { AgeBand, Tournament, TournamentFees } from "../types";
+import type { Tournament } from "../types";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
 
@@ -18,7 +18,6 @@ type EditState = {
   e_transfer_email: string;
   registration_open: boolean;
   terms_text: string;
-  fees: TournamentFees;
 };
 
 function emptyEditState(): EditState {
@@ -28,7 +27,6 @@ function emptyEditState(): EditState {
     event_time: "", registration_deadline: "",
     contact_info: "", e_transfer_email: "",
     registration_open: true, terms_text: "",
-    fees: {},
   };
 }
 
@@ -90,7 +88,6 @@ export function TournamentPicker({
         e_transfer_email: current.e_transfer_email ?? "",
         registration_open: current.registration_open ?? true,
         terms_text: current.terms_text ?? "",
-        fees: current.fees ?? {},
       });
     }
   }, [editing, current]);
@@ -104,10 +101,6 @@ export function TournamentPicker({
       if (!next.event_time) next.event_time = "09:00";
       if (!next.registration_deadline && next.event_date) {
         next.registration_deadline = defaultDeadlineFor(next.event_date);
-      }
-      // Only set fees if no bands are populated yet
-      if (Object.keys(next.fees).length === 0) {
-        next.fees = { adult: { member: 20, non_member: 20 } };
       }
       if (!next.terms_text) {
         next.terms_text =
@@ -157,7 +150,6 @@ export function TournamentPicker({
         e_transfer_email: form.e_transfer_email.trim() || null,
         registration_open: form.registration_open,
         terms_text: form.terms_text.trim() || null,
-        fees: form.fees,
       };
       await db.updateTournament(current.id, patch);
       setEditing(false);
@@ -202,7 +194,7 @@ export function TournamentPicker({
       {isAdmin && (
         <>
           <button onClick={() => setCreating(true)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(58,134,255,0.4)", background: "rgba(58,134,255,0.2)", color: "#93c5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ New</button>
-          {current && <button onClick={() => setEditing(true)} title="Edit tournament settings — name, date, venue, fees, registration form" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(168,85,247,0.4)", background: "rgba(168,85,247,0.2)", color: "#c4b5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✏️ Edit</button>}
+          {current && <button onClick={() => setEditing(true)} title="Edit tournament settings — name, date, venue, registration form (prices are set per category)" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(168,85,247,0.4)", background: "rgba(168,85,247,0.2)", color: "#c4b5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✏️ Edit</button>}
           {current && <button onClick={copyRegistrationLink} title="Copy public registration link — share via WhatsApp/text" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(0,212,255,0.5)", background: "rgba(0,212,255,0.2)", color: "#7dd3fc", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>📋 Copy Registration Link</button>}
           {current && <button onClick={() => navigate(`/register/${current.id}`)} title="Open the public registration form in this window — useful for testing push notifications inside the PWA" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(250,204,21,0.5)", background: "rgba(250,204,21,0.2)", color: "#fde68a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🧪 Test as Player</button>}
           {current && <button onClick={removeCurrent} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(230,57,70,0.4)", background: "rgba(230,57,70,0.2)", color: "#fca5a5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete</button>}
@@ -266,9 +258,6 @@ export function TournamentPicker({
             <label style={labelStyle}>Contact info (shown on the form)</label>
             <textarea value={form.contact_info} onChange={e => setField("contact_info", e.target.value)} placeholder="Email: organizer@club.com&#10;Phone: 604-XXX-XXXX" rows={3} style={{ ...lightInputStyle, resize: "vertical" }} />
 
-            <SectionHeader>Fees</SectionHeader>
-            <FeeEditor value={form.fees} onChange={(next) => setField("fees", next)} />
-
             <SectionHeader>Terms & rules (shown on the form)</SectionHeader>
             <textarea value={form.terms_text} onChange={e => setField("terms_text", e.target.value)} placeholder="Type each paragraph separated by a blank line…" rows={6} style={{ ...lightInputStyle, resize: "vertical", fontFamily: "inherit" }} />
 
@@ -317,110 +306,3 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ---------- FeeEditor -----------------------------------------------------
-
-const BANDS: { key: AgeBand; label: string }[] = [
-  { key: "kid",   label: "Kids (8-12)" },
-  { key: "teen",  label: "Teens (13-17)" },
-  { key: "adult", label: "Adults (18+)" },
-];
-
-function FeeEditor({ value, onChange }: { value: TournamentFees; onChange: (next: TournamentFees) => void }) {
-  // Determine initial "member discount" toggle from the data: ON if any band
-  // has member !== non_member.
-  const initialDiscount = BANDS.some(b => {
-    const cell = value[b.key];
-    return cell && typeof cell.member === "number" && typeof cell.non_member === "number" && cell.member !== cell.non_member;
-  });
-  const [discount, setDiscount] = useState(initialDiscount);
-
-  const setBand = (band: AgeBand, field: "member" | "non_member", raw: string) => {
-    const num = raw === "" ? NaN : Number(raw);
-    const next: TournamentFees = { ...value };
-    const cell = { ...(next[band] ?? { member: NaN, non_member: NaN }) };
-    if (Number.isNaN(num)) {
-      // Clearing the input — remove that side
-      (cell as any)[field] = undefined;
-    } else {
-      cell[field] = num;
-      if (!discount) {
-        // Mirror to the other side so the schema shape stays consistent (flat fee)
-        cell.member = num;
-        cell.non_member = num;
-      }
-    }
-    // Drop entirely if both sides are empty/NaN
-    const hasMember = typeof cell.member === "number" && !Number.isNaN(cell.member);
-    const hasNon = typeof cell.non_member === "number" && !Number.isNaN(cell.non_member);
-    if (!hasMember && !hasNon) {
-      delete next[band];
-    } else {
-      next[band] = {
-        member: hasMember ? cell.member! : (hasNon ? cell.non_member! : 0),
-        non_member: hasNon ? cell.non_member! : (hasMember ? cell.member! : 0),
-      };
-    }
-    onChange(next);
-  };
-
-  const onToggleDiscount = (checked: boolean) => {
-    setDiscount(checked);
-    if (!checked) {
-      // Collapse: mirror non_member into member for every band
-      const next: TournamentFees = {};
-      for (const band of BANDS) {
-        const cell = value[band.key];
-        if (cell) {
-          const v = typeof cell.non_member === "number" ? cell.non_member : cell.member;
-          if (typeof v === "number") next[band.key] = { member: v, non_member: v };
-        }
-      }
-      onChange(next);
-    }
-  };
-
-  return (
-    <div>
-      <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
-        <input type="checkbox" checked={discount} onChange={e => onToggleDiscount(e.target.checked)} />
-        <span><strong>Enable member discount</strong> — show a second column for member rate</span>
-      </label>
-      <div style={{ display: "grid", gridTemplateColumns: discount ? "1fr 1fr 1fr" : "1fr 1fr", gap: 8, alignItems: "center", marginBottom: 4 }}>
-        <div />
-        {discount && <div style={miniLabel}>Member ($)</div>}
-        <div style={miniLabel}>{discount ? "Non-member ($)" : "Fee ($)"}</div>
-      </div>
-      {BANDS.map(b => {
-        const cell = value[b.key];
-        const mem = cell && typeof cell.member === "number" ? cell.member : "";
-        const non = cell && typeof cell.non_member === "number" ? cell.non_member : "";
-        return (
-          <div key={b.key} style={{ display: "grid", gridTemplateColumns: discount ? "1fr 1fr 1fr" : "1fr 1fr", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>{b.label}</label>
-            {discount && (
-              <input
-                type="number" min={0} step={1} value={mem}
-                onChange={e => setBand(b.key, "member", e.target.value)}
-                placeholder="—"
-                style={{ ...lightInputStyle, marginTop: 0, marginBottom: 0 }}
-              />
-            )}
-            <input
-              type="number" min={0} step={1} value={non}
-              onChange={e => setBand(b.key, "non_member", e.target.value)}
-              placeholder="—"
-              style={{ ...lightInputStyle, marginTop: 0, marginBottom: 0 }}
-            />
-          </div>
-        );
-      })}
-      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
-        Leave a row blank to hide that age band. {discount ? "" : "Both columns will be set to the same value (no discount)."}
-      </div>
-    </div>
-  );
-}
-
-const miniLabel: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase",
-};

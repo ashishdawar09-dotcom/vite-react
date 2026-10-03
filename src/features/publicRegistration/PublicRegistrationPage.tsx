@@ -6,11 +6,11 @@ import { submitPublicRegistration } from "../../lib/db";
 import { pushSupportStatus, subscribeToPush } from "../../lib/push";
 import { captureError } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
-import type { Category, PublicRegistrationPayload, TournamentFees } from "../../types";
+import type { Category, PublicRegistrationPayload } from "../../types";
 import { Countdown } from "./Countdown";
-import { computeFee, type PaymentSplit } from "./computeFee";
+import { computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type PaymentSplit } from "./computeFee";
 import { usePublicTournament } from "./usePublicTournament";
-import { emptyFormState, type FormErrors, type FormState, hasMemberDiscount, isValid, validate } from "./validate";
+import { emptyFormState, type FormErrors, type FormState, isValid, validate } from "./validate";
 
 const CYAN = "#00d4ff";
 const CYAN_DARK = "#006d80";
@@ -35,11 +35,6 @@ function fmtDate(iso: string | null, time: string | null): string {
   const period = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${dateStr} • ${h12}:${String(mins).padStart(2, "0")} ${period}`;
-}
-
-function fmtMoney(n: number | null): string {
-  if (n === null) return "—";
-  return `$${n}`;
 }
 
 function paragraphs(text: string): string[] {
@@ -101,41 +96,6 @@ const inputStyle: React.CSSProperties = {
   minHeight: 44,
 };
 
-function YesNoCards({
-  value, onChange,
-}: { value: boolean | null; onChange: (v: boolean) => void }) {
-  const opts: Array<{ v: boolean; label: string }> = [
-    { v: true, label: "Yes" },
-    { v: false, label: "No" },
-  ];
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: spacing.sm }}>
-      {opts.map((o) => {
-        const sel = value === o.v;
-        return (
-          <button
-            key={String(o.v)} type="button" onClick={() => onChange(o.v)}
-            style={{
-              padding: "12px 16px",
-              borderRadius: radii.md,
-              border: `2px solid ${sel ? CYAN : colors.border.lightStrong}`,
-              background: sel ? "rgba(0, 212, 255, 0.08)" : colors.bg.card,
-              color: sel ? CYAN_DARK : colors.text.primaryLight,
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: "pointer",
-              minHeight: 44,
-              transition: "border-color 120ms, background 120ms",
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ---------- the page ---------------------------------------------------------
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
@@ -159,11 +119,10 @@ export function PublicRegistrationPage() {
     () => categories.find((c) => c.id === form.category_id) ?? null,
     [categories, form.category_id],
   );
-  const fees: TournamentFees = tournament?.fees ?? {};
-  const showMembershipQuestion = useMemo(() => hasMemberDiscount(fees), [fees]);
+  // Prices are per category; membership no longer affects the fee.
   const errors = useMemo(
-    () => validate(form, selectedCategory, { requireMembership: showMembershipQuestion }),
-    [form, selectedCategory, showMembershipQuestion],
+    () => validate(form, selectedCategory, { requireMembership: false }),
+    [form, selectedCategory],
   );
   const visibleErrors: FormErrors = useMemo(() => {
     const out: FormErrors = {};
@@ -173,11 +132,15 @@ export function PublicRegistrationPage() {
     return out;
   }, [errors, touched, submitStatus]);
 
-  // When membership question is hidden (flat-fee tournament), treat as non-member
-  // for fee calc so a value is always available.
-  const memberForFee = showMembershipQuestion ? form.player_is_member : false;
-  const feeOwed = computeFee(fees, selectedCategory, memberForFee, form.payment_split);
-  const baseFee = computeFee(fees, selectedCategory, memberForFee, "separate");
+  // "Pay for both" only applies to doubles priced per player, once a partner
+  // is named. Per-team prices already cover both players.
+  const baseFee = computeFee(selectedCategory, "separate");
+  const showPaymentSplit =
+    selectedCategory?.team_size === 2 &&
+    priceBasis(selectedCategory) === "per_player" &&
+    baseFee !== null &&
+    !!form.partner_name.trim();
+  const paymentSplit: PaymentSplit = showPaymentSplit ? form.payment_split : "separate";
 
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: val }));
@@ -216,9 +179,11 @@ export function PublicRegistrationPage() {
       player_name: form.player_name.trim(),
       player_email: form.player_email.trim(),
       player_phone: form.player_phone.trim() || undefined,
-      player_is_member: form.player_is_member === true,
+      player_is_member: false,
       payment_reference: form.payment_reference.trim(),
-      payment_paid_full_for_partner: form.payment_split === "full",
+      payment_paid_full_for_partner:
+        selectedCategory.team_size === 2 &&
+        (priceBasis(selectedCategory) === "per_team" ? !!form.partner_name.trim() : paymentSplit === "full"),
       comments: form.comments.trim() || undefined,
       group_choice: form.group_choice ?? undefined,
     };
@@ -226,7 +191,6 @@ export function PublicRegistrationPage() {
       payload.partner_name = form.partner_name.trim();
       payload.partner_email = form.partner_email.trim();
       payload.partner_phone = form.partner_phone.trim() || undefined;
-      if (form.partner_is_member !== null) payload.partner_is_member = form.partner_is_member;
     }
 
     const result = await submitPublicRegistration(payload);
@@ -486,14 +450,6 @@ export function PublicRegistrationPage() {
                 onBlur={() => markTouched("player_phone")}
               />
             </Field>
-            {showMembershipQuestion && (
-              <Field label="Are you a club member?" required hint="Determines your fee tier" error={visibleErrors.player_is_member}>
-                <YesNoCards
-                  value={form.player_is_member}
-                  onChange={(v) => { set("player_is_member", v); markTouched("player_is_member"); }}
-                />
-              </Field>
-            )}
           </Card>
 
           {/* Category section */}
@@ -503,11 +459,19 @@ export function PublicRegistrationPage() {
                 categories={categories}
                 value={form.category_id}
                 onChange={(id) => { set("category_id", id); markTouched("category_id"); }}
-                fees={fees}
-                isMember={memberForFee}
                 isMobile={isMobile}
               />
             </Field>
+            {selectedCategory && priceDescription(selectedCategory) && (
+              <div style={{
+                marginTop: spacing.sm, padding: "12px 14px",
+                background: "rgba(0, 212, 255, 0.08)", border: `1px solid ${CYAN}`, borderRadius: radii.md,
+                fontSize: 14, color: colors.text.primaryLight,
+              }}>
+                <span style={{ fontWeight: 800, color: CYAN_DARK }}>Entry fee: </span>
+                {priceDescription(selectedCategory)}
+              </div>
+            )}
           </Card>
 
           {/* Partner section (conditional) */}
@@ -528,7 +492,7 @@ export function PublicRegistrationPage() {
                     </div>
                     <div style={{ fontSize: 13, color: colors.text.mutedLight, marginTop: 4 }}>
                       {selectedCategory.allow_solo_signup
-                        ? "Optional — leave blank if you don't have a partner, we'll arrange one for you."
+                        ? "Optional — leave blank if you don't have a partner at this point."
                         : "Only one member of each team needs to submit this form."}
                     </div>
                   </div>
@@ -550,14 +514,6 @@ export function PublicRegistrationPage() {
                       onChange={(e) => set("partner_email", e.target.value)}
                       onBlur={() => markTouched("partner_email")} />
                   </Field>
-                  {showMembershipQuestion && (
-                    <Field label="Is your partner a club member?" required={!selectedCategory.allow_solo_signup} error={visibleErrors.partner_is_member}>
-                      <YesNoCards
-                        value={form.partner_is_member}
-                        onChange={(v) => { set("partner_is_member", v); markTouched("partner_is_member"); }}
-                      />
-                    </Field>
-                  )}
                 </Card>
               </motion.div>
             )}
@@ -565,14 +521,14 @@ export function PublicRegistrationPage() {
 
           {/* Payment section */}
           <Card>
-            {selectedCategory && selectedCategory.team_size === 2 && baseFee !== null && (
+            {showPaymentSplit && baseFee !== null && (
               <Field label="Payment split for this team">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: spacing.sm }}>
                   {([
                     { v: "separate" as PaymentSplit, label: `Partner pays separately (${fmtMoney(baseFee)} each)` },
                     { v: "full" as PaymentSplit, label: `I'll pay for both (${fmtMoney(baseFee * 2)} total)` },
                   ]).map((o) => {
-                    const sel = form.payment_split === o.v;
+                    const sel = paymentSplit === o.v;
                     return (
                       <button key={o.v} type="button"
                         onClick={() => set("payment_split", o.v)}
@@ -588,18 +544,6 @@ export function PublicRegistrationPage() {
                 </div>
               </Field>
             )}
-            <Field label="You owe">
-              <div style={{
-                padding: "14px 16px", background: "rgba(0, 212, 255, 0.08)",
-                border: `1px solid ${CYAN}`, borderRadius: radii.md,
-                fontSize: 22, fontWeight: 800, color: CYAN_DARK,
-                ...typography.tabular,
-              }}>
-                {feeOwed !== null
-                  ? <>CAD {fmtMoney(feeOwed)} <span style={{ fontSize: 12, fontWeight: 600, color: colors.text.mutedLight, marginLeft: spacing.sm }}>computed from category + membership</span></>
-                  : <span style={{ fontSize: 14, color: colors.text.mutedLight }}>Select a category and membership status to see your fee.</span>}
-              </div>
-            </Field>
             <Field label="e-Transfer reference #" required hint="Send your e-transfer first, then paste the reference number here" error={visibleErrors.payment_reference}>
               <input type="text" style={inputStyle} autoCapitalize="characters"
                 value={form.payment_reference}
@@ -694,18 +638,16 @@ type CategoryPickerProps = {
   categories: Category[];
   value: string | null;
   onChange: (id: string) => void;
-  fees: TournamentFees;
-  isMember: boolean | null;
   isMobile: boolean;
 };
 
-function CategoryPicker({ categories, value, onChange, fees, isMember, isMobile }: CategoryPickerProps) {
+function CategoryPicker({ categories, value, onChange, isMobile }: CategoryPickerProps) {
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
         {categories.map((c) => {
           const sel = c.id === value;
-          const fee = computeFee(fees, c, isMember, "separate");
+          const price = priceLabel(c);
           return (
             <button key={c.id} type="button" onClick={() => onChange(c.id)}
               style={{
@@ -719,7 +661,7 @@ function CategoryPicker({ categories, value, onChange, fees, isMember, isMobile 
               <div style={{ fontSize: 12, color: colors.text.mutedLight, display: "flex", gap: spacing.sm }}>
                 <span>{c.team_size === 1 ? "Singles" : "Doubles"}</span>
                 {c.age_band && <span>• {c.age_band}</span>}
-                {fee !== null && <span>• {fmtMoney(fee)}</span>}
+                {price && <span>• {price}</span>}
                 {c.allow_solo_signup && <span style={{ color: CYAN_DARK }}>• solo OK</span>}
               </div>
             </button>
@@ -741,11 +683,11 @@ function CategoryPicker({ categories, value, onChange, fees, isMember, isMobile 
     >
       <option value="" disabled>Choose a category…</option>
       {categories.map((c) => {
-        const fee = computeFee(fees, c, isMember, "separate");
+        const price = priceLabel(c);
         return (
           <option key={c.id} value={c.id}>
             {c.name} — {c.team_size === 1 ? "Singles" : "Doubles"}
-            {c.age_band ? ` (${c.age_band})` : ""}{fee !== null ? ` — ${fmtMoney(fee)}` : ""}
+            {c.age_band ? ` (${c.age_band})` : ""}{price ? ` — ${price}` : ""}
           </option>
         );
       })}

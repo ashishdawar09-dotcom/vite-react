@@ -4,13 +4,12 @@ import { useState } from "react";
 import { useToast } from "../../components/Toast";
 import { approveRegistration, rejectRegistration } from "../../lib/db";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
-import type { Category, PendingRegistration, TournamentFees } from "../../types";
-import { computeFee } from "../publicRegistration/computeFee";
+import type { Category, PendingRegistration } from "../../types";
+import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
 
 type Props = {
   reg: PendingRegistration;
   category: Category | null;
-  fees: TournamentFees;
   onResolved: (id: string) => void;
 };
 
@@ -44,7 +43,7 @@ function errorMessage(e: unknown): string {
   return String(e);
 }
 
-export function PendingRegistrationCard({ reg, category, fees, onResolved }: Props) {
+export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
   const reduce = useReducedMotion();
   const toast = useToast();
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -52,10 +51,13 @@ export function PendingRegistrationCard({ reg, category, fees, onResolved }: Pro
   const [reason, setReason] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const ownFee = computeFee(fees, category, reg.player_is_member, reg.payment_paid_full_for_partner ? "full" : "separate");
-  const partnerFee = reg.partner_email && reg.partner_is_member !== null && category
-    ? computeFee(fees, category, reg.partner_is_member, "separate")
-    : null;
+  // From the category's current price, not a snapshot taken at submission.
+  const ownFee = computeFee(category, reg.payment_paid_full_for_partner ? "full" : "separate");
+  const partnerPaysSeparately =
+    !!category && category.team_size === 2 && priceBasis(category) === "per_player" &&
+    !!reg.partner_name && !reg.payment_paid_full_for_partner;
+  const coversTeam =
+    !!category && category.team_size === 2 && !!reg.partner_name && !partnerPaysSeparately;
 
   const handleApprove = async () => {
     setBusy("approve");
@@ -122,9 +124,6 @@ export function PendingRegistrationCard({ reg, category, fees, onResolved }: Pro
           <div style={{ fontSize: 16, fontWeight: 800, color: colors.text.primaryLight }}>
             {reg.player_name}
           </div>
-          <Badge tone={reg.player_is_member ? "good" : "neutral"}>
-            {reg.player_is_member ? "Member" : "Non-member"}
-          </Badge>
           {category && (
             <Badge tone="info">{category.name}{category.age_band ? ` • ${category.age_band}` : ""}</Badge>
           )}
@@ -152,11 +151,6 @@ export function PendingRegistrationCard({ reg, category, fees, onResolved }: Pro
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: spacing.sm, flexWrap: "wrap" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: colors.text.primaryLight }}>{reg.partner_name ?? "—"}</div>
-            {reg.partner_is_member !== null && (
-              <Badge tone={reg.partner_is_member ? "good" : "neutral"}>
-                {reg.partner_is_member ? "Member" : "Non-member"}
-              </Badge>
-            )}
           </div>
           <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: spacing.md, fontSize: 12, color: colors.text.mutedLight }}>
             {reg.partner_email && <ContactLine label="Email" value={reg.partner_email} copyKey={`xe-${reg.id}`} copiedKey={copiedKey} onCopy={onCopy} />}
@@ -185,9 +179,11 @@ export function PendingRegistrationCard({ reg, category, fees, onResolved }: Pro
         </button>
         {ownFee !== null && (
           <span style={{ marginLeft: "auto", fontSize: 13, color: colors.text.primaryLight, ...typography.tabular }}>
-            Owes <strong>${ownFee}</strong>
-            {partnerFee !== null && reg.payment_paid_full_for_partner === false &&
-              <span style={{ color: colors.text.mutedLight }}> &nbsp;(partner pays ${partnerFee} separately)</span>}
+            Owes <strong>{fmtMoney(ownFee)}</strong>
+            {partnerPaysSeparately &&
+              <span style={{ color: colors.text.mutedLight }}> &nbsp;(partner pays {fmtMoney(ownFee)} separately)</span>}
+            {coversTeam &&
+              <span style={{ color: colors.text.mutedLight }}> &nbsp;(covers both players)</span>}
           </span>
         )}
       </div>

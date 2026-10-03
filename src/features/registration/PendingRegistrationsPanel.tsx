@@ -90,7 +90,6 @@ export function PendingRegistrationsPanel({ tournament, categories, isAdmin }: P
                     key={reg.id}
                     reg={reg}
                     category={catById.get(reg.category_id) ?? null}
-                    fees={tournament.fees}
                     onResolved={removeLocal}
                   />
                 ))}

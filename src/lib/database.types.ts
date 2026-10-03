@@ -31,6 +31,8 @@ export type Database = {
           match_minutes: number
           name: string
           phase: string
+          price: number | null
+          price_basis: string
           rounds_per_pair: number
           sort_order: number
           starts_at: string | null
@@ -48,6 +50,8 @@ export type Database = {
           match_minutes?: number
           name: string
           phase?: string
+          price?: number | null
+          price_basis?: string
           rounds_per_pair?: number
           sort_order?: number
           starts_at?: string | null
@@ -65,6 +69,8 @@ export type Database = {
           match_minutes?: number
           name?: string
           phase?: string
+          price?: number | null
+          price_basis?: string
           rounds_per_pair?: number
           sort_order?: number
           starts_at?: string | null

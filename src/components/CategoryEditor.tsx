@@ -3,7 +3,7 @@ import * as db from "../lib/db";
 import { toast } from "./Toast";
 import { Modal } from "./ui/Modal";
 import { recommendFormats, describeFormat, type FormatPlan } from "../lib/formatPlanner";
-import type { AgeBand, Category, Player, PlayerCategory } from "../types";
+import type { AgeBand, Category, Player, PlayerCategory, PriceBasis } from "../types";
 
 export function CategoryEditor({
   tournamentId,
@@ -27,6 +27,8 @@ export function CategoryEditor({
   const [ageBand, setAgeBand] = useState<AgeBand | null>(category?.age_band ?? null);
   const [allowSolo, setAllowSolo] = useState<boolean>(category?.allow_solo_signup ?? false);
   const [hasBronze, setHasBronze] = useState<boolean>(category?.has_bronze_match ?? false);
+  const [price, setPrice] = useState<string>(category?.price != null ? String(category.price) : "");
+  const [priceBasis, setPriceBasis] = useState<PriceBasis>(category?.price_basis ?? "per_player");
   const [busy, setBusy] = useState(false);
 
   // Estimated number of teams in this category — drives the format recommender.
@@ -76,6 +78,10 @@ export function CategoryEditor({
 
   const save = async () => {
     if (!name.trim()) { toast("Category name required", "warn"); return; }
+    const priceNum = price.trim() === "" ? null : Number(price);
+    if (priceNum !== null && (!Number.isFinite(priceNum) || priceNum < 0)) { toast("Price must be a positive amount", "warn"); return; }
+    // Singles are always per player (also enforced by a DB constraint).
+    const basis: PriceBasis = teamSize === 2 ? priceBasis : "per_player";
     setBusy(true);
     try {
       const startsIso = startsAt ? new Date(startsAt).toISOString() : null;
@@ -89,6 +95,8 @@ export function CategoryEditor({
           age_band: ageBand,
           allow_solo_signup: allowSolo,
           has_bronze_match: hasBronze,
+          price: priceNum,
+          price_basis: basis,
         };
         if (selectedPlan) {
           patch.groups_count = selectedPlan.groupsCount;
@@ -98,8 +106,11 @@ export function CategoryEditor({
         await db.updateCategory(category.id, patch);
       } else {
         const created = await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
-        if (ageBand !== null || allowSolo || hasBronze) {
-          await db.updateCategory(created.id, { age_band: ageBand, allow_solo_signup: allowSolo, has_bronze_match: hasBronze });
+        if (ageBand !== null || allowSolo || hasBronze || priceNum !== null || basis !== "per_player") {
+          await db.updateCategory(created.id, {
+            age_band: ageBand, allow_solo_signup: allowSolo, has_bronze_match: hasBronze,
+            price: priceNum, price_basis: basis,
+          });
         }
       }
       onClose();
@@ -139,7 +150,24 @@ export function CategoryEditor({
           <input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={inputStyle} />
         </Field>
 
-        <Field label="Age band (drives registration fee tier)">
+        <Field label="Registration price (CAD)">
+          <input
+            type="number" min={0} step="0.01" inputMode="decimal"
+            value={price} onChange={e => setPrice(e.target.value)}
+            placeholder="e.g. 25 — leave blank to hide the price" style={inputStyle}
+          />
+          {teamSize === 2 ? (
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <FormatBtn active={priceBasis === "per_player"} onClick={() => setPriceBasis("per_player")}>PER PLAYER</FormatBtn>
+              <FormatBtn active={priceBasis === "per_team"} onClick={() => setPriceBasis("per_team")}>PER TEAM</FormatBtn>
+            </div>
+          ) : null}
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+            {pricePreview(price, teamSize, priceBasis)}
+          </div>
+        </Field>
+
+        <Field label="Age band">
           <select
             value={ageBand ?? ""}
             onChange={e => setAgeBand((e.target.value || null) as AgeBand | null)}
@@ -161,7 +189,7 @@ export function CategoryEditor({
                 onChange={e => setAllowSolo(e.target.checked)}
                 style={{ accentColor: "#00d4ff", width: 16, height: 16 }}
               />
-              <span>Players can register without a partner (we'll pair them)</span>
+              <span>Players can register without a partner</span>
             </label>
           </Field>
         )}
@@ -305,4 +333,14 @@ function toLocalInput(iso: string): string {
   // produce YYYY-MM-DDTHH:MM in LOCAL time
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// What registrants will see, so per-player vs per-team is unambiguous.
+function pricePreview(raw: string, teamSize: 1 | 2, basis: PriceBasis): string {
+  const n = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(n)) return "No price set — the form won't show a price for this category.";
+  const amt = (v: number) => (Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`);
+  if (teamSize === 1) return `Registrants see: ${amt(n)} per player.`;
+  if (basis === "per_team") return `Registrants see: ${amt(n)} per team — one payment covers both players.`;
+  return `Registrants see: ${amt(n)} per player (${amt(n * 2)} per team) — each player pays their own share, or one pays for both.`;
 }

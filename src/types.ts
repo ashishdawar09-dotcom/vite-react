@@ -1,5 +1,9 @@
 export type AgeBand = "kid" | "teen" | "adult";
 
+export type PriceBasis = "per_player" | "per_team";
+
+// Legacy: per-tournament fee grid, superseded by Category.price. Still a
+// column in the database but no longer read or written by the app.
 export type TournamentFees = {
   [band in AgeBand]?: { member: number; non_member: number };
 };
@@ -48,6 +52,9 @@ export type Category = {
   // the two semi-final losers. Only effective when the bracket has SFs
   // (slots >= 4); ignored otherwise.
   has_bronze_match: boolean;
+  // Registration price in CAD (null = not set). Singles are always per player.
+  price: number | null;
+  price_basis: PriceBasis;
 };
 
 export type Player = {
