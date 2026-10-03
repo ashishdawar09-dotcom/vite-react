@@ -23,7 +23,7 @@
     "partyserver": "0.5.8",
     "zod": "4.4.3",
     "eventsource-parser": "3.1.0",
-    "fast-uri": "3.1.4",
+    "fast-uri": "3.1.8",
     "core-js-pure": "3.49.0"
   }
 }

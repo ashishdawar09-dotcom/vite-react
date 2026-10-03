@@ -37,6 +37,17 @@ function fmtDate(iso: string | null, time: string | null): string {
   return `${dateStr} • ${h12}:${String(mins).padStart(2, "0")} ${period}`;
 }
 
+// Only http(s) links reach an href; anything else (e.g. javascript:) is dropped.
+function safeHttpUrl(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function paragraphs(text: string): string[] {
   return text.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
 }
@@ -353,8 +364,8 @@ export function PublicRegistrationPage() {
                 {tournament.venue_address}
               </div>
             )}
-            {tournament.venue_map_url && (
-              <a href={tournament.venue_map_url} target="_blank" rel="noopener noreferrer"
+            {safeHttpUrl(tournament.venue_map_url) && (
+              <a href={safeHttpUrl(tournament.venue_map_url)} target="_blank" rel="noopener noreferrer"
                 style={{ marginTop: spacing.sm, display: "inline-block", color: CYAN_DARK, fontSize: 13, fontWeight: 700, textDecoration: "none" }}>
                 Open map ↗
               </a>

@@ -41,11 +41,15 @@ function VoiceCall({ tournamentId, playerId, onClose }: {
   onClose: () => void;
 }) {
   const reduce = useReducedMotion();
+  // One agent instance per panel session, so visitors never share
+  // conversation history (the default instance name is shared by everyone).
+  const [room] = useState(() => crypto.randomUUID());
   const {
     status, transcript, interimTranscript, connected, error,
     startCall, endCall, toggleMute, isMuted,
   } = useVoiceAgent({
     agent: AGENT,
+    name: room,
     host: WORKER_HOST,
     query: {
       tournamentId: tournamentId ?? undefined,

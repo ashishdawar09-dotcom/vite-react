@@ -14,13 +14,9 @@
 // switch RESEND_FROM_EMAIL to e.g. `notify@yourdomain.com`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { isUuid, json, serveWithCors } from "../_shared/http.ts";
 import webpush from "npm:web-push@3.6.7";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 type Player = { id: string; name: string; email: string | null };
 type Team = { id: string; p1_id: string; p2_id: string | null };
@@ -58,10 +54,9 @@ async function requireAdmin(req: Request): Promise<string | null> {
   }
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+serveWithCors(handle);
+
+async function handle(req: Request): Promise<Response> {
 
   // Admin-only. This function emails + push-notifies every player on a match.
   // Match IDs are world-readable, so without this gate anyone with the public
@@ -74,7 +69,7 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}));
     const matchId: string | undefined = body?.match_id;
-    if (!matchId) {
+    if (!isUuid(matchId)) {
       return json({ error: "match_id required" }, 400);
     }
 
@@ -337,7 +332,7 @@ Good luck out there!
         sent++;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error("send failed for", player.email, msg);
+        console.error("send failed for player", player.id, msg);
         await supabase.from("notification_log").insert({
           match_id: matchId,
           player_id: player.id,
@@ -426,14 +421,8 @@ Good luck out there!
     console.error("notify-court-allocated error:", msg);
     return json({ error: msg }, 500);
   }
-});
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 }
+
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {

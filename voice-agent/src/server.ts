@@ -16,6 +16,18 @@ import type { Env, Snapshot } from "./types";
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
+// Browsers that may open a voice session: production, the Vercel alias, this
+// team's preview deployments, and local dev. Keeps other sites from spending
+// this account's Workers AI allowance through the app's agent.
+const ALLOWED_ORIGIN =
+  /^(https:\/\/(badminton\.adawar\.org|badminton-ad\.vercel\.app|vite-react-[a-z0-9-]+-ashishs-projects-eeab76d3\.vercel\.app)|http:\/\/localhost:\d+)$/;
+
+// Per-connection limits on model calls.
+const MAX_TURN_CHARS = 300;
+const MIN_TURN_GAP_MS = 1_000;
+const MAX_TURNS_PER_WINDOW = 30;
+const TURN_WINDOW_MS = 10 * 60_000;
+
 interface ToolDef {
   name: string;
   description: string;
@@ -127,6 +139,8 @@ export class BadmintonVoiceAgent extends VoiceAgent {
   // Per-connection identity (tournamentId + playerId), parsed from query params.
   // playerId is a convenience hint from the client, not an authenticated identity.
   #identity = new Map<string, Identity>();
+  // Recent turn timestamps per connection, for throttling.
+  #turns = new Map<string, number[]>();
   // Short-lived snapshot cache to avoid re-fetching within a rapid back-and-forth.
   #cache: { id: string; data: Snapshot; at: number } | null = null;
 
@@ -144,6 +158,7 @@ export class BadmintonVoiceAgent extends VoiceAgent {
 
   onClose(connection: Connection) {
     this.#identity.delete(connection.id);
+    this.#turns.delete(connection.id);
   }
 
   async getSnapshot(tournamentId: string): Promise<Snapshot> {
@@ -165,7 +180,24 @@ export class BadmintonVoiceAgent extends VoiceAgent {
     return this.env.DEFAULT_TOURNAMENT_ID || null;
   }
 
+  // True when this connection may make another model call now.
+  #allowTurn(connectionId: string, now: number): boolean {
+    const recent = (this.#turns.get(connectionId) ?? []).filter((t) => now - t < TURN_WINDOW_MS);
+    const last = recent[recent.length - 1];
+    if (recent.length >= MAX_TURNS_PER_WINDOW || (last !== undefined && now - last < MIN_TURN_GAP_MS)) {
+      this.#turns.set(connectionId, recent);
+      return false;
+    }
+    recent.push(now);
+    this.#turns.set(connectionId, recent);
+    return true;
+  }
+
   async onTurn(transcript: string, context: VoiceTurnContext): Promise<string> {
+    if (!this.#allowTurn(context.connection.id, Date.now())) {
+      return "Let's slow down a little. Please ask again in a moment.";
+    }
+    transcript = transcript.slice(0, MAX_TURN_CHARS);
     const identity = this.#identity.get(context.connection.id) ?? { tournamentId: null, playerId: null };
     const tournamentId = await this.resolveTournamentId(identity);
     if (!tournamentId) {
@@ -243,6 +275,14 @@ export class BadmintonVoiceAgent extends VoiceAgent {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const origin = request.headers.get("Origin") ?? "";
+    if (!ALLOWED_ORIGIN.test(origin)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    const { success } = await env.CONNECT_LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" });
+    if (!success) {
+      return new Response("Too many requests", { status: 429 });
+    }
     return (await routeAgentRequest(request, env, { cors: true })) ?? new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

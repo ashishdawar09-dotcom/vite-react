@@ -11,12 +11,8 @@
 //   SUPABASE_SERVICE_ROLE_KEY
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { allow, allowClient, isUuid, json, serveWithCors } from "../_shared/http.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 type Payload = {
   tournament_id: string;
@@ -35,15 +31,25 @@ type Payload = {
   group_choice?: "open" | "members";
 };
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+serveWithCors(handle);
+
+async function handle(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return json({ success: false, error: "POST only" }, 405);
   }
 
   try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Flood guard per client. Generous because families and club sessions share
+    // one network; the per-tournament cap below bounds the total.
+    if (!(await allowClient(supabase, req, "register-player", 15, 600))) {
+      return json({ success: false, error: "Too many submissions. Please wait a few minutes and try again." }, 429);
+    }
+
     // Cap raw body size before parsing — prevents oversized payloads from
     // bloating storage or exhausting memory. ~8 KB is generous for this form.
     const rawBody = await req.text();
@@ -56,11 +62,6 @@ Deno.serve(async (req: Request) => {
     } catch {
       return json({ success: false, error: "Invalid JSON" }, 400);
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     // ---- Validation: required scalars ----
     const requiredStrings: (keyof Payload)[] = [
@@ -75,6 +76,9 @@ Deno.serve(async (req: Request) => {
       if (typeof v !== "string" || !v.trim()) {
         return json({ success: false, error: `Missing field: ${k}` }, 400);
       }
+    }
+    if (!isUuid(body.tournament_id) || !isUuid(body.category_id)) {
+      return json({ success: false, error: "Tournament not found" }, 404);
     }
     if (typeof body.player_is_member !== "boolean") {
       return json({ success: false, error: "player_is_member must be boolean" }, 400);
@@ -113,6 +117,11 @@ Deno.serve(async (req: Request) => {
     }
     if (t.registration_deadline && new Date(t.registration_deadline).getTime() < Date.now()) {
       return json({ success: false, error: "Registration deadline has passed" }, 400);
+    }
+
+    // Overall cap per tournament, which per-client limits can't get around.
+    if (!(await allow(supabase, "register-player-tournament", t.id, 200, 3600))) {
+      return json({ success: false, error: "Registration is busy right now. Please try again shortly." }, 429);
     }
 
     // ---- Validation: category belongs to tournament ----
@@ -218,23 +227,13 @@ Deno.serve(async (req: Request) => {
 
     if (insErr || !ins) {
       console.error("register-player insert failed:", insErr?.message);
-      return json(
-        { success: false, error: insErr?.message ?? "Failed to save registration" },
-        500,
-      );
+      return json({ success: false, error: "Failed to save registration. Please try again." }, 500);
     }
 
     return json({ success: true, registrationId: ins.id }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("register-player error:", msg);
-    return json({ success: false, error: msg }, 500);
+    return json({ success: false, error: "Something went wrong. Please try again." }, 500);
   }
-});
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 }
