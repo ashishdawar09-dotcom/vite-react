@@ -2,46 +2,45 @@
 
 Vite + React + Supabase. Public read-only viewer; admin signs in to manage players, teams, and scores. Realtime updates so anyone watching sees scores live.
 
-## Setup
+Production: https://badminton.adawar.org (Vercel project `vite-react`, deploys from `main`).
 
-### 1. Run the schema in Supabase
+## Database
 
-Open Supabase Dashboard → SQL Editor → paste contents of `supabase/schema.sql` → Run.
-
-Creates: `tournaments`, `players`, `teams`, `matches` tables, `player-photos` storage bucket, RLS policies (public read, admin-only write), realtime publication.
-
-### 2. Local dev
+Supabase project `wdqooznwzesmjdvlcrxw`. Schema changes are migrations in
+`supabase/migrations/`, tracked by the Supabase CLI:
 
 ```bash
-npm install
+supabase link --project-ref wdqooznwzesmjdvlcrxw
+supabase migration list          # what is applied in production
+supabase migration new <name>    # write a new change
+supabase db push                 # apply pending migrations
+```
+
+`20261002000000_baseline.sql` is a snapshot of the live schema taken on
+2 October 2026. Everything before it was applied by hand and is kept in
+`supabase/legacy/` for history only — never re-run those files.
+
+Edge Functions live in `supabase/functions/` and deploy separately:
+`supabase functions deploy <name>`.
+
+## Local dev
+
+```bash
+npm ci
 npm run dev
 ```
 
-Env vars in `.env.local` (gitignored):
+Env vars in `.env.local` (gitignored), see `.env.example`:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_ADMIN_EMAIL`
+- `VITE_VOICE_WORKER_URL` (optional; voice assistant)
+- `VITE_VAPID_PUBLIC_KEY`, `VITE_SENTRY_DSN` (optional)
 
-### 3. Deploy to Netlify
-
-1. Push this folder to GitHub.
-2. Netlify → "Add new site" → "Import an existing project" → pick the repo.
-3. Build settings auto-detected from `netlify.toml` (`npm run build` → `dist`).
-4. Site settings → Environment variables, add:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY`
-   - `VITE_ADMIN_EMAIL`
-5. Trigger deploy.
-
-### 4. Configure Supabase auth redirects
-
-Supabase Dashboard → Authentication → URL Configuration:
-- **Site URL**: `https://your-site.netlify.app`
-- **Additional Redirect URLs**: `https://your-site.netlify.app/**`, `http://localhost:5173/**`
+Checks: `npm test`, `npm run lint`, `npm run build:check`.
 
 ## How it works
 
 - Public visitors see current state (read-only).
-- "Admin Sign In" → magic link emailed → click → authenticated.
-- Postgres `is_admin()` function checks JWT email against hardcoded admin address; RLS allows writes only when matched.
-- Realtime subscriptions push changes to all connected clients.
+- Admins sign in (email code or Google); `is_admin()` checks the JWT email against the `tournament_admins` table and RLS allows writes only when matched.
+- Realtime subscriptions push changes to admin clients; spectators poll the `live_snapshot` RPC.
+- The voice assistant is a separate Cloudflare Worker (`badminton-voice-agent`).

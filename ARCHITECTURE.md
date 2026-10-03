@@ -78,15 +78,15 @@ on the server, so even a tampered client can't write.
 Every UPDATE/INSERT/DELETE on `matches` writes a row to `match_audit_log`
 via the `trg_match_audit` trigger (schema_v6). Captures the JWT email of
 the actor, before/after JSON, and the changed field list. Read with
-`db.listMatchAudit(matchId)`.
+`db.listMatchAudit(matchId)`. Readable by admins only, because `changed_by`
+holds the admin's email.
 
 ## Migrations
 
-SQL files in `supabase/`. Apply manually via the Supabase SQL editor in
-order. v6 (`schema_v6_perf_safety.sql`) is idempotent; safe to re-run.
-
-Roadmap: move to `supabase/migrations/<timestamp>_<name>.sql` and apply
-via `supabase db push` from CI.
+`supabase/migrations/<timestamp>_<name>.sql`, applied with `supabase db push`
+and tracked in `supabase_migrations.schema_migrations`. The first migration is
+a baseline of the live schema (2 October 2026); the hand-applied scripts it
+replaces are in `supabase/legacy/` for history only.
 
 ## Build splits
 
