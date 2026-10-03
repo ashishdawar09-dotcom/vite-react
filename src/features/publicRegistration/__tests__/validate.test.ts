@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { emptyFormState, hasMemberDiscount, isValid, validate } from "../validate";
-import type { Category, TournamentFees } from "../../../types";
+import { emptyFormState, isValid, validate } from "../validate";
+import type { Category } from "../../../types";
 
 const singles: Category = {
   id: "s", tournament_id: "t", name: "Men's Singles", team_size: 1,
   match_minutes: 12, starts_at: null, phase: "none", rounds_per_pair: 1,
   groups_count: 0, top_n_advance: 0, sort_order: 0, created_at: "",
   age_band: "adult", allow_solo_signup: false, has_bronze_match: false,
+  price: null, price_basis: "per_player",
 };
 const doubles: Category = { ...singles, id: "d", name: "MD", team_size: 2 };
 const doublesSolo: Category = { ...doubles, id: "ds", allow_solo_signup: true };
@@ -113,27 +114,5 @@ describe("validate", () => {
     const errs = validate(f, doubles, { requireMembership: false });
     expect(errs.partner_is_member).toBeUndefined();
     expect(isValid(errs)).toBe(true);
-  });
-});
-
-describe("hasMemberDiscount", () => {
-  it("returns false for empty fees", () => {
-    expect(hasMemberDiscount({} as TournamentFees)).toBe(false);
-  });
-
-  it("returns false when all bands have equal member and non_member", () => {
-    const fees: TournamentFees = {
-      adult: { member: 20, non_member: 20 },
-      teen: { member: 15, non_member: 15 },
-    };
-    expect(hasMemberDiscount(fees)).toBe(false);
-  });
-
-  it("returns true when any band differs", () => {
-    const fees: TournamentFees = {
-      adult: { member: 20, non_member: 25 },
-      teen: { member: 15, non_member: 15 },
-    };
-    expect(hasMemberDiscount(fees)).toBe(true);
   });
 });
