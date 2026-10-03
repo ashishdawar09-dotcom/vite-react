@@ -1,14 +1,14 @@
 {
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "has": [
         {
           "type": "host",
           "value": "badminton-ad.vercel.app"
         }
       ],
-      "destination": "https://badminton.adawar.org/:path*",
+      "destination": "https://badminton.adawar.org/$1",
       "permanent": true
     }
   ],
