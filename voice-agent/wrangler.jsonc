@@ -16,7 +16,8 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BadmintonVoiceAgent"] }],
   // New sessions per client IP per minute (checked before a socket opens).
-  "ratelimits": [{ "name": "CONNECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }],
+  // Generous: spectators on venue Wi-Fi share one IP, and reconnects count.
+  "ratelimits": [{ "name": "CONNECT_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }],
   "vars": {
     "SUPABASE_URL": "https://wdqooznwzesmjdvlcrxw.supabase.co",
     "DEFAULT_TOURNAMENT_ID": ""
@@ -31,7 +32,7 @@
       "durable_objects": {
         "bindings": [{ "name": "BadmintonVoiceAgent", "class_name": "BadmintonVoiceAgent" }]
       },
-      "ratelimits": [{ "name": "CONNECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }],
+      "ratelimits": [{ "name": "CONNECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }],
       "vars": {
         "SUPABASE_URL": "https://wdqooznwzesmjdvlcrxw.supabase.co",
         "DEFAULT_TOURNAMENT_ID": ""
