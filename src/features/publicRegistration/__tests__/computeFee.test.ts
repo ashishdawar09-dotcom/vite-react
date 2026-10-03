@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeFee, fmtMoney, priceBasis, priceDescription, priceLabel } from "../computeFee";
+import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel } from "../computeFee";
 import type { Category } from "../../../types";
 
 const cat = (overrides: Partial<Category> = {}): Category => ({
@@ -70,5 +70,15 @@ describe("price labels", () => {
       .toBe("$40 per team. One payment covers both players.");
     expect(priceDescription(cat({ team_size: 2, price: 20 }))).toContain("$20 per player ($40 for the team)");
     expect(priceDescription(cat({ price: null }))).toBeNull();
+  });
+});
+
+describe("cardAmount", () => {
+  it("adds 3% and rounds to the cent, matching the server", () => {
+    expect(cardAmount(40)).toBe(41.2);
+    expect(cardAmount(25)).toBe(25.75);
+    expect(cardAmount(12.5)).toBe(12.88); // 1287.5 cents rounds up
+    expect(cardAmount(20 * 2)).toBe(41.2); // pay for both, per player
+    expect(cardAmount(0)).toBe(0);
   });
 });

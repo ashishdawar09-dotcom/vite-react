@@ -116,3 +116,11 @@ describe("validate", () => {
     expect(isValid(errs)).toBe(true);
   });
 });
+
+describe("payment method", () => {
+  it("requires an e-transfer reference only for e-transfer", () => {
+    const base = { ...happyPath(), payment_reference: "" };
+    expect(validate({ ...base, payment_method: "etransfer" }, singles).payment_reference).toBe("Required");
+    expect(validate({ ...base, payment_method: "card" }, singles).payment_reference).toBeUndefined();
+  });
+});

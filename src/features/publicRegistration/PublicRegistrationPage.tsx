@@ -8,7 +8,7 @@ import { captureError } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, PublicRegistrationPayload } from "../../types";
 import { Countdown } from "./Countdown";
-import { computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type PaymentSplit } from "./computeFee";
+import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type PaymentSplit } from "./computeFee";
 import { usePublicTournament } from "./usePublicTournament";
 import { emptyFormState, type FormErrors, type FormState, isValid, validate } from "./validate";
 
@@ -130,10 +130,13 @@ export function PublicRegistrationPage() {
     () => categories.find((c) => c.id === form.category_id) ?? null,
     [categories, form.category_id],
   );
+  // Card payment needs a category price; without one only e-Transfer is offered.
+  const cardAvailable = computeFee(selectedCategory, "separate") !== null;
+  const payMethod = cardAvailable ? form.payment_method : "etransfer";
   // Prices are per category; membership no longer affects the fee.
   const errors = useMemo(
-    () => validate(form, selectedCategory, { requireMembership: false }),
-    [form, selectedCategory],
+    () => validate({ ...form, payment_method: payMethod }, selectedCategory, { requireMembership: false }),
+    [form, payMethod, selectedCategory],
   );
   const visibleErrors: FormErrors = useMemo(() => {
     const out: FormErrors = {};
@@ -152,6 +155,25 @@ export function PublicRegistrationPage() {
     baseFee !== null &&
     !!form.partner_name.trim();
   const paymentSplit: PaymentSplit = showPaymentSplit ? form.payment_split : "separate";
+  const etransferDue = computeFee(selectedCategory, paymentSplit);
+  const cardDue = etransferDue === null ? null : cardAmount(etransferDue);
+
+  // Back from Stripe Checkout: ?payment=success&reg=<id> or ?payment=cancelled.
+  const [cardReturn, setCardReturn] = useState<"paid" | "cancelled" | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const payment = q.get("payment");
+    if (!payment) return;
+    const reg = q.get("reg");
+    if (payment === "success" && reg && /^[0-9a-f-]{36}$/i.test(reg)) {
+      setSubmittedRegistrationId(reg);
+      setCardReturn("paid");
+      setSubmitStatus("success");
+    } else if (payment === "cancelled") {
+      setCardReturn("cancelled");
+    }
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: val }));
@@ -191,7 +213,8 @@ export function PublicRegistrationPage() {
       player_email: form.player_email.trim(),
       player_phone: form.player_phone.trim() || undefined,
       player_is_member: false,
-      payment_reference: form.payment_reference.trim(),
+      payment_method: payMethod,
+      payment_reference: payMethod === "etransfer" ? form.payment_reference.trim() : undefined,
       payment_paid_full_for_partner:
         selectedCategory.team_size === 2 &&
         (priceBasis(selectedCategory) === "per_team" ? !!form.partner_name.trim() : paymentSplit === "full"),
@@ -205,6 +228,11 @@ export function PublicRegistrationPage() {
     }
 
     const result = await submitPublicRegistration(payload);
+    if (result.success && result.checkoutUrl) {
+      // Card: Stripe Checkout takes over and sends the player back here.
+      window.location.assign(result.checkoutUrl);
+      return;
+    }
     if (result.success) {
       setSubmittedRegistrationId(result.registrationId ?? null);
       setSubmitStatus("success");
@@ -223,6 +251,7 @@ export function PublicRegistrationPage() {
       player_phone: f.player_phone,
       player_is_member: f.player_is_member,
       group_choice: f.group_choice,
+      payment_method: f.payment_method,
     }));
     setTouched(new Set());
     setSubmitStatus("idle");
@@ -272,11 +301,15 @@ export function PublicRegistrationPage() {
         >
           <div style={{ fontSize: 56, marginBottom: spacing.md }}>✓</div>
           <div style={{ fontFamily: typography.display, fontSize: 28, fontWeight: 800, color: colors.text.primaryLight }}>
-            Registration submitted
+            {cardReturn === "paid" ? "Payment received" : "Registration submitted"}
           </div>
           <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 15, lineHeight: 1.5 }}>
-            Thanks, {form.player_name}! An admin will verify your e-transfer reference and
-            confirm your spot shortly. You'll be visible in the player roster once approved.
+            {cardReturn === "paid"
+              ? <>Thanks{form.player_name ? `, ${form.player_name}` : ""}! Your card payment went through and your
+                  registration is with the organizers. They'll confirm your spot shortly, and Stripe has
+                  emailed your receipt.</>
+              : <>Thanks, {form.player_name}! An admin will verify your e-transfer reference and
+                  confirm your spot shortly. You'll be visible in the player roster once approved.</>}
           </p>
           {/* Push opt-in surface — always renders something so users on
               cached pages or with malformed responses still see status */}
@@ -555,12 +588,43 @@ export function PublicRegistrationPage() {
                 </div>
               </Field>
             )}
-            <Field label="e-Transfer reference #" required hint="Send your e-transfer first, then paste the reference number here" error={visibleErrors.payment_reference}>
-              <input type="text" style={inputStyle} autoCapitalize="characters"
-                value={form.payment_reference}
-                onChange={(e) => set("payment_reference", e.target.value)}
-                onBlur={() => markTouched("payment_reference")} />
-            </Field>
+            {cardAvailable && etransferDue !== null && cardDue !== null && (
+              <Field label="How would you like to pay?" required>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: spacing.sm }}>
+                  {([
+                    { v: "etransfer" as const, title: `Interac e-Transfer · ${fmtMoney(etransferDue)}`, sub: "The lower price. Send the e-Transfer, then enter its reference number." },
+                    { v: "card" as const, title: `Card, Apple Pay or Google Pay · ${fmtMoney(cardDue)}`, sub: "Pay now on Stripe's secure checkout page." },
+                  ]).map((o) => {
+                    const sel = payMethod === o.v;
+                    return (
+                      <button key={o.v} type="button" onClick={() => set("payment_method", o.v)}
+                        style={{
+                          padding: "12px 16px", borderRadius: radii.md, textAlign: "left",
+                          border: `2px solid ${sel ? CYAN : colors.border.lightStrong}`,
+                          background: sel ? "rgba(0, 212, 255, 0.08)" : colors.bg.card,
+                          cursor: "pointer", minHeight: 56,
+                        }}>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: sel ? CYAN_DARK : colors.text.primaryLight }}>{o.title}</div>
+                        <div style={{ fontSize: 12, color: colors.text.mutedLight, marginTop: 2 }}>{o.sub}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
+            {payMethod === "etransfer" ? (
+              <Field label="e-Transfer reference #" required hint="Send your e-transfer first, then paste the reference number here" error={visibleErrors.payment_reference}>
+                <input type="text" style={inputStyle} autoCapitalize="characters"
+                  value={form.payment_reference}
+                  onChange={(e) => set("payment_reference", e.target.value)}
+                  onBlur={() => markTouched("payment_reference")} />
+              </Field>
+            ) : (
+              <div style={{ fontSize: 13, color: colors.text.mutedLight, lineHeight: 1.5 }}>
+                After you submit, you'll pay {cardDue !== null ? fmtMoney(cardDue) : ""} on Stripe's secure checkout.
+                Your registration goes to the organizers once the payment completes.
+              </div>
+            )}
             <Field label="Comments" hint={`${form.comments.length}/500 characters`} error={visibleErrors.comments}>
               <textarea
                 rows={3}
@@ -574,6 +638,15 @@ export function PublicRegistrationPage() {
 
           {/* Submit */}
           <div style={{ padding: `${spacing.lg}px ${spacing.md}px ${spacing.xxxl}px` }}>
+            {cardReturn === "cancelled" && submitStatus !== "error" && (
+              <div style={{
+                padding: spacing.md, marginBottom: spacing.md,
+                background: colors.bg.muted, border: `1px solid ${colors.border.lightStrong}`,
+                borderRadius: radii.md, color: colors.text.primaryLight, fontSize: 14,
+              }}>
+                Card payment cancelled. You weren't charged. Submit again to retry, or choose e-Transfer.
+              </div>
+            )}
             {submitError && submitStatus === "error" && (
               <div style={{
                 padding: spacing.md, marginBottom: spacing.md,
@@ -595,7 +668,9 @@ export function PublicRegistrationPage() {
                 boxShadow: "0 4px 12px rgba(0, 212, 255, 0.32)",
               }}
             >
-              {submitStatus === "submitting" ? "Submitting…" : "Submit Registration"}
+              {submitStatus === "submitting"
+                ? (payMethod === "card" ? "Opening secure checkout…" : "Submitting…")
+                : payMethod === "card" && cardDue !== null ? `Continue to payment · ${fmtMoney(cardDue)}` : "Submit Registration"}
             </button>
           </div>
         </form>
