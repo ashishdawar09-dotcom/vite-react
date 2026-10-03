@@ -214,10 +214,13 @@ export function CategoryEditor({
             groups_count + top_n_advance + rounds_per_pair on Save. */}
         {category && formatOptions.length > 0 && (
           <Field label={`Tournament format · ${estimatedTeamCount} team${estimatedTeamCount === 1 ? "" : "s"} estimated`}>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${formatOptions.length}, 1fr)`, gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
               {formatOptions.map(opt => {
                 const selected = opt.label === selectedLabel;
-                const accent = opt.label === "Recommended" ? "#22c55e" : opt.label === "More games" ? "#a855f7" : "#3b82f6";
+                const accent = opt.label === "Recommended" ? "#22c55e"
+                  : opt.label === "More games" ? "#a855f7"
+                  : opt.label === "Super Compact" ? "#f59e0b"
+                  : opt.label === "Ultra Compact" ? "#f43f5e" : "#3b82f6";
                 return (
                   <button
                     key={opt.label}

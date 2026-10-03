@@ -7,6 +7,7 @@ import {
   describeFormat,
   bracketSlotOrder,
   seedBracket,
+  byeAdvances,
 } from "../formatPlanner";
 
 describe("splitIntoGroups", () => {
@@ -308,5 +309,58 @@ describe("describeFormat", () => {
   });
   it("formats round-robin only", () => {
     expect(describeFormat(defaultFormat(3))).toMatch(/Round-robin/);
+  });
+});
+
+describe("Super / Ultra Compact", () => {
+  const labels = (N: number) => recommendFormats(N).map((o) => o.label);
+  const plan = (N: number, label: string) => recommendFormats(N).find((o) => o.label === label)!;
+
+  it("20 teams: five options, each cheaper compact option has fewer matches", () => {
+    expect(labels(20)).toEqual(["Recommended", "More games", "Compact", "Super Compact", "Ultra Compact"]);
+    expect(plan(20, "Super Compact")).toMatchObject({ groupsCount: 5, groupSizes: [4, 4, 4, 4, 4], topNAdvance: 1, knockoutShape: "QF", totalMatches: 34 });
+    expect(plan(20, "Ultra Compact")).toMatchObject({ groupsCount: 6, groupSizes: [4, 4, 3, 3, 3, 3], topNAdvance: 1, knockoutShape: "QF", totalMatches: 29 });
+    expect(describeFormat(plan(20, "Super Compact"))).toBe("5 groups of 4, top 1 each → QF (3 byes)");
+  });
+
+  it("never sends anyone home after one game, and always saves games over Compact", () => {
+    for (let N = 4; N <= 40; N++) {
+      const opts = recommendFormats(N);
+      const compact = opts.find((o) => o.label === "Compact");
+      const sup = opts.find((o) => o.label === "Super Compact");
+      const ult = opts.find((o) => o.label === "Ultra Compact");
+      for (const o of [sup, ult]) {
+        if (!o) continue;
+        expect(o.groupSizes.reduce((a, b) => a + b, 0)).toBe(N);
+        expect(Math.min(...o.groupSizes)).toBeGreaterThanOrEqual(3); // ≥ 2 games each
+        if (compact) expect(o.totalMatches).toBeLessThan(compact.totalMatches);
+      }
+      if (sup) expect(Math.min(...sup.groupSizes)).toBeGreaterThanOrEqual(4); // ≥ 3 games each
+      if (sup && ult) expect(ult.totalMatches).toBeLessThan(sup.totalMatches);
+    }
+  });
+
+  it("isn't offered when it would just repeat Compact", () => {
+    expect(labels(12)).not.toContain("Super Compact");
+    expect(labels(12)).not.toContain("Ultra Compact");
+    expect(labels(16)).not.toContain("Super Compact"); // 4 groups of 4 = Compact
+    expect(labels(16)).toContain("Ultra Compact");
+  });
+});
+
+describe("byeAdvances", () => {
+  it("places bye winners in round 2 so the bracket can't stall", () => {
+    // 5 group winners → 8-slot bracket; seeds 1,2,3 get byes.
+    const seeded = seedBracket([["A"], ["B"], ["C"], ["D"], ["E"]]);
+    expect(seeded).toEqual(["A", null, "D", "E", "B", null, "C", null]);
+    expect(byeAdvances(seeded)).toEqual([
+      { a: "A", b: null }, // A waits for the D v E winner
+      { a: "B", b: "C" },  // both from byes: a real semi-final
+    ]);
+  });
+
+  it("is empty-handed when there are no byes", () => {
+    expect(byeAdvances(["A", "B", "C", "D"])).toEqual([{ a: null, b: null }]);
+    expect(byeAdvances(["A", "B"])).toEqual([]);
   });
 });

@@ -34,11 +34,13 @@ export function KnockoutSanityBanner({ knockoutMatches, expectedQualifiers, actu
       color: "#fbbf24",
       bg: "rgba(251,191,36,0.08)",
       border: "rgba(251,191,36,0.4)",
-      icon: "⚠",
+      icon: "ℹ",
       title: `${byes} bye${byes === 1 ? "" : "s"} in this bracket`,
+      // Expected with Super / Ultra Compact, where group winners don't fill
+      // a power-of-2 bracket.
       desc: byes === 1
-        ? "One top seed advances directly to the next round. To balance the bracket, consider re-running the format with different group settings."
-        : `${byes} top seeds advance directly to the next round. To balance the bracket, consider re-running the format with different group settings.`,
+        ? "The top seed goes straight to the next round. This is expected when the number of qualifiers isn't 2, 4, 8 or 16."
+        : `The top ${byes} seeds go straight to the next round. This is expected when the number of qualifiers isn't 2, 4, 8 or 16.`,
     },
     tbds: {
       color: "#ef4444",

@@ -1,7 +1,9 @@
 // Tournament format recommender.
 //
-// Given N teams in a category, computes 2–3 viable tournament formats so that
-// the bracket falls out cleanly (qualifier count is a power of 2 → no byes).
+// Given N teams in a category, computes up to 5 viable tournament formats.
+// The first three keep the bracket clean (qualifier count is a power of 2 →
+// no byes). "Super Compact" and "Ultra Compact" trade that for fewer games:
+// smaller groups whose winners advance, with byes for the top seeds.
 //
 // Pure module. Zero dependencies. Tested via src/lib/__tests__/formatPlanner.test.ts.
 //
@@ -12,7 +14,7 @@
 
 export type KnockoutShape = "F" | "SF" | "QF" | "R16" | "RR-only" | "none";
 
-export type FormatLabel = "Recommended" | "More games" | "Compact";
+export type FormatLabel = "Recommended" | "More games" | "Compact" | "Super Compact" | "Ultra Compact";
 
 export type FormatPlan = {
   label: FormatLabel;
@@ -98,6 +100,11 @@ function buildPlan(args: {
     estimatedMinutes: (matchMin: number, courts: number) =>
       Math.ceil((totalMatches * matchMin) / Math.max(1, courts)),
   };
+}
+
+/** Smallest power of 2 ≥ q (the bracket size, including byes). */
+function bracketSize(q: number): number {
+  return Math.max(2, Math.pow(2, Math.ceil(Math.log2(Math.max(1, q)))));
 }
 
 function shapeQualifiers(shape: KnockoutShape): number {
@@ -246,6 +253,29 @@ export function recommendFormats(N: number): FormatPlan[] {
     }));
   }
 
+  // "Super Compact" / "Ultra Compact": more, smaller groups whose winners go
+  // to the knockout (byes fill the bracket). Groups of ~4 guarantee every team
+  // 3 games; groups of ~3 guarantee 2. Each is only offered when it really
+  // saves games over the cheapest option so far.
+  const groupWinnersFormat = (label: FormatLabel, groupsCount: number): FormatPlan | null => {
+    if (groupsCount < 2) return null;
+    const sizes = splitIntoGroups(N, groupsCount);
+    if (Math.min(...sizes) < 3) return null;
+    return buildPlan({
+      label, groupsCount, groupSizes: sizes, topNAdvance: 1,
+      knockoutShape: knockoutShapeFor(bracketSize(groupsCount)), roundsPerPair: 1,
+    });
+  };
+  for (const [label, groupsCount] of [
+    ["Super Compact", Math.floor(N / 4)],
+    ["Ultra Compact", Math.floor(N / 3)],
+  ] as const) {
+    const plan = groupWinnersFormat(label, groupsCount);
+    const fewest = Math.min(...out.map((o) => o.totalMatches));
+    const duplicate = out.some((o) => o.groupsCount === plan?.groupsCount && o.topNAdvance === 1 && o.roundsPerPair === 1);
+    if (plan && plan.totalMatches < fewest && !duplicate) out.push(plan);
+  }
+
   return out;
 }
 
@@ -321,6 +351,24 @@ export function seedBracket<T>(qualifiers: T[][]): (T | null)[] {
   return result;
 }
 
+/**
+ * Round-2 occupants implied by first-round byes. A bye match (one empty side)
+ * is decided at creation, so its team must already be placed in the next
+ * round; otherwise the bracket stalls. Entry i is round-2 slot i (sides a/b).
+ */
+export function byeAdvances<T>(seeded: (T | null)[]): { a: T | null; b: T | null }[] {
+  const out: { a: T | null; b: T | null }[] = [];
+  for (let i = 0; i < Math.floor(seeded.length / 4); i++) out.push({ a: null, b: null });
+  for (let m = 0; m < seeded.length / 2; m++) {
+    const x = seeded[m * 2], y = seeded[m * 2 + 1];
+    const winner = x && !y ? x : !x && y ? y : null;
+    if (winner === null || out.length === 0) continue;
+    const target = out[Math.floor(m / 2)];
+    if (m % 2 === 0) target.a = winner; else target.b = winner;
+  }
+  return out;
+}
+
 /** Human-friendly description of the format, suitable for UI labels. */
 export function describeFormat(plan: FormatPlan): string {
   if (plan.knockoutShape === "none" && plan.groupsCount === 0) return "No tournament";
@@ -335,5 +383,8 @@ export function describeFormat(plan: FormatPlan): string {
     plan.groupsCount === 1 ? `, top ${plan.topNAdvance} → ${plan.knockoutShape}` :
     `, top ${plan.topNAdvance} each → ${plan.knockoutShape}`;
   const rrStr = plan.roundsPerPair === 2 ? " · 2× RR" : "";
-  return sizesStr + rrStr + advStr;
+  const qualifiers = plan.groupsCount * plan.topNAdvance;
+  const byes = plan.topNAdvance > 0 && plan.groupsCount > 0 ? bracketSize(qualifiers) - qualifiers : 0;
+  const byeStr = byes > 0 ? ` (${byes} bye${byes === 1 ? "" : "s"})` : "";
+  return sizesStr + rrStr + advStr + byeStr;
 }
