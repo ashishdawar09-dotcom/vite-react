@@ -50,7 +50,7 @@ deploy can be checked without a microphone.
 
 - Only the app's origins may connect (production, the Vercel alias, this team's
   preview deployments, localhost); everything else gets 403.
-- `CONNECT_LIMITER`: 20 new sessions per client IP per minute (approximate, per
+- `CONNECT_LIMITER`: 60 new sessions per client IP per minute (approximate, per
   Cloudflare location).
 - Per connection: at most one model call per second and 30 per 10 minutes;
   questions are cut to 300 characters.

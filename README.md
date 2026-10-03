@@ -23,6 +23,10 @@ supabase db push                 # apply pending migrations
 Edge Functions live in `supabase/functions/` and deploy separately:
 `supabase functions deploy <name>`.
 
+The Free plan has no Supabase backups. Before each event run
+`bash scripts/backup-db.sh`; it writes every table and the player photos to
+`~/Developer/badminton-backups/<timestamp>/` (private, contains contact details).
+
 ## Local dev
 
 ```bash
