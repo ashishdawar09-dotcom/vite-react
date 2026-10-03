@@ -7,6 +7,7 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   DEFAULT_TOURNAMENT_ID?: string;
+  CONNECT_LIMITER: RateLimit;
 }
 
 export interface Tournament {

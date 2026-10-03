@@ -16,8 +16,9 @@ from live data in `src/tools.ts`.
 The original project was never committed. This source was rebuilt on
 2 October 2026 from the Worker deployed on 23 July 2026:
 
-- Dependencies are pinned (including `overrides`) to what that build used. The
-  rebuilt bundle's library code is byte-identical to production.
+- Dependencies are pinned (including `overrides`) to what that build used, and
+  the rebuilt library code was byte-identical to production. `fast-uri` has
+  since been raised to 3.1.8 for security fixes.
 - `test/parity.test.ts` checks every answer function against the deployed logic
   kept in `test/reference/`.
 - Live and staging gave identical replies and audio for the same questions.
@@ -45,10 +46,19 @@ npm run deploy              # production
 `scripts/ask.mjs` sends typed questions over the app's WebSocket protocol, so a
 deploy can be checked without a microphone.
 
-## Known issues (inherited from the July build)
+## Abuse protection
 
-- All visitors share one agent room (`default`), whose stored history feeds the
-  last four messages to the model, so separate users' questions can mix.
+- Only the app's origins may connect (production, the Vercel alias, this team's
+  preview deployments, localhost); everything else gets 403.
+- `CONNECT_LIMITER`: 20 new sessions per client IP per minute (approximate, per
+  Cloudflare location).
+- Per connection: at most one model call per second and 30 per 10 minutes;
+  questions are cut to 300 characters.
+- The app opens a fresh agent instance per panel session, so visitors never
+  share conversation history.
+
+## Known limitations
+
 - `playerId` comes from the client and is a hint, not an authenticated identity.
-- CORS is open (`cors: true`) and there is no rate limiting.
+  It only selects which public schedule to read out.
 - "Thanks!" is answered with a tournament summary instead of a pleasantry.

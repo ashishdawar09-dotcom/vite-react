@@ -6,6 +6,7 @@
 //   node scripts/ask.mjs <host> <tournament-id-or-slug> "question" ["question" ...]
 //
 // Uses a separate room ("smoke-test") so it doesn't touch the app's history.
+// Sends the production Origin, which the Worker requires.
 
 const [host, tournamentId, ...questions] = process.argv.slice(2);
 if (!host || !tournamentId || questions.length === 0) {
@@ -43,7 +44,7 @@ function ask(ws, text) {
   });
 }
 
-const ws = new WebSocket(url);
+const ws = new WebSocket(url, { headers: { Origin: "https://badminton.adawar.org" } });
 ws.binaryType = "arraybuffer";
 await new Promise((resolve, reject) => {
   ws.addEventListener("open", resolve, { once: true });

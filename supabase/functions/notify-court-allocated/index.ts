@@ -14,21 +14,9 @@
 // switch RESEND_FROM_EMAIL to e.g. `notify@yourdomain.com`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { isUuid, json, serveWithCors } from "../_shared/http.ts";
 import webpush from "npm:web-push@3.6.7";
 
-// Allowed browser origins: the production app + this project's Vercel domains
-// (default + preview deploys). Anything else gets the prod origin echoed back,
-// which the browser then blocks. CORS is a browser-only control — server-side
-// callers ignore it — so the real protection is the requireAdmin gate below.
-const ALLOWED_ORIGIN =
-  /^https:\/\/(badminton\.adawar\.org|badminton-ad\.vercel\.app|vite-react-[a-z0-9-]+\.vercel\.app)$/;
-
-const corsHeaders = {
-  // Access-Control-Allow-Origin is overwritten per-request by the wrapper in Deno.serve.
-  "Access-Control-Allow-Origin": "https://badminton.adawar.org",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 type Player = { id: string; name: string; email: string | null };
 type Team = { id: string; p1_id: string; p2_id: string | null };
@@ -66,21 +54,9 @@ async function requireAdmin(req: Request): Promise<string | null> {
   }
 }
 
-Deno.serve(async (req: Request) => {
-  const res = await handle(req);
-  const origin = req.headers.get("Origin") ?? "";
-  res.headers.set(
-    "Access-Control-Allow-Origin",
-    ALLOWED_ORIGIN.test(origin) ? origin : "https://badminton.adawar.org",
-  );
-  res.headers.set("Vary", "Origin");
-  return res;
-});
+serveWithCors(handle);
 
 async function handle(req: Request): Promise<Response> {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
 
   // Admin-only. This function emails + push-notifies every player on a match.
   // Match IDs are world-readable, so without this gate anyone with the public
@@ -93,7 +69,7 @@ async function handle(req: Request): Promise<Response> {
   try {
     const body = await req.json().catch(() => ({}));
     const matchId: string | undefined = body?.match_id;
-    if (!matchId) {
+    if (!isUuid(matchId)) {
       return json({ error: "match_id required" }, 400);
     }
 
@@ -356,7 +332,7 @@ Good luck out there!
         sent++;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error("send failed for", player.email, msg);
+        console.error("send failed for player", player.id, msg);
         await supabase.from("notification_log").insert({
           match_id: matchId,
           player_id: player.id,
@@ -447,12 +423,6 @@ Good luck out there!
   }
 }
 
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {

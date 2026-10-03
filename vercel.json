@@ -1,29 +1,64 @@
 {
   "rewrites": [
-    { "source": "/((?!assets/|images/|favicon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|map|json|txt|xml)).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!assets/|images/|favicon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|map|json|txt|xml)).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(self), geolocation=()" },
-        { "key": "Content-Security-Policy-Report-Only", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.supabase.co data: blob:; font-src 'self'; connect-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co wss://wdqooznwzesmjdvlcrxw.supabase.co https://badminton-voice-agent.ashishdawar09.workers.dev wss://badminton-voice-agent.ashishdawar09.workers.dev https://*.ingest.us.sentry.io; worker-src 'self'; manifest-src 'self'" }
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://badminton.adawar.org"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(self), geolocation=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co data: blob:; font-src 'self' data:; connect-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co wss://wdqooznwzesmjdvlcrxw.supabase.co https://*.ingest.us.sentry.io https://badminton-voice-agent.ashishdawar09.workers.dev wss://badminton-voice-agent.ashishdawar09.workers.dev; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob:; upgrade-insecure-requests"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        }
       ]
     },
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/images/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
       ]
     }
   ]
