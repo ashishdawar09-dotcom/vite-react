@@ -12,6 +12,7 @@ export type FormState = {
   partner_email: string;
   partner_is_member: boolean | null;
   payment_split: "full" | "separate";
+  payment_method: "etransfer" | "card";
   payment_reference: string;
   comments: string;
 };
@@ -33,6 +34,7 @@ export function emptyFormState(): FormState {
     partner_email: "",
     partner_is_member: null,
     payment_split: "separate",
+    payment_method: "etransfer",
     payment_reference: "",
     comments: "",
   };
@@ -61,7 +63,7 @@ export function validate(
 
   if (!form.category_id) errs.category_id = "Please pick a category";
 
-  if (!form.payment_reference.trim()) errs.payment_reference = "Required";
+  if (form.payment_method === "etransfer" && !form.payment_reference.trim()) errs.payment_reference = "Required";
 
   if (selectedCategory && selectedCategory.team_size === 2) {
     const partnerRequired = !selectedCategory.allow_solo_signup;

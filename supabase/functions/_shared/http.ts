@@ -31,6 +31,13 @@ export function serveWithCors(handler: (req: Request) => Promise<Response>) {
   });
 }
 
+// Site to send the browser back to (e.g. after Stripe Checkout): the caller's
+// origin when it's one of ours, otherwise production.
+export function appOrigin(req: Request): string {
+  const origin = req.headers.get("Origin") ?? "";
+  return ALLOWED_ORIGIN.test(origin) ? origin : DEFAULT_ORIGIN;
+}
+
 export function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,

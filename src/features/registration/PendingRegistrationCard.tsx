@@ -160,6 +160,28 @@ export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
       )}
 
       {/* Payment + fee */}
+      {reg.payment_method === "card" ? (
+        <div style={{ marginTop: spacing.md, display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
+          <Badge tone={reg.card_payment_status === "refunded" ? "neutral" : "good"}>
+            {reg.card_payment_status === "refunded" ? "Card payment refunded" : "Paid by card ✓"}
+          </Badge>
+          {reg.amount_due_cents !== null && (
+            <strong style={{ fontSize: 14, color: colors.text.primaryLight, ...typography.tabular }}>
+              {fmtMoney(reg.amount_due_cents / 100)}
+            </strong>
+          )}
+          {reg.stripe_payment_intent_id && (
+            <a href={`https://dashboard.stripe.com/payments/${encodeURIComponent(reg.stripe_payment_intent_id)}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, fontWeight: 700, color: colors.brand.primary, textDecoration: "none" }}>
+              View in Stripe ↗
+            </a>
+          )}
+          <span style={{ marginLeft: "auto", fontSize: 12, color: colors.text.mutedLight }}>
+            Rejecting? Refund it in Stripe too.
+          </span>
+        </div>
+      ) : (
       <div style={{ marginTop: spacing.md, display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: "uppercase", color: colors.text.mutedLight }}>
           Payment ref
@@ -168,8 +190,8 @@ export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
           padding: "4px 10px", background: colors.bg.muted, borderRadius: radii.sm,
           fontSize: 13, fontWeight: 700, color: colors.text.primaryLight, fontFamily: "Menlo, monospace",
           ...typography.tabular,
-        }}>{reg.payment_reference}</code>
-        <button type="button" onClick={() => onCopy(`pr-${reg.id}`, reg.payment_reference)}
+        }}>{reg.payment_reference ?? "—"}</code>
+        <button type="button" onClick={() => onCopy(`pr-${reg.id}`, reg.payment_reference ?? "")}
           style={{
             padding: "4px 10px", border: `1px solid ${colors.border.lightStrong}`,
             borderRadius: radii.sm, background: colors.bg.card, fontSize: 12,
@@ -187,6 +209,7 @@ export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
           </span>
         )}
       </div>
+      )}
 
       {/* Comments */}
       {reg.comments && (

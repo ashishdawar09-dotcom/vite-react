@@ -11,7 +11,9 @@
 //   SUPABASE_SERVICE_ROLE_KEY
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-import { allow, allowClient, isUuid, json, serveWithCors } from "../_shared/http.ts";
+import { allow, allowClient, appOrigin, isUuid, json, serveWithCors } from "../_shared/http.ts";
+import { cardCents, etransferCents } from "../_shared/pricing.ts";
+import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
 
 
 type Payload = {
@@ -25,7 +27,8 @@ type Payload = {
   partner_email?: string;
   partner_phone?: string;
   partner_is_member?: boolean;
-  payment_reference: string;
+  payment_method?: "etransfer" | "card";
+  payment_reference?: string;
   payment_paid_full_for_partner?: boolean;
   comments?: string;
   group_choice?: "open" | "members";
@@ -69,13 +72,19 @@ async function handle(req: Request): Promise<Response> {
       "category_id",
       "player_name",
       "player_email",
-      "payment_reference",
     ];
     for (const k of requiredStrings) {
       const v = body[k];
       if (typeof v !== "string" || !v.trim()) {
         return json({ success: false, error: `Missing field: ${k}` }, 400);
       }
+    }
+    const payByCard = body.payment_method === "card";
+    if (!payByCard && (typeof body.payment_reference !== "string" || !body.payment_reference.trim())) {
+      return json({ success: false, error: "Missing field: payment_reference" }, 400);
+    }
+    if (payByCard && !stripeConfigured()) {
+      return json({ success: false, error: "Card payments aren't available right now. Please pay by e-Transfer." }, 503);
     }
     if (!isUuid(body.tournament_id) || !isUuid(body.category_id)) {
       return json({ success: false, error: "Tournament not found" }, 404);
@@ -106,7 +115,7 @@ async function handle(req: Request): Promise<Response> {
     // ---- Validation: tournament exists, open, not past deadline ----
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("id, registration_open, registration_deadline")
+      .select("id, name, registration_open, registration_deadline")
       .eq("id", body.tournament_id)
       .maybeSingle();
     if (tErr || !t) {
@@ -127,7 +136,7 @@ async function handle(req: Request): Promise<Response> {
     // ---- Validation: category belongs to tournament ----
     const { data: c, error: cErr } = await supabase
       .from("categories")
-      .select("id, tournament_id, team_size, allow_solo_signup")
+      .select("id, name, tournament_id, team_size, allow_solo_signup, price, price_basis")
       .eq("id", body.category_id)
       .maybeSingle();
     if (cErr || !c || c.tournament_id !== body.tournament_id) {
@@ -158,6 +167,14 @@ async function handle(req: Request): Promise<Response> {
       }
     }
 
+    // ---- Amount, computed from the category, never from the request ----
+    const paysForBoth = !!body.payment_paid_full_for_partner && partnerProvided;
+    const etransfer = etransferCents(c, paysForBoth);
+    if (payByCard && etransfer === null) {
+      return json({ success: false, error: "Card payment isn't available for this category. Please pay by e-Transfer." }, 400);
+    }
+    const amountDue = etransfer === null ? null : payByCard ? cardCents(etransfer) : etransfer;
+
     // ---- Dedup: no existing pending/approved row for (email, category) ----
     const { data: dup } = await supabase
       .from("pending_registrations")
@@ -181,12 +198,29 @@ async function handle(req: Request): Promise<Response> {
       .from("pending_registrations")
       .select("id", { count: "exact", head: true })
       .eq("tournament_id", body.tournament_id)
+      .neq("status", "payment_expired")
       .ilike("player_email", playerEmail);
     if ((emailCount ?? 0) >= 8) {
       return json(
         { success: false, error: "Too many registrations for this email" },
         429,
       );
+    }
+
+    // A new card attempt replaces any unfinished one for the same entry, so a
+    // player can't end up paying twice by retrying.
+    if (payByCard) {
+      const { data: stale } = await supabase
+        .from("pending_registrations")
+        .update({ status: "payment_expired", card_payment_status: "expired" })
+        .eq("category_id", body.category_id)
+        .eq("status", "awaiting_payment")
+        .ilike("player_email", playerEmail)
+        .select("stripe_checkout_session_id");
+      for (const row of stale ?? []) {
+        if (!row.stripe_checkout_session_id) continue;
+        await stripePost(`/checkout/sessions/${row.stripe_checkout_session_id}/expire`, {}).catch(() => {});
+      }
     }
 
     // ---- Insert ----
@@ -204,8 +238,12 @@ async function handle(req: Request): Promise<Response> {
         partner_phone: body.partner_phone?.trim() || null,
         partner_is_member:
           typeof body.partner_is_member === "boolean" ? body.partner_is_member : null,
-        payment_reference: body.payment_reference!.trim(),
-        payment_paid_full_for_partner: !!body.payment_paid_full_for_partner,
+        payment_method: payByCard ? "card" : "etransfer",
+        payment_reference: payByCard ? null : body.payment_reference!.trim(),
+        payment_paid_full_for_partner: paysForBoth || (isDoubles && c.price_basis === "per_team" && partnerProvided),
+        amount_due_cents: amountDue,
+        status: payByCard ? "awaiting_payment" : "pending",
+        card_payment_status: payByCard ? "awaiting" : null,
         comments: body.comments?.trim() || null,
         group_choice: body.group_choice ?? null,
         // Store a bounded, validated subset rather than the raw request body
@@ -217,7 +255,8 @@ async function handle(req: Request): Promise<Response> {
           partner_name: body.partner_name?.trim() || null,
           partner_email: partnerEmail,
           partner_phone: body.partner_phone?.trim() || null,
-          payment_reference: body.payment_reference!.trim(),
+          payment_method: payByCard ? "card" : "etransfer",
+          payment_reference: payByCard ? null : body.payment_reference!.trim(),
           comments: body.comments?.trim() || null,
           group_choice: body.group_choice ?? null,
         },
@@ -230,7 +269,55 @@ async function handle(req: Request): Promise<Response> {
       return json({ success: false, error: "Failed to save registration. Please try again." }, 500);
     }
 
-    return json({ success: true, registrationId: ins.id }, 200);
+    if (!payByCard) {
+      return json({ success: true, registrationId: ins.id }, 200);
+    }
+
+    // ---- Card: hand off to Stripe Checkout ----
+    const origin = appOrigin(req);
+    const back = `${origin}/register/${body.tournament_id}`;
+    const meta = { app: "badminton", registration_id: ins.id, tournament_id: body.tournament_id };
+    const entryFor = !isDoubles
+      ? "Entry for 1 player"
+      : c.price_basis === "per_team" || paysForBoth
+        ? "Entry for a team of 2"
+        : "Entry for 1 player of a doubles team";
+    try {
+      const session = await stripePost<{ id: string; url: string }>("/checkout/sessions", {
+        mode: "payment",
+        customer_email: playerEmail,
+        client_reference_id: ins.id,
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: "cad",
+            unit_amount: amountDue,
+            product_data: { name: `${t.name} — ${c.name}`, description: entryFor },
+          },
+        }],
+        metadata: meta,
+        // Ordinary card payment, not Stripe Managed Payments (merchant of
+        // record for digital goods, +3.5% per transaction), which is the
+        // account default.
+        managed_payments: { enabled: false },
+        payment_intent_data: { metadata: meta },
+        success_url: `${back}?payment=success&reg=${ins.id}`,
+        cancel_url: `${back}?payment=cancelled`,
+        expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+      }, `badminton-checkout-${ins.id}`);
+      await supabase
+        .from("pending_registrations")
+        .update({ stripe_checkout_session_id: session.id })
+        .eq("id", ins.id);
+      return json({ success: true, registrationId: ins.id, checkoutUrl: session.url }, 200);
+    } catch (e) {
+      console.error("register-player checkout failed:", e instanceof Error ? e.message : String(e));
+      await supabase
+        .from("pending_registrations")
+        .update({ status: "payment_expired", card_payment_status: "expired" })
+        .eq("id", ins.id);
+      return json({ success: false, error: "Card payment couldn't be started. Please try again or pay by e-Transfer." }, 502);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("register-player error:", msg);

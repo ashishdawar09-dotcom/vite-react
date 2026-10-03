@@ -2,6 +2,15 @@ import type { Category, PriceBasis } from "../../types";
 
 export type PaymentSplit = "full" | "separate";
 
+// Card payments cost 3% more than Interac e-Transfer. Presented as an
+// e-Transfer discount, not a card surcharge. Must match
+// supabase/functions/_shared/pricing.ts, which computes the actual charge.
+export const CARD_MARKUP = 0.03;
+
+export function cardAmount(etransfer: number): number {
+  return Math.round(Math.round(etransfer * 100) * (1 + CARD_MARKUP)) / 100;
+}
+
 type Priced = Pick<Category, "team_size" | "price" | "price_basis">;
 
 // Singles are always priced per player, whatever is stored.

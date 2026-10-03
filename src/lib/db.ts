@@ -732,7 +732,7 @@ export async function rejectRegistration(reg_id: string, reason: string): Promis
 // gateway returns 401 even though the function itself accepts anonymous input.
 export async function submitPublicRegistration(
   payload: PublicRegistrationPayload,
-): Promise<{ success: boolean; registrationId?: string; error?: string }> {
+): Promise<{ success: boolean; registrationId?: string; checkoutUrl?: string; error?: string }> {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-player`;
   const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   const ctrl = new AbortController();
@@ -745,12 +745,12 @@ export async function submitPublicRegistration(
       signal: ctrl.signal,
     });
     const body = (await resp.json().catch(() => ({}))) as {
-      success?: boolean; registrationId?: string; error?: string;
+      success?: boolean; registrationId?: string; checkoutUrl?: string; error?: string;
     };
     if (!resp.ok) {
       return { success: false, error: body.error ?? `HTTP ${resp.status}` };
     }
-    return { success: !!body.success, registrationId: body.registrationId, error: body.error };
+    return { success: !!body.success, registrationId: body.registrationId, checkoutUrl: body.checkoutUrl, error: body.error };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };

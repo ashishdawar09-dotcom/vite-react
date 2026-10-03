@@ -303,7 +303,13 @@ export type Database = {
           partner_name: string | null
           partner_phone: string | null
           payment_paid_full_for_partner: boolean
-          payment_reference: string
+          payment_reference: string | null
+          payment_method: string
+          amount_due_cents: number | null
+          card_payment_status: string | null
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          paid_at: string | null
           player_email: string
           player_is_member: boolean
           player_name: string
@@ -329,7 +335,13 @@ export type Database = {
           partner_name?: string | null
           partner_phone?: string | null
           payment_paid_full_for_partner?: boolean
-          payment_reference: string
+          payment_reference?: string | null
+          payment_method?: string
+          amount_due_cents?: number | null
+          card_payment_status?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          paid_at?: string | null
           player_email: string
           player_is_member?: boolean
           player_name: string
@@ -355,7 +367,13 @@ export type Database = {
           partner_name?: string | null
           partner_phone?: string | null
           payment_paid_full_for_partner?: boolean
-          payment_reference?: string
+          payment_reference?: string | null
+          payment_method?: string
+          amount_due_cents?: number | null
+          card_payment_status?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          paid_at?: string | null
           player_email?: string
           player_is_member?: boolean
           player_name?: string

@@ -142,12 +142,20 @@ export type PendingRegistration = {
   partner_phone: string | null;
   partner_is_member: boolean | null;
 
-  payment_reference: string;
+  payment_reference: string | null;     // e-Transfer reference, or "Stripe pi_…" once paid by card
   payment_paid_full_for_partner: boolean;
   comments: string | null;
   group_choice: "open" | "members" | null;
 
-  status: "pending" | "approved" | "rejected";
+  payment_method: PaymentMethod;
+  amount_due_cents: number | null;
+  card_payment_status: "awaiting" | "paid" | "expired" | "refunded" | null;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  paid_at: string | null;
+
+  // Card registrations start as awaiting_payment and become pending once paid.
+  status: "pending" | "approved" | "rejected" | "awaiting_payment" | "payment_expired";
   reviewed_at: string | null;
   reviewed_by: string | null;
   rejection_reason: string | null;
@@ -158,6 +166,8 @@ export type PendingRegistration = {
 };
 
 // Payload accepted by the register-player Edge Function
+export type PaymentMethod = "etransfer" | "card";
+
 export type PublicRegistrationPayload = {
   tournament_id: string;
   category_id: string;
@@ -169,7 +179,8 @@ export type PublicRegistrationPayload = {
   partner_email?: string;
   partner_phone?: string;
   partner_is_member?: boolean;
-  payment_reference: string;
+  payment_method: PaymentMethod;
+  payment_reference?: string;           // required for e-Transfer
   payment_paid_full_for_partner?: boolean;
   comments?: string;
   group_choice?: "open" | "members";
