@@ -10,14 +10,33 @@
 // Workbox precaching code below is identical to the default generateSW
 // scaffold — we only add the push handlers.
 
-import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
-import { registerRoute } from "workbox-routing";
-import { NetworkOnly, CacheFirst } from "workbox-strategies";
+import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from "workbox-precaching";
+import { NavigationRoute, registerRoute } from "workbox-routing";
+import { NetworkOnly, NetworkFirst, CacheFirst } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
 };
+
+// Page navigations → network first, precached shell only when offline.
+// Serving index.html from the precache also replays the response headers
+// captured at install time, and the precache only refreshes when the file's
+// content changes. A header-only deploy (e.g. Permissions-Policy in
+// vercel.json) would never reach installed clients. Registered before
+// precacheAndRoute so it wins for navigations.
+registerRoute(
+  new NavigationRoute(
+    new NetworkFirst({
+      cacheName: "pages",
+      networkTimeoutSeconds: 4,
+      plugins: [
+        new ExpirationPlugin({ maxEntries: 20 }),
+        { handlerDidError: async () => (await matchPrecache("index.html")) ?? undefined },
+      ],
+    }),
+  ),
+);
 
 // Precache the app shell (Workbox auto-injects this manifest at build time)
 precacheAndRoute(self.__WB_MANIFEST);
