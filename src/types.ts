@@ -183,5 +183,6 @@ export type PublicRegistrationPayload = {
   payment_reference?: string;           // required for e-Transfer
   payment_paid_full_for_partner?: boolean;
   comments?: string;
+  website?: string;                     // honeypot; always empty for people
   group_choice?: "open" | "members";
 };

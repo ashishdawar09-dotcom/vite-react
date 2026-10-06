@@ -32,6 +32,7 @@ type Payload = {
   payment_paid_full_for_partner?: boolean;
   comments?: string;
   group_choice?: "open" | "members";
+  website?: string; // honeypot: hidden from people, filled in by form bots
 };
 
 serveWithCors(handle);
@@ -64,6 +65,13 @@ async function handle(req: Request): Promise<Response> {
       body = rawBody ? (JSON.parse(rawBody) as Partial<Payload>) : {};
     } catch {
       return json({ success: false, error: "Invalid JSON" }, 400);
+    }
+
+    // Honeypot: the form's hidden "website" field is invisible to people.
+    // Bots that fill it get a normal-looking success and nothing is stored.
+    if (typeof body.website === "string" && body.website.trim()) {
+      console.warn("register-player: honeypot tripped");
+      return json({ success: true }, 200);
     }
 
     // ---- Validation: required scalars ----

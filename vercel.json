@@ -48,7 +48,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co data: blob:; font-src 'self' data:; connect-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co wss://wdqooznwzesmjdvlcrxw.supabase.co https://*.ingest.us.sentry.io https://badminton-voice-agent.ashishdawar09.workers.dev wss://badminton-voice-agent.ashishdawar09.workers.dev; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob:; upgrade-insecure-requests"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' blob: https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co data: blob: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self' data:; connect-src 'self' https://wdqooznwzesmjdvlcrxw.supabase.co wss://wdqooznwzesmjdvlcrxw.supabase.co https://*.ingest.us.sentry.io https://badminton-voice-agent.ashishdawar09.workers.dev wss://badminton-voice-agent.ashishdawar09.workers.dev https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob:; upgrade-insecure-requests"
         },
         {
           "key": "Cross-Origin-Opener-Policy",

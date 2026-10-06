@@ -4,6 +4,14 @@ import { useParams } from "react-router-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { submitPublicRegistration } from "../../lib/db";
 import { pushSupportStatus, subscribeToPush } from "../../lib/push";
+import {
+  GA_MEASUREMENT_ID,
+  PRIVACY_URL,
+  initAnalytics,
+  rememberPendingCardRegistration,
+  takePendingCardRegistration,
+  trackRegistrationComplete,
+} from "../../lib/analytics";
 import { captureError } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, PublicRegistrationPayload } from "../../types";
@@ -125,6 +133,10 @@ export function PublicRegistrationPage() {
   // After successful submission, we hold the pending registration id so the
   // success screen can attach a push subscription to it.
   const [submittedRegistrationId, setSubmittedRegistrationId] = useState<string | null>(null);
+  // Honeypot: hidden from people; bots that fill it are dropped server-side.
+  const [website, setWebsite] = useState("");
+
+  useEffect(() => { void initAnalytics(); }, []);
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === form.category_id) ?? null,
@@ -169,6 +181,11 @@ export function PublicRegistrationPage() {
       setSubmittedRegistrationId(reg);
       setCardReturn("paid");
       setSubmitStatus("success");
+      trackRegistrationComplete(reg, {
+        payment_method: "card",
+        value: takePendingCardRegistration(),
+        tournament_id: window.location.pathname.split("/")[2],
+      });
     } else if (payment === "cancelled") {
       setCardReturn("cancelled");
     }
@@ -220,6 +237,7 @@ export function PublicRegistrationPage() {
         (priceBasis(selectedCategory) === "per_team" ? !!form.partner_name.trim() : paymentSplit === "full"),
       comments: form.comments.trim() || undefined,
       group_choice: form.group_choice ?? undefined,
+      website: website || undefined,
     };
     if (selectedCategory.team_size === 2 && form.partner_name.trim()) {
       payload.partner_name = form.partner_name.trim();
@@ -230,12 +248,18 @@ export function PublicRegistrationPage() {
     const result = await submitPublicRegistration(payload);
     if (result.success && result.checkoutUrl) {
       // Card: Stripe Checkout takes over and sends the player back here.
+      if (cardDue !== null) rememberPendingCardRegistration(cardDue);
       window.location.assign(result.checkoutUrl);
       return;
     }
     if (result.success) {
       setSubmittedRegistrationId(result.registrationId ?? null);
       setSubmitStatus("success");
+      trackRegistrationComplete(result.registrationId ?? null, {
+        payment_method: "etransfer",
+        value: etransferDue ?? undefined,
+        tournament_id: tournament.id,
+      });
     } else {
       setSubmitStatus("error");
       setSubmitError(result.error ?? "Submission failed. Please try again.");
@@ -469,6 +493,16 @@ export function PublicRegistrationPage() {
           onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}
           noValidate
         >
+          {/* Honeypot. Off-screen rather than display:none, which some bots skip. */}
+          <div aria-hidden="true" style={{ position: "absolute", left: -10000, top: "auto", width: 1, height: 1, overflow: "hidden" }}>
+            <label>
+              Website (leave blank)
+              <input
+                type="text" name="website" tabIndex={-1} autoComplete="off"
+                value={website} onChange={(e) => setWebsite(e.target.value)}
+              />
+            </label>
+          </div>
           <Card>
             <Field label="Email" required hint="We'll send confirmation here" error={visibleErrors.player_email}>
               <input
@@ -672,6 +706,21 @@ export function PublicRegistrationPage() {
                 ? (payMethod === "card" ? "Opening secure checkout…" : "Submitting…")
                 : payMethod === "card" && cardDue !== null ? `Continue to payment · ${fmtMoney(cardDue)}` : "Submit Registration"}
             </button>
+            <p style={{ margin: `${spacing.md}px 0 0`, textAlign: "center", fontSize: 13, color: colors.text.mutedLight }}>
+              How we use your details:{" "}
+              <a href={PRIVACY_URL} target="_blank" rel="noopener" style={{ color: "inherit" }}>privacy policy</a>
+              {GA_MEASUREMENT_ID && (
+                <>
+                  {" · "}
+                  <button
+                    type="button" data-consent-open
+                    style={{ font: "inherit", color: "inherit", background: "none", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }}
+                  >
+                    cookie settings
+                  </button>
+                </>
+              )}
+            </p>
           </div>
         </form>
       )}
