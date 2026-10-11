@@ -33,6 +33,11 @@ const PublicRegistrationPage = lazyWithReload(() =>
     default: m.PublicRegistrationPage,
   })),
 )
+const PartnerWaiverPage = lazyWithReload(() =>
+  import('./features/publicRegistration/PartnerWaiverPage').then((m) => ({
+    default: m.PartnerWaiverPage,
+  })),
+)
 const PublicSpectatorPage = lazyWithReload(() =>
   import('./features/publicSpectator/PublicSpectatorPage').then((m) => ({
     default: m.PublicSpectatorPage,
@@ -113,6 +118,7 @@ createRoot(document.getElementById('root')!).render(
           <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
             <Routes>
               <Route path="/register/:tournamentId" element={<PublicRegistrationPage />} />
+              <Route path="/waiver/:token" element={<PartnerWaiverPage />} />
               {/* Public share surfaces — anonymous read of tournament state.
                   Specific sub-paths must come BEFORE the bare /t/:slug match. */}
               <Route path="/t/:slug/tv" element={<VenueTvPage />} />

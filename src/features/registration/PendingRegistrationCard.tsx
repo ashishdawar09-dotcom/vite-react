@@ -4,14 +4,30 @@ import { useState } from "react";
 import { useToast } from "../../components/Toast";
 import { approveRegistration, rejectRegistration } from "../../lib/db";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
-import type { Category, PendingRegistration } from "../../types";
+import type { Category, FeeType, PendingRegistration, WaiverConsent } from "../../types";
 import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
 
 type Props = {
   reg: PendingRegistration;
   category: Category | null;
   onResolved: (id: string) => void;
+  waiverRequired?: boolean;
+  playerConsent?: WaiverConsent | null;
+  partnerConsent?: WaiverConsent | null;
 };
+
+const FEE_LABEL: Record<FeeType, string | null> = {
+  standard: null,
+  youth: "Youth fee",
+  student: "Student fee · check ID",
+};
+
+function consentLine(c: WaiverConsent): string {
+  const when = new Date(c.accepted_at).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return c.guardian_name
+    ? `Accepted ${when} by ${c.guardian_name} (parent/guardian, player age ${c.participant_age})`
+    : `Accepted ${when}, signed "${c.signature}"`;
+}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -43,7 +59,7 @@ function errorMessage(e: unknown): string {
   return String(e);
 }
 
-export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
+export function PendingRegistrationCard({ reg, category, onResolved, waiverRequired, playerConsent, partnerConsent }: Props) {
   const reduce = useReducedMotion();
   const toast = useToast();
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -51,8 +67,11 @@ export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
   const [reason, setReason] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // From the category's current price, not a snapshot taken at submission.
-  const ownFee = computeFee(category, reg.payment_paid_full_for_partner ? "full" : "separate");
+  // The amount priced at submission (age and student rates included); older
+  // rows without one fall back to the category's current price.
+  const ownFee = reg.amount_due_cents !== null
+    ? reg.amount_due_cents / 100
+    : computeFee(category, reg.payment_paid_full_for_partner ? "full" : "separate");
   const partnerPaysSeparately =
     !!category && category.team_size === 2 && priceBasis(category) === "per_player" &&
     !!reg.partner_name && !reg.payment_paid_full_for_partner;
@@ -203,12 +222,55 @@ export function PendingRegistrationCard({ reg, category, onResolved }: Props) {
           <span style={{ marginLeft: "auto", fontSize: 13, color: colors.text.primaryLight, ...typography.tabular }}>
             Owes <strong>{fmtMoney(ownFee)}</strong>
             {partnerPaysSeparately &&
-              <span style={{ color: colors.text.mutedLight }}> &nbsp;(partner pays {fmtMoney(ownFee)} separately)</span>}
+              <span style={{ color: colors.text.mutedLight }}> &nbsp;(partner pays their own share)</span>}
             {coversTeam &&
               <span style={{ color: colors.text.mutedLight }}> &nbsp;(covers both players)</span>}
           </span>
         )}
       </div>
+      )}
+
+      {/* Age, fee type and waiver */}
+      {(reg.player_age !== null || waiverRequired) && (
+        <div style={{ marginTop: spacing.md, display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: colors.text.mutedLight }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
+            {reg.player_age !== null && <span>Age {reg.player_age}</span>}
+            {reg.player_fee_type && FEE_LABEL[reg.player_fee_type] && <Badge tone="info">{FEE_LABEL[reg.player_fee_type]}</Badge>}
+            {reg.partner_fee_type && FEE_LABEL[reg.partner_fee_type] && <Badge tone="info">Partner: {FEE_LABEL[reg.partner_fee_type]}</Badge>}
+          </div>
+          {waiverRequired && (
+            <div>
+              <Badge tone={playerConsent ? "good" : "neutral"}>{playerConsent ? "Waiver ✓" : "No waiver on file"}</Badge>
+              {playerConsent && <span style={{ marginLeft: 8 }}>{consentLine(playerConsent)}</span>}
+            </div>
+          )}
+          {waiverRequired && reg.partner_name && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
+              <Badge tone={partnerConsent ? "good" : "neutral"}>
+                {partnerConsent ? `Partner waiver ✓` : "Partner waiver pending"}
+              </Badge>
+              {partnerConsent && <span>{consentLine(partnerConsent)}</span>}
+              {!partnerConsent && reg.partner_waiver_email_status && (
+                <span>
+                  {reg.partner_waiver_email_status === "sent"
+                    ? "Link emailed to partner"
+                    : "Email to partner failed: share the link yourself"}
+                </span>
+              )}
+              {!partnerConsent && reg.partner_consent_token && (
+                <button type="button"
+                  onClick={() => onCopy(`wl-${reg.id}`, `${window.location.origin}/waiver/${reg.partner_consent_token}`)}
+                  style={{
+                    padding: "4px 10px", border: `1px solid ${colors.border.lightStrong}`,
+                    borderRadius: radii.sm, background: colors.bg.card, fontSize: 12,
+                    fontWeight: 700, cursor: "pointer", color: colors.text.primaryLight,
+                  }}>
+                  {copiedKey === `wl-${reg.id}` ? "Copied!" : "Copy partner's waiver link"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Comments */}

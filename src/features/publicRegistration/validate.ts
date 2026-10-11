@@ -15,7 +15,28 @@ export type FormState = {
   payment_method: "etransfer" | "card";
   payment_reference: string;
   comments: string;
+  // Age on the event date: drives the youth fee and whether a parent or
+  // guardian must accept the waiver (under 19, BC's age of majority).
+  player_age: string;
+  player_student: boolean;
+  partner_age: string;
+  partner_student: boolean;
+  guardian_name: string;
+  signature: string;
+  accepted_rules: boolean;
+  accepted_waiver: boolean;
+  accepted_codes: boolean;
 };
+
+export const AGE_OF_MAJORITY = 19;
+
+export function parseAge(v: string): number | null {
+  if (!/^\d{1,3}$/.test(v.trim())) return null;
+  const n = Number(v);
+  return n >= 4 && n <= 110 ? n : null;
+}
+
+const normName = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 
 export type FormErrors = Partial<Record<keyof FormState, string>>;
 
@@ -37,15 +58,29 @@ export function emptyFormState(): FormState {
     payment_method: "etransfer",
     payment_reference: "",
     comments: "",
+    player_age: "",
+    player_student: false,
+    partner_age: "",
+    partner_student: false,
+    guardian_name: "",
+    signature: "",
+    accepted_rules: false,
+    accepted_waiver: false,
+    accepted_codes: false,
   };
 }
 
 export function validate(
   form: FormState,
   selectedCategory: Category | null,
-  options: { requireMembership?: boolean } = {},
+  options: {
+    requireMembership?: boolean;
+    requireAge?: boolean;         // tournament has a waiver or a youth fee
+    requireWaiver?: boolean;      // tournament has a waiver
+    requirePartnerAge?: boolean;  // paying for both, and shares are priced by age
+  } = {},
 ): FormErrors {
-  const { requireMembership = true } = options;
+  const { requireMembership = true, requireAge = false, requireWaiver = false, requirePartnerAge = false } = options;
   const errs: FormErrors = {};
 
   if (!form.player_email.trim()) errs.player_email = "Required";
@@ -105,6 +140,23 @@ export function validate(
   }
 
   if (form.comments.length > 500) errs.comments = "Max 500 characters";
+
+  const age = parseAge(form.player_age);
+  if (requireAge && age === null) errs.player_age = "Enter the player's age (4–110)";
+  if (requirePartnerAge && parseAge(form.partner_age) === null) errs.partner_age = "Enter your partner's age (4–110)";
+
+  if (requireWaiver) {
+    if (!form.accepted_rules) errs.accepted_rules = "Required";
+    if (!form.accepted_waiver) errs.accepted_waiver = "Required";
+    if (!form.accepted_codes) errs.accepted_codes = "Required";
+    const minor = age !== null && age < AGE_OF_MAJORITY;
+    if (minor && form.guardian_name.trim().length < 2) errs.guardian_name = "Required for players under 19";
+    const signer = minor ? form.guardian_name : form.player_name;
+    if (!form.signature.trim()) errs.signature = "Type the full name to sign";
+    else if (signer.trim() && normName(form.signature) !== normName(signer)) {
+      errs.signature = minor ? "Must match the parent or guardian's name" : "Must match the player name above";
+    }
+  }
 
   return errs;
 }

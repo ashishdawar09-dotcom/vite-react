@@ -18,6 +18,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       categories: {
@@ -291,26 +316,31 @@ export type Database = {
       }
       pending_registrations: {
         Row: {
+          amount_due_cents: number | null
           approved_partner_id: string | null
           approved_player_id: string | null
           approved_team_id: string | null
+          card_payment_status: string | null
           category_id: string
           comments: string | null
           group_choice: string | null
           id: string
+          paid_at: string | null
+          partner_age: number | null
+          partner_consent_token: string | null
           partner_email: string | null
+          partner_fee_type: string | null
           partner_is_member: boolean | null
           partner_name: string | null
           partner_phone: string | null
+          partner_waiver_email_status: string | null
+          partner_waiver_emailed_at: string | null
+          payment_method: string
           payment_paid_full_for_partner: boolean
           payment_reference: string | null
-          payment_method: string
-          amount_due_cents: number | null
-          card_payment_status: string | null
-          stripe_checkout_session_id: string | null
-          stripe_payment_intent_id: string | null
-          paid_at: string | null
+          player_age: number | null
           player_email: string
+          player_fee_type: string | null
           player_is_member: boolean
           player_name: string
           player_phone: string | null
@@ -319,30 +349,37 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
           submitted_at: string
           tournament_id: string
         }
         Insert: {
+          amount_due_cents?: number | null
           approved_partner_id?: string | null
           approved_player_id?: string | null
           approved_team_id?: string | null
+          card_payment_status?: string | null
           category_id: string
           comments?: string | null
           group_choice?: string | null
           id?: string
+          paid_at?: string | null
+          partner_age?: number | null
+          partner_consent_token?: string | null
           partner_email?: string | null
+          partner_fee_type?: string | null
           partner_is_member?: boolean | null
           partner_name?: string | null
           partner_phone?: string | null
+          partner_waiver_email_status?: string | null
+          partner_waiver_emailed_at?: string | null
+          payment_method?: string
           payment_paid_full_for_partner?: boolean
           payment_reference?: string | null
-          payment_method?: string
-          amount_due_cents?: number | null
-          card_payment_status?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          paid_at?: string | null
+          player_age?: number | null
           player_email: string
+          player_fee_type?: string | null
           player_is_member?: boolean
           player_name: string
           player_phone?: string | null
@@ -351,30 +388,37 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           submitted_at?: string
           tournament_id: string
         }
         Update: {
+          amount_due_cents?: number | null
           approved_partner_id?: string | null
           approved_player_id?: string | null
           approved_team_id?: string | null
+          card_payment_status?: string | null
           category_id?: string
           comments?: string | null
           group_choice?: string | null
           id?: string
+          paid_at?: string | null
+          partner_age?: number | null
+          partner_consent_token?: string | null
           partner_email?: string | null
+          partner_fee_type?: string | null
           partner_is_member?: boolean | null
           partner_name?: string | null
           partner_phone?: string | null
+          partner_waiver_email_status?: string | null
+          partner_waiver_emailed_at?: string | null
+          payment_method?: string
           payment_paid_full_for_partner?: boolean
           payment_reference?: string | null
-          payment_method?: string
-          amount_due_cents?: number | null
-          card_payment_status?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          paid_at?: string | null
+          player_age?: number | null
           player_email?: string
+          player_fee_type?: string | null
           player_is_member?: boolean
           player_name?: string
           player_phone?: string | null
@@ -383,6 +427,8 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           submitted_at?: string
           tournament_id?: string
         }
@@ -580,6 +626,27 @@ export type Database = {
           },
         ]
       }
+      rate_limit_events: {
+        Row: {
+          bucket: string
+          created_at: string
+          id: number
+          key_hash: string
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          id?: never
+          key_hash: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          id?: never
+          key_hash?: string
+        }
+        Relationships: []
+      }
       teams: {
         Row: {
           category_id: string
@@ -676,11 +743,18 @@ export type Database = {
           registration_deadline: string | null
           registration_open: boolean
           rounds_per_pair: number
+          rules_url: string | null
           slug: string | null
+          student_label: string | null
+          student_price: number | null
           terms_text: string | null
           venue_address: string | null
           venue_map_url: string | null
           venue_name: string | null
+          waiver_text: string | null
+          waiver_url: string | null
+          waiver_version: string | null
+          youth_price: number | null
         }
         Insert: {
           contact_info?: string | null
@@ -697,11 +771,18 @@ export type Database = {
           registration_deadline?: string | null
           registration_open?: boolean
           rounds_per_pair?: number
+          rules_url?: string | null
           slug?: string | null
+          student_label?: string | null
+          student_price?: number | null
           terms_text?: string | null
           venue_address?: string | null
           venue_map_url?: string | null
           venue_name?: string | null
+          waiver_text?: string | null
+          waiver_url?: string | null
+          waiver_version?: string | null
+          youth_price?: number | null
         }
         Update: {
           contact_info?: string | null
@@ -718,20 +799,123 @@ export type Database = {
           registration_deadline?: string | null
           registration_open?: boolean
           rounds_per_pair?: number
+          rules_url?: string | null
           slug?: string | null
+          student_label?: string | null
+          student_price?: number | null
           terms_text?: string | null
           venue_address?: string | null
           venue_map_url?: string | null
           venue_name?: string | null
+          waiver_text?: string | null
+          waiver_url?: string | null
+          waiver_version?: string | null
+          youth_price?: number | null
         }
         Relationships: []
+      }
+      waiver_consents: {
+        Row: {
+          accepted_at: string
+          accepted_codes_of_conduct: boolean
+          accepted_rules: boolean
+          accepted_waiver: boolean
+          guardian_name: string | null
+          id: string
+          ip_address: string | null
+          participant_age: number
+          participant_email: string | null
+          participant_name: string
+          registration_id: string | null
+          role: string
+          signature: string
+          tournament_id: string
+          user_agent: string | null
+          waiver_sha256: string
+          waiver_version: string
+        }
+        Insert: {
+          accepted_at?: string
+          accepted_codes_of_conduct: boolean
+          accepted_rules: boolean
+          accepted_waiver: boolean
+          guardian_name?: string | null
+          id?: string
+          ip_address?: string | null
+          participant_age: number
+          participant_email?: string | null
+          participant_name: string
+          registration_id?: string | null
+          role: string
+          signature: string
+          tournament_id: string
+          user_agent?: string | null
+          waiver_sha256: string
+          waiver_version: string
+        }
+        Update: {
+          accepted_at?: string
+          accepted_codes_of_conduct?: boolean
+          accepted_rules?: boolean
+          accepted_waiver?: boolean
+          guardian_name?: string | null
+          id?: string
+          ip_address?: string | null
+          participant_age?: number
+          participant_email?: string | null
+          participant_name?: string
+          registration_id?: string | null
+          role?: string
+          signature?: string
+          tournament_id?: string
+          user_agent?: string | null
+          waiver_sha256?: string
+          waiver_version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waiver_consents_registration_id_fkey"
+            columns: ["registration_id"]
+            isOneToOne: false
+            referencedRelation: "pending_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waiver_consents_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      admin_players: { Args: { p_tournament_id: string }; Returns: Json }
+      admin_players: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          active: boolean
+          checked_in_at: string | null
+          color: string
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          note: string | null
+          photo_url: string | null
+          sort_order: number
+          tournament_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "players"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       approve_registration: { Args: { p_reg_id: string }; Returns: Json }
       extend_match: {
         Args: { p_extra_minutes: number; p_match_id: string }
@@ -740,6 +924,15 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       live_snapshot: { Args: { p_tournament_id: string }; Returns: Json }
       my_player: { Args: { p_tournament_id: string }; Returns: Json }
+      rate_limit_hit: {
+        Args: {
+          p_bucket: string
+          p_key: string
+          p_max: number
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
       reject_registration: {
         Args: { p_reason: string; p_reg_id: string }
         Returns: undefined
@@ -775,12 +968,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -804,11 +997,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -829,11 +1022,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -854,11 +1047,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -871,11 +1064,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -885,6 +1078,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

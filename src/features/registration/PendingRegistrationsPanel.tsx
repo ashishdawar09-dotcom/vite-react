@@ -16,7 +16,7 @@ type Props = {
 // — costs no vertical space when the queue is empty.
 export function PendingRegistrationsPanel({ tournament, categories, isAdmin }: Props) {
   const reduce = useReducedMotion();
-  const { pending, loading, error, removeLocal } = usePendingRegistrations(tournament?.id, isAdmin);
+  const { pending, consents, loading, error, removeLocal } = usePendingRegistrations(tournament?.id, isAdmin);
   const [open, setOpen] = useState(true);
 
   const catById = useMemo(() => {
@@ -91,6 +91,15 @@ export function PendingRegistrationsPanel({ tournament, categories, isAdmin }: P
                     reg={reg}
                     category={catById.get(reg.category_id) ?? null}
                     onResolved={removeLocal}
+                    waiverRequired={!!tournament.waiver_text}
+                    playerConsent={consents.find((c) => c.registration_id === reg.id && c.role === "player") ?? null}
+                    partnerConsent={
+                      consents.find((c) => c.registration_id === reg.id && c.role === "partner") ??
+                      // A partner who registered themselves has accepted on their own entry.
+                      (reg.partner_email
+                        ? consents.find((c) => c.participant_email?.toLowerCase() === reg.partner_email!.toLowerCase()) ?? null
+                        : null)
+                    }
                   />
                 ))}
               </AnimatePresence>

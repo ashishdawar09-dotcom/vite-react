@@ -30,6 +30,17 @@ export type Tournament = {
   // v15: share surface — public spectator URL /t/:slug. Auto-generated on
   // insert by a DB trigger if the client doesn't supply one (current behavior).
   slug: string;
+  // Waiver + concessions (20261010000000_waiver_consent). A tournament with
+  // waiver_text makes every participant accept it; waiver_version is stored
+  // with each consent. youth_price / student_price are reduced per-player
+  // fees, applied when lower than the category price.
+  rules_url: string | null;
+  waiver_url: string | null;
+  waiver_text: string | null;
+  waiver_version: string | null;
+  youth_price: number | null;
+  student_price: number | null;
+  student_label: string | null;
 };
 
 export type Category = {
@@ -163,6 +174,41 @@ export type PendingRegistration = {
   approved_player_id: string | null;
   approved_partner_id: string | null;
   approved_team_id: string | null;
+
+  player_age: number | null;
+  partner_age: number | null;
+  player_fee_type: FeeType | null;
+  partner_fee_type: FeeType | null;
+  partner_consent_token: string | null;
+  partner_waiver_email_status: string | null;   // null | 'sent' | 'failed: …'
+  partner_waiver_emailed_at: string | null;
+};
+
+export type FeeType = "standard" | "youth" | "student";
+
+// One participant's acceptance of the regulations, waiver and codes of
+// conduct. Written by Edge Functions only; admins can read.
+export type WaiverConsent = {
+  id: string;
+  registration_id: string | null;
+  tournament_id: string;
+  role: "player" | "partner";
+  participant_name: string;
+  participant_email: string | null;
+  participant_age: number;
+  guardian_name: string | null;
+  signature: string;
+  waiver_version: string;
+  accepted_at: string;
+};
+
+export type ConsentPayload = {
+  guardian_name?: string;
+  signature: string;
+  accepted_rules: boolean;
+  accepted_waiver: boolean;
+  accepted_codes_of_conduct: boolean;
+  waiver_version: string | null;
 };
 
 // Payload accepted by the register-player Edge Function
@@ -184,5 +230,10 @@ export type PublicRegistrationPayload = {
   payment_paid_full_for_partner?: boolean;
   comments?: string;
   website?: string;                     // honeypot; always empty for people
+  player_age?: number;
+  player_student?: boolean;
+  partner_age?: number;
+  partner_student?: boolean;
+  consent?: ConsentPayload;
   group_choice?: "open" | "members";
 };

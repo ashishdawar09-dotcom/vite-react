@@ -24,19 +24,56 @@ function priceOf(category: Priced): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Reduced per-player fees set on the tournament. Mirrors
+// supabase/functions/_shared/pricing.ts, which computes the actual charge.
+export type Concessions = { youth_price?: number | string | null; student_price?: number | string | null };
+export type Participant = { age: number | null; student: boolean };
+export type FeeType = "standard" | "youth" | "student";
+
+function money(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+// One player's share of a per-player price: under-18s pay the youth fee and
+// students the student fee, only when lower than the category price.
+export function playerShare(
+  categoryPrice: number,
+  who: Participant | undefined,
+  concessions: Concessions = {},
+): { price: number; type: FeeType } {
+  const youth = money(concessions.youth_price);
+  const student = money(concessions.student_price);
+  if (who && who.age !== null && who.age < 18 && youth !== null && youth < categoryPrice) {
+    return { price: youth, type: "youth" };
+  }
+  if (who?.student && student !== null && student < categoryPrice) return { price: student, type: "student" };
+  return { price: categoryPrice, type: "standard" };
+}
+
 // Computes the dollar amount the submitter owes RIGHT NOW.
-// - Singles, or doubles priced per team: the category price.
-// - Doubles priced per player + 'separate': one player's share.
+// - Singles, or doubles priced per team: the category price (per-team
+//   prices ignore concessions).
+// - Doubles priced per player + 'separate': the submitter's own share.
 // - Doubles priced per player + 'full': both players' shares.
 // Returns null when the category has no price set.
-export function computeFee(category: Priced | null, paymentSplit: PaymentSplit = "separate"): number | null {
+export function computeFee(
+  category: Priced | null,
+  paymentSplit: PaymentSplit = "separate",
+  player?: Participant,
+  partner?: Participant,
+  concessions: Concessions = {},
+): number | null {
   if (!category) return null;
   const price = priceOf(category);
   if (price === null) return null;
-  if (category.team_size === 2 && priceBasis(category) === "per_player" && paymentSplit === "full") {
-    return price * 2;
+  if (category.team_size === 2 && priceBasis(category) === "per_team") return price;
+  const own = playerShare(price, player, concessions).price;
+  if (category.team_size === 2 && paymentSplit === "full") {
+    return own + playerShare(price, partner, concessions).price;
   }
-  return price;
+  return own;
 }
 
 export function fmtMoney(n: number): string {
