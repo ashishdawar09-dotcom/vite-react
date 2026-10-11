@@ -4,7 +4,7 @@
 // verified in Resend).
 
 export type Mail = {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   text: string;
@@ -24,7 +24,7 @@ export async function sendEmail(mail: Mail): Promise<string | null> {
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from,
-        to: [mail.to],
+        to: Array.isArray(mail.to) ? mail.to : [mail.to],
         subject: mail.subject,
         html: mail.html,
         text: mail.text,

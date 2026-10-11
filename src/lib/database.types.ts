@@ -316,6 +316,8 @@ export type Database = {
       }
       pending_registrations: {
         Row: {
+          admin_email_status: string | null
+          admin_emailed_at: string | null
           amount_due_cents: number | null
           approval_email_status: string | null
           approval_emailed_at: string | null
@@ -359,6 +361,8 @@ export type Database = {
           tournament_id: string
         }
         Insert: {
+          admin_email_status?: string | null
+          admin_emailed_at?: string | null
           amount_due_cents?: number | null
           approval_email_status?: string | null
           approval_emailed_at?: string | null
@@ -402,6 +406,8 @@ export type Database = {
           tournament_id: string
         }
         Update: {
+          admin_email_status?: string | null
+          admin_emailed_at?: string | null
           amount_due_cents?: number | null
           approval_email_status?: string | null
           approval_emailed_at?: string | null
@@ -741,6 +747,7 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          admin_notify_emails: string[] | null
           contact_info: string | null
           created_at: string
           created_by: string | null
@@ -770,6 +777,7 @@ export type Database = {
           youth_price: number | null
         }
         Insert: {
+          admin_notify_emails?: string[] | null
           contact_info?: string | null
           created_at?: string
           created_by?: string | null
@@ -799,6 +807,7 @@ export type Database = {
           youth_price?: number | null
         }
         Update: {
+          admin_notify_emails?: string[] | null
           contact_info?: string | null
           created_at?: string
           created_by?: string | null
