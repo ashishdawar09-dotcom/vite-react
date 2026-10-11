@@ -7,7 +7,7 @@
 //
 // The admin app, scoreboards and spectator pages are not tracked.
 
-export const GA_MEASUREMENT_ID = "";
+export const GA_MEASUREMENT_ID = "G-FT7CJBVQ4Z";
 export const PRIVACY_URL = "https://shuttlestorm.adawar.org/privacy";
 
 type Gtag = (...args: unknown[]) => void;
