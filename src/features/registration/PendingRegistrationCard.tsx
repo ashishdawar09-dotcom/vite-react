@@ -83,10 +83,13 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
     setBusy("approve");
     try {
       await approveRegistration(reg.id);
+      // The database also sends this on approval; whichever call is first
+      // sends, the other sees "already sent".
       const email = await sendApprovalEmail(reg.id);
+      const emailed = email.sent || email.status === "already sent";
       toast.success(`Approved — ${reg.player_name}${reg.partner_name ? " & " + reg.partner_name : ""} added` +
-        (email.sent ? " · “You're in” email sent" : ""));
-      if (!email.sent && email.status !== "already sent") {
+        (emailed ? " · “You're in” email sent" : ""));
+      if (!emailed) {
         toast.error(`The “You're in” email didn't send (${email.status}). Let them know directly.`);
       }
       if (!reduce) {

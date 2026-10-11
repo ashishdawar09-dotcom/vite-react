@@ -417,3 +417,8 @@ enabled = true
 # Stripe-Signature header instead.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Called by the database (pg_net) with a shared secret, or by an admin;
+# the function checks both itself.
+[functions.registration-email]
+verify_jwt = false
