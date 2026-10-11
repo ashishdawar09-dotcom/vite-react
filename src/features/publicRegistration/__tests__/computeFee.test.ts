@@ -82,3 +82,16 @@ describe("cardAmount", () => {
     expect(cardAmount(0)).toBe(0);
   });
 });
+
+describe("concessions", () => {
+  const fees = { youth_price: 30, student_price: 30 };
+  const singles40 = { team_size: 1 as const, price: 40, price_basis: "per_player" as const };
+  const doubles40 = { team_size: 2 as const, price: 40, price_basis: "per_player" as const };
+  it("prices each player by age and student status", () => {
+    expect(computeFee(singles40, "separate", { age: 30, student: false }, undefined, fees)).toBe(40);
+    expect(computeFee(singles40, "separate", { age: 17, student: false }, undefined, fees)).toBe(30);
+    expect(computeFee(singles40, "separate", { age: 22, student: true }, undefined, fees)).toBe(30);
+    expect(computeFee(doubles40, "full", { age: 30, student: false }, { age: 16, student: false }, fees)).toBe(70);
+    expect(computeFee(doubles40, "separate", { age: 16, student: false }, { age: 30, student: false }, fees)).toBe(30);
+  });
+});

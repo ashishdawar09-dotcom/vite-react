@@ -12,8 +12,9 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { allow, allowClient, appOrigin, isUuid, json, serveWithCors } from "../_shared/http.ts";
-import { cardCents, etransferCents } from "../_shared/pricing.ts";
+import { cardCents, etransferCents, playerShare } from "../_shared/pricing.ts";
 import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
+import { type ConsentInput, parseAge, recordConsent, sendPartnerWaiverEmail, validateConsent } from "../_shared/waiver.ts";
 
 
 type Payload = {
@@ -32,6 +33,12 @@ type Payload = {
   payment_paid_full_for_partner?: boolean;
   comments?: string;
   group_choice?: "open" | "members";
+  website?: string; // honeypot: hidden from people, filled in by form bots
+  player_age?: number;
+  player_student?: boolean;
+  partner_age?: number;      // needed to price the partner's share when paying for both
+  partner_student?: boolean;
+  consent?: ConsentInput;    // required when the tournament has a waiver
 };
 
 serveWithCors(handle);
@@ -64,6 +71,13 @@ async function handle(req: Request): Promise<Response> {
       body = rawBody ? (JSON.parse(rawBody) as Partial<Payload>) : {};
     } catch {
       return json({ success: false, error: "Invalid JSON" }, 400);
+    }
+
+    // Honeypot: the form's hidden "website" field is invisible to people.
+    // Bots that fill it get a normal-looking success and nothing is stored.
+    if (typeof body.website === "string" && body.website.trim()) {
+      console.warn("register-player: honeypot tripped");
+      return json({ success: true }, 200);
     }
 
     // ---- Validation: required scalars ----
@@ -115,7 +129,7 @@ async function handle(req: Request): Promise<Response> {
     // ---- Validation: tournament exists, open, not past deadline ----
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("id, name, registration_open, registration_deadline")
+      .select("id, name, registration_open, registration_deadline, waiver_text, waiver_version, youth_price, student_price")
       .eq("id", body.tournament_id)
       .maybeSingle();
     if (tErr || !t) {
@@ -167,9 +181,38 @@ async function handle(req: Request): Promise<Response> {
       }
     }
 
-    // ---- Amount, computed from the category, never from the request ----
+    // ---- Age, fee type and waiver consent ----
+    const waiverRequired = !!t.waiver_text;
+    const concessions = { youth_price: t.youth_price, student_price: t.student_price };
+    const ageNeeded = waiverRequired || t.youth_price !== null;
+    const playerAge = parseAge(body.player_age);
+    if (ageNeeded && playerAge === null) {
+      return json({ success: false, error: "Please enter the player's age." }, 400);
+    }
+    let consent = null;
+    if (waiverRequired) {
+      const v = validateConsent({ ...body.consent, age: playerAge }, t, body.player_name!.trim());
+      if (!v.ok) return json({ success: false, error: v.error }, v.status);
+      consent = v.value;
+    }
+
+    // ---- Amount, computed from the category and ages, never from the request ----
     const paysForBoth = !!body.payment_paid_full_for_partner && partnerProvided;
-    const etransfer = etransferCents(c, paysForBoth);
+    const sharedByAge = isDoubles && c.price_basis === "per_player" && paysForBoth && ageNeeded;
+    const partnerAge = parseAge(body.partner_age);
+    if (sharedByAge && partnerAge === null) {
+      return json({ success: false, error: "Please enter your partner's age so we can price their share." }, 400);
+    }
+    const player = { age: playerAge, student: body.player_student === true };
+    const partner = { age: partnerAge, student: body.partner_student === true };
+    const etransfer = etransferCents(c, paysForBoth, player, partner, concessions);
+    const categoryPrice = c.price === null ? null : Number(c.price);
+    const playerFeeType = categoryPrice === null || c.price_basis === "per_team"
+      ? "standard"
+      : playerShare(categoryPrice, player, concessions).type;
+    const partnerFeeType = sharedByAge && categoryPrice !== null
+      ? playerShare(categoryPrice, partner, concessions).type
+      : null;
     if (payByCard && etransfer === null) {
       return json({ success: false, error: "Card payment isn't available for this category. Please pay by e-Transfer." }, 400);
     }
@@ -246,6 +289,11 @@ async function handle(req: Request): Promise<Response> {
         card_payment_status: payByCard ? "awaiting" : null,
         comments: body.comments?.trim() || null,
         group_choice: body.group_choice ?? null,
+        player_age: playerAge,
+        partner_age: partnerProvided ? partnerAge : null,
+        player_fee_type: playerFeeType,
+        partner_fee_type: partnerFeeType,
+        partner_consent_token: waiverRequired && partnerProvided ? crypto.randomUUID() : null,
         // Store a bounded, validated subset rather than the raw request body
         // (previously persisted verbatim and unbounded).
         raw_payload: {
@@ -269,7 +317,25 @@ async function handle(req: Request): Promise<Response> {
       return json({ success: false, error: "Failed to save registration. Please try again." }, 500);
     }
 
+    // The consent record is part of the entry: without it, the entry is undone.
+    if (consent) {
+      const consentErr = await recordConsent(supabase, req, t, {
+        registration_id: ins.id,
+        role: "player",
+        participant_name: body.player_name!.trim(),
+        participant_email: playerEmail,
+        consent,
+      });
+      if (consentErr) {
+        console.error("register-player consent insert failed:", consentErr);
+        await supabase.from("pending_registrations").delete().eq("id", ins.id);
+        return json({ success: false, error: "Failed to save registration. Please try again." }, 500);
+      }
+    }
+
     if (!payByCard) {
+      // Card entries email the partner once payment completes (stripe-webhook).
+      if (waiverRequired && partnerProvided) await sendPartnerWaiverEmail(supabase, ins.id, appOrigin(req));
       return json({ success: true, registrationId: ins.id }, 200);
     }
 
@@ -300,7 +366,9 @@ async function handle(req: Request): Promise<Response> {
         // record for digital goods, +3.5% per transaction), which is the
         // account default.
         managed_payments: { enabled: false },
-        payment_intent_data: { metadata: meta },
+        // The success page tells players Stripe emails their receipt; this
+        // makes sure it does, whatever the account's email settings.
+        payment_intent_data: { metadata: meta, receipt_email: playerEmail },
         success_url: `${back}?payment=success&reg=${ins.id}`,
         cancel_url: `${back}?payment=cancelled`,
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,

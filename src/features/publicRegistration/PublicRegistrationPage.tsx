@@ -4,16 +4,22 @@ import { useParams } from "react-router-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { submitPublicRegistration } from "../../lib/db";
 import { pushSupportStatus, subscribeToPush } from "../../lib/push";
+import {
+  GA_MEASUREMENT_ID,
+  PRIVACY_URL,
+  initAnalytics,
+  rememberPendingCardRegistration,
+  takePendingCardRegistration,
+  trackRegistrationComplete,
+} from "../../lib/analytics";
 import { captureError } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
-import type { Category, PublicRegistrationPayload } from "../../types";
+import type { AgeBand, Category, PublicRegistrationPayload, Tournament } from "../../types";
 import { Countdown } from "./Countdown";
-import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type PaymentSplit } from "./computeFee";
+import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type Concessions, type PaymentSplit } from "./computeFee";
+import { CYAN, CYAN_DARK, Card, CheckRow, Field, PageShell, inputStyle, safeHttpUrl } from "./formParts";
 import { usePublicTournament } from "./usePublicTournament";
-import { emptyFormState, type FormErrors, type FormState, isValid, validate } from "./validate";
-
-const CYAN = "#00d4ff";
-const CYAN_DARK = "#006d80";
+import { AGE_OF_MAJORITY, emptyFormState, type FormErrors, type FormState, isValid, parseAge, validate } from "./validate";
 
 // ---------- small helpers (file-local) ---------------------------------------
 
@@ -37,17 +43,6 @@ function fmtDate(iso: string | null, time: string | null): string {
   return `${dateStr} • ${h12}:${String(mins).padStart(2, "0")} ${period}`;
 }
 
-// Only http(s) links reach an href; anything else (e.g. javascript:) is dropped.
-function safeHttpUrl(raw: string | null): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const u = new URL(raw);
-    return u.protocol === "https:" || u.protocol === "http:" ? u.href : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function paragraphs(text: string): string[] {
   return text.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
 }
@@ -62,50 +57,6 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 // ---------- field-level building blocks ---------------------------------------
-
-type FieldProps = {
-  label: string;
-  hint?: string;
-  error?: string;
-  required?: boolean;
-  children: React.ReactNode;
-};
-
-function Field({ label, hint, error, required, children }: FieldProps) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label
-        style={{
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: 1.5,
-          textTransform: "uppercase",
-          color: colors.text.mutedLight,
-        }}
-      >
-        {label}{required && <span style={{ color: colors.state.live, marginLeft: 4 }}>*</span>}
-      </label>
-      {children}
-      {/* Reserved 16px error slot prevents layout shift on blur validation */}
-      <div style={{ minHeight: 16, fontSize: 12, color: colors.state.live }}>
-        {error ? error : hint && <span style={{ color: colors.text.mutedLight }}>{hint}</span>}
-      </div>
-    </div>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "12px 14px",
-  fontSize: 16, // 16+ avoids iOS auto-zoom on focus
-  border: `1px solid ${colors.border.lightStrong}`,
-  borderRadius: radii.md,
-  background: colors.bg.card,
-  color: colors.text.primaryLight,
-  fontFamily: typography.body,
-  boxSizing: "border-box",
-  minHeight: 44,
-};
 
 // ---------- the page ---------------------------------------------------------
 
@@ -125,6 +76,10 @@ export function PublicRegistrationPage() {
   // After successful submission, we hold the pending registration id so the
   // success screen can attach a push subscription to it.
   const [submittedRegistrationId, setSubmittedRegistrationId] = useState<string | null>(null);
+  // Honeypot: hidden from people; bots that fill it are dropped server-side.
+  const [website, setWebsite] = useState("");
+
+  useEffect(() => { void initAnalytics(); }, []);
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === form.category_id) ?? null,
@@ -133,10 +88,41 @@ export function PublicRegistrationPage() {
   // Card payment needs a category price; without one only e-Transfer is offered.
   const cardAvailable = computeFee(selectedCategory, "separate") !== null;
   const payMethod = cardAvailable ? form.payment_method : "etransfer";
-  // Prices are per category; membership no longer affects the fee.
+
+  // Reduced fees for under-18s and students, and the waiver every participant
+  // must accept, both set per tournament.
+  const concessions: Concessions = useMemo(
+    () => ({ youth_price: tournament?.youth_price ?? null, student_price: tournament?.student_price ?? null }),
+    [tournament],
+  );
+  const studentPrice = numOrNull(tournament?.student_price);
+  const waiverRequired = !!tournament?.waiver_text;
+  const ageRequired = waiverRequired || numOrNull(tournament?.youth_price) !== null;
+  const playerAge = parseAge(form.player_age);
+  const playerIsMinor = playerAge !== null && playerAge < AGE_OF_MAJORITY;
+  const categoryPrice = selectedCategory ? numOrNull(selectedCategory.price) : null;
+  const perPlayerPrice = categoryPrice !== null && priceBasis(selectedCategory!) === "per_player";
+  // The student rate is offered to adults when it beats the category price.
+  const offerStudent = (who: number | null) =>
+    perPlayerPrice && studentPrice !== null && studentPrice < categoryPrice! && (who === null || who >= 18);
+  const player = { age: playerAge, student: offerStudent(playerAge) && form.player_student };
+  const partnerAge = parseAge(form.partner_age);
+  const partner = { age: partnerAge, student: offerStudent(partnerAge) && form.partner_student };
+
+  // Prices are per category and per player's age/student status; membership
+  // no longer affects the fee. requirePartnerAge is set below once the split
+  // is known.
+  const partnerAgeNeeded =
+    ageRequired && selectedCategory?.team_size === 2 && priceBasis(selectedCategory) === "per_player" &&
+    !!form.partner_name.trim() && form.payment_split === "full";
   const errors = useMemo(
-    () => validate({ ...form, payment_method: payMethod }, selectedCategory, { requireMembership: false }),
-    [form, payMethod, selectedCategory],
+    () => validate({ ...form, payment_method: payMethod }, selectedCategory, {
+      requireMembership: false,
+      requireAge: ageRequired,
+      requireWaiver: waiverRequired,
+      requirePartnerAge: partnerAgeNeeded,
+    }),
+    [form, payMethod, selectedCategory, ageRequired, waiverRequired, partnerAgeNeeded],
   );
   const visibleErrors: FormErrors = useMemo(() => {
     const out: FormErrors = {};
@@ -155,7 +141,8 @@ export function PublicRegistrationPage() {
     baseFee !== null &&
     !!form.partner_name.trim();
   const paymentSplit: PaymentSplit = showPaymentSplit ? form.payment_split : "separate";
-  const etransferDue = computeFee(selectedCategory, paymentSplit);
+  const etransferDue = computeFee(selectedCategory, paymentSplit, player, partner, concessions);
+  const ownShare = computeFee(selectedCategory, "separate", player, partner, concessions);
   const cardDue = etransferDue === null ? null : cardAmount(etransferDue);
 
   // Back from Stripe Checkout: ?payment=success&reg=<id> or ?payment=cancelled.
@@ -169,6 +156,11 @@ export function PublicRegistrationPage() {
       setSubmittedRegistrationId(reg);
       setCardReturn("paid");
       setSubmitStatus("success");
+      trackRegistrationComplete(reg, {
+        payment_method: "card",
+        value: takePendingCardRegistration(),
+        tournament_id: window.location.pathname.split("/")[2],
+      });
     } else if (payment === "cancelled") {
       setCardReturn("cancelled");
     }
@@ -220,7 +212,24 @@ export function PublicRegistrationPage() {
         (priceBasis(selectedCategory) === "per_team" ? !!form.partner_name.trim() : paymentSplit === "full"),
       comments: form.comments.trim() || undefined,
       group_choice: form.group_choice ?? undefined,
+      website: website || undefined,
+      player_age: playerAge ?? undefined,
+      player_student: player.student,
     };
+    if (partnerAgeNeeded && paymentSplit === "full") {
+      payload.partner_age = partnerAge ?? undefined;
+      payload.partner_student = partner.student;
+    }
+    if (waiverRequired) {
+      payload.consent = {
+        guardian_name: playerIsMinor ? form.guardian_name.trim() : undefined,
+        signature: form.signature.trim(),
+        accepted_rules: form.accepted_rules,
+        accepted_waiver: form.accepted_waiver,
+        accepted_codes_of_conduct: form.accepted_codes,
+        waiver_version: tournament.waiver_version,
+      };
+    }
     if (selectedCategory.team_size === 2 && form.partner_name.trim()) {
       payload.partner_name = form.partner_name.trim();
       payload.partner_email = form.partner_email.trim();
@@ -230,12 +239,18 @@ export function PublicRegistrationPage() {
     const result = await submitPublicRegistration(payload);
     if (result.success && result.checkoutUrl) {
       // Card: Stripe Checkout takes over and sends the player back here.
+      if (cardDue !== null) rememberPendingCardRegistration(cardDue);
       window.location.assign(result.checkoutUrl);
       return;
     }
     if (result.success) {
       setSubmittedRegistrationId(result.registrationId ?? null);
       setSubmitStatus("success");
+      trackRegistrationComplete(result.registrationId ?? null, {
+        payment_method: "etransfer",
+        value: etransferDue ?? undefined,
+        tournament_id: tournament.id,
+      });
     } else {
       setSubmitStatus("error");
       setSubmitError(result.error ?? "Submission failed. Please try again.");
@@ -252,6 +267,9 @@ export function PublicRegistrationPage() {
       player_is_member: f.player_is_member,
       group_choice: f.group_choice,
       payment_method: f.payment_method,
+      player_age: f.player_age,
+      player_student: f.player_student,
+      guardian_name: f.guardian_name,
     }));
     setTouched(new Set());
     setSubmitStatus("idle");
@@ -330,6 +348,11 @@ export function PublicRegistrationPage() {
                 push notifications on the next success screen.
               </div>
             )
+          )}
+          {tournament?.waiver_text && (
+            <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 13, lineHeight: 1.5 }}>
+              If you entered a doubles partner, we've emailed them a link to accept the waiver. They need to do this before they can play.
+            </p>
           )}
           <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 13 }}>
             Need to enter another category? Each category requires a separate submission.
@@ -469,8 +492,18 @@ export function PublicRegistrationPage() {
           onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}
           noValidate
         >
+          {/* Honeypot. Off-screen rather than display:none, which some bots skip. */}
+          <div aria-hidden="true" style={{ position: "absolute", left: -10000, top: "auto", width: 1, height: 1, overflow: "hidden" }}>
+            <label>
+              Website (leave blank)
+              <input
+                type="text" name="website" tabIndex={-1} autoComplete="off"
+                value={website} onChange={(e) => setWebsite(e.target.value)}
+              />
+            </label>
+          </div>
           <Card>
-            <Field label="Email" required hint="We'll send confirmation here" error={visibleErrors.player_email}>
+            <Field label="Email" required hint="We'll contact you here about your entry" error={visibleErrors.player_email}>
               <input
                 type="email" inputMode="email" autoComplete="email" style={inputStyle}
                 value={form.player_email}
@@ -494,6 +527,21 @@ export function PublicRegistrationPage() {
                 onBlur={() => markTouched("player_phone")}
               />
             </Field>
+            {ageRequired && (
+              <Field
+                label={`Player's age on ${tournament.event_date ? fmtShortDate(tournament.event_date) : "the tournament date"}`}
+                required
+                hint={waiverRequired ? "Under 18 pays the youth fee. Under 19 needs a parent or guardian to accept the waiver." : "Under 18 pays the youth fee."}
+                error={visibleErrors.player_age}
+              >
+                <input
+                  type="text" inputMode="numeric" style={{ ...inputStyle, maxWidth: 120 }}
+                  value={form.player_age}
+                  onChange={(e) => set("player_age", e.target.value.replace(/\D/g, "").slice(0, 3))}
+                  onBlur={() => markTouched("player_age")}
+                />
+              </Field>
+            )}
           </Card>
 
           {/* Category section */}
@@ -514,7 +562,18 @@ export function PublicRegistrationPage() {
               }}>
                 <span style={{ fontWeight: 800, color: CYAN_DARK }}>Entry fee: </span>
                 {priceDescription(selectedCategory)}
+                {concessionNote(selectedCategory, tournament) && (
+                  <div style={{ marginTop: 6, color: colors.text.mutedLight }}>{concessionNote(selectedCategory, tournament)}</div>
+                )}
               </div>
+            )}
+            {offerStudent(playerAge) && (
+              <CheckRow
+                checked={form.player_student}
+                onChange={(v) => set("player_student", v)}
+                label={`I'm a current ${tournament.student_label ?? "student"} (${fmtMoney(studentPrice!)} instead of ${fmtMoney(categoryPrice!)})`}
+                hint="Your student ID may be checked at check-in."
+              />
             )}
           </Card>
 
@@ -563,14 +622,83 @@ export function PublicRegistrationPage() {
             )}
           </AnimatePresence>
 
+          {/* Rules and waiver */}
+          {waiverRequired && (
+            <Card>
+              <div style={{ fontFamily: typography.display, fontSize: 18, fontWeight: 700, color: colors.text.primaryLight }}>
+                Rules and waiver
+              </div>
+              <p style={{ fontSize: 13, color: colors.text.mutedLight, margin: "4px 0 12px", lineHeight: 1.5 }}>
+                Every player must read the competition regulations and agree to the waiver before taking part.
+                {playerIsMinor && " The player is under 19, so a parent or guardian must accept on their behalf."}
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.md, marginBottom: spacing.md }}>
+                {safeHttpUrl(tournament.rules_url) && (
+                  <a href={safeHttpUrl(tournament.rules_url)} target="_blank" rel="noopener" style={{ color: CYAN_DARK, fontWeight: 700, fontSize: 14 }}>
+                    Read the competition regulations ↗
+                  </a>
+                )}
+                {safeHttpUrl(tournament.waiver_url) && (
+                  <a href={safeHttpUrl(tournament.waiver_url)} target="_blank" rel="noopener" style={{ color: CYAN_DARK, fontWeight: 700, fontSize: 14 }}>
+                    Open the waiver in a new tab ↗
+                  </a>
+                )}
+              </div>
+              <div
+                role="region" aria-label="Waiver text" tabIndex={0}
+                style={{
+                  maxHeight: 240, overflowY: "auto", padding: spacing.md,
+                  background: colors.bg.muted, border: `1px solid ${colors.border.lightStrong}`, borderRadius: radii.md,
+                  fontSize: 13, lineHeight: 1.55, color: colors.text.primaryLight, whiteSpace: "pre-wrap",
+                }}
+              >
+                {tournament.waiver_text}
+              </div>
+              <div style={{ marginTop: spacing.md }}>
+                <CheckRow checked={form.accepted_rules} onChange={(v) => { set("accepted_rules", v); markTouched("accepted_rules"); }}
+                  label="I have read the competition regulations." error={visibleErrors.accepted_rules} />
+                <CheckRow checked={form.accepted_waiver} onChange={(v) => { set("accepted_waiver", v); markTouched("accepted_waiver"); }}
+                  label="I have read and understood the Acknowledgement of Risk and Release of Liability above, and I agree to it."
+                  error={visibleErrors.accepted_waiver} />
+                <CheckRow checked={form.accepted_codes} onChange={(v) => { set("accepted_codes", v); markTouched("accepted_codes"); }}
+                  label="I have read and will follow the Badminton BC codes of conduct (linked in the regulations)."
+                  error={visibleErrors.accepted_codes} />
+              </div>
+              {playerIsMinor && (
+                <Field label="Parent or guardian's full name" required error={visibleErrors.guardian_name}>
+                  <input type="text" autoComplete="off" style={inputStyle}
+                    value={form.guardian_name}
+                    onChange={(e) => set("guardian_name", e.target.value)}
+                    onBlur={() => markTouched("guardian_name")} />
+                </Field>
+              )}
+              <Field
+                label={playerIsMinor ? "Parent or guardian's signature" : "Your signature"}
+                required
+                hint={playerIsMinor ? "Type the parent or guardian's full name, as entered above." : "Type your full name, as entered above."}
+                error={visibleErrors.signature}
+              >
+                <input type="text" autoComplete="off" style={{ ...inputStyle, fontStyle: "italic" }}
+                  value={form.signature}
+                  onChange={(e) => set("signature", e.target.value)}
+                  onBlur={() => markTouched("signature")} />
+              </Field>
+              {selectedCategory?.team_size === 2 && form.partner_email.trim() && (
+                <p style={{ fontSize: 13, color: colors.text.mutedLight, margin: 0, lineHeight: 1.5 }}>
+                  We'll email {form.partner_name.trim() || "your partner"} a link to read the regulations and accept the waiver too.
+                </p>
+              )}
+            </Card>
+          )}
+
           {/* Payment section */}
           <Card>
             {showPaymentSplit && baseFee !== null && (
               <Field label="Payment split for this team">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: spacing.sm }}>
                   {([
-                    { v: "separate" as PaymentSplit, label: `Partner pays separately (${fmtMoney(baseFee)} each)` },
-                    { v: "full" as PaymentSplit, label: `I'll pay for both (${fmtMoney(baseFee * 2)} total)` },
+                    { v: "separate" as PaymentSplit, label: `Partner pays their own share (you pay ${fmtMoney(ownShare ?? baseFee)})` },
+                    { v: "full" as PaymentSplit, label: ageRequired ? "I'll pay for both (total depends on your partner's age)" : `I'll pay for both (${fmtMoney(baseFee * 2)} total)` },
                   ]).map((o) => {
                     const sel = paymentSplit === o.v;
                     return (
@@ -587,6 +715,26 @@ export function PublicRegistrationPage() {
                   })}
                 </div>
               </Field>
+            )}
+            {partnerAgeNeeded && paymentSplit === "full" && (
+              <>
+                <Field label="Partner's age on the tournament date" required hint="Prices your partner's share." error={visibleErrors.partner_age}>
+                  <input
+                    type="text" inputMode="numeric" style={{ ...inputStyle, maxWidth: 120 }}
+                    value={form.partner_age}
+                    onChange={(e) => set("partner_age", e.target.value.replace(/\D/g, "").slice(0, 3))}
+                    onBlur={() => markTouched("partner_age")}
+                  />
+                </Field>
+                {offerStudent(partnerAge) && (
+                  <CheckRow
+                    checked={form.partner_student}
+                    onChange={(v) => set("partner_student", v)}
+                    label={`My partner is a current ${tournament.student_label ?? "student"} (${fmtMoney(studentPrice!)})`}
+                    hint="Their student ID may be checked at check-in."
+                  />
+                )}
+              </>
             )}
             {cardAvailable && etransferDue !== null && cardDue !== null && (
               <Field label="How would you like to pay?" required>
@@ -672,6 +820,21 @@ export function PublicRegistrationPage() {
                 ? (payMethod === "card" ? "Opening secure checkout…" : "Submitting…")
                 : payMethod === "card" && cardDue !== null ? `Continue to payment · ${fmtMoney(cardDue)}` : "Submit Registration"}
             </button>
+            <p style={{ margin: `${spacing.md}px 0 0`, textAlign: "center", fontSize: 13, color: colors.text.mutedLight }}>
+              How we use your details:{" "}
+              <a href={PRIVACY_URL} target="_blank" rel="noopener" style={{ color: "inherit" }}>privacy policy</a>
+              {GA_MEASUREMENT_ID && (
+                <>
+                  {" · "}
+                  <button
+                    type="button" data-consent-open
+                    style={{ font: "inherit", color: "inherit", background: "none", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }}
+                  >
+                    cookie settings
+                  </button>
+                </>
+              )}
+            </p>
           </div>
         </form>
       )}
@@ -681,41 +844,29 @@ export function PublicRegistrationPage() {
 
 // ---------- Page shell --------------------------------------------------------
 
-function PageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      // dvh + safe-area padding so the form looks right whether opened in
-      // mobile Safari, an installed PWA, or a desktop browser.
-      minHeight: "100dvh",
-      background: colors.bg.page,
-      fontFamily: typography.body,
-      color: colors.text.primaryLight,
-      paddingTop: "env(safe-area-inset-top, 0px)",
-      paddingBottom: "env(safe-area-inset-bottom, 0px)",
-      paddingLeft: "env(safe-area-inset-left, 0px)",
-      paddingRight: "env(safe-area-inset-right, 0px)",
-    }}>
-      <div style={{ maxWidth: 560, margin: "0 auto", padding: `0 ${spacing.md}px` }}>
-        {children}
-      </div>
-    </div>
-  );
+const AGE_BAND_LABEL: Record<AgeBand, string> = { kid: "Junior", teen: "Youth", adult: "Adult" };
+
+function numOrNull(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      background: colors.bg.card,
-      borderRadius: radii.xl,
-      padding: spacing.lg,
-      marginBottom: spacing.md,
-      boxShadow: shadows.md,
-      border: `1px solid ${colors.border.light}`,
-      display: "flex", flexDirection: "column", gap: spacing.md,
-    }}>
-      {children}
-    </div>
-  );
+function fmtShortDate(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// "Under 18: $30. UFV students: $30." when those beat the category price.
+function concessionNote(category: Category, t: Tournament): string | null {
+  const price = numOrNull(category.price);
+  if (price === null || priceBasis(category) === "per_team") return null;
+  const parts: string[] = [];
+  const youth = numOrNull(t.youth_price);
+  const student = numOrNull(t.student_price);
+  if (youth !== null && youth < price) parts.push(`Under 18: ${fmtMoney(youth)}`);
+  if (student !== null && student < price) parts.push(`${t.student_label ? `${t.student_label}s` : "Students"}: ${fmtMoney(student)}`);
+  return parts.length ? `${parts.join(". ")} per player.` : null;
 }
 
 // ---------- Category picker (sub-component) ----------------------------------
@@ -746,7 +897,7 @@ function CategoryPicker({ categories, value, onChange, isMobile }: CategoryPicke
               <div style={{ fontSize: 14, fontWeight: 800, color: colors.text.primaryLight }}>{c.name}</div>
               <div style={{ fontSize: 12, color: colors.text.mutedLight, display: "flex", gap: spacing.sm }}>
                 <span>{c.team_size === 1 ? "Singles" : "Doubles"}</span>
-                {c.age_band && <span>• {c.age_band}</span>}
+                {c.age_band && <span>• {AGE_BAND_LABEL[c.age_band]}</span>}
                 {price && <span>• {price}</span>}
                 {c.allow_solo_signup && <span style={{ color: CYAN_DARK }}>• solo OK</span>}
               </div>
@@ -773,7 +924,7 @@ function CategoryPicker({ categories, value, onChange, isMobile }: CategoryPicke
         return (
           <option key={c.id} value={c.id}>
             {c.name} — {c.team_size === 1 ? "Singles" : "Doubles"}
-            {c.age_band ? ` (${c.age_band})` : ""}{price ? ` — ${price}` : ""}
+            {c.age_band ? ` (${AGE_BAND_LABEL[c.age_band]})` : ""}{price ? ` — ${price}` : ""}
           </option>
         );
       })}

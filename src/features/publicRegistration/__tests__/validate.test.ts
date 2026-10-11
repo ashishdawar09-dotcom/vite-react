@@ -124,3 +124,40 @@ describe("payment method", () => {
     expect(validate({ ...base, payment_method: "card" }, singles).payment_reference).toBeUndefined();
   });
 });
+
+describe("waiver and age", () => {
+  const base = () => ({
+    ...emptyFormState(),
+    player_email: "a@b.co", player_name: "Sam Lee", player_phone: "6041234567",
+    category_id: "c1", payment_reference: "REF1",
+  });
+  const opts = { requireMembership: false, requireAge: true, requireWaiver: true };
+
+  it("requires age, all three acceptances and a signature", () => {
+    const errs = validate(base(), null, opts);
+    expect(errs.player_age).toBeDefined();
+    expect(errs.accepted_rules).toBe("Required");
+    expect(errs.accepted_waiver).toBe("Required");
+    expect(errs.accepted_codes).toBe("Required");
+    expect(errs.signature).toBeDefined();
+  });
+
+  it("an adult signs with their own name, case and spacing ignored", () => {
+    const f = { ...base(), player_age: "30", accepted_rules: true, accepted_waiver: true, accepted_codes: true, signature: "  sam   LEE " };
+    expect(validate(f, null, opts)).toEqual({});
+    expect(validate({ ...f, signature: "Someone Else" }, null, opts).signature).toBe("Must match the player name above");
+  });
+
+  it("under 19 needs a parent or guardian, who signs", () => {
+    const f = { ...base(), player_age: "18", accepted_rules: true, accepted_waiver: true, accepted_codes: true, signature: "Sam Lee" };
+    expect(validate(f, null, opts).guardian_name).toBe("Required for players under 19");
+    const g = { ...f, guardian_name: "Pat Lee", signature: "Pat Lee" };
+    expect(validate(g, null, opts)).toEqual({});
+  });
+
+  it("asks for the partner's age only when it prices their share", () => {
+    const f = { ...base(), player_age: "30" };
+    expect(validate(f, null, { requireMembership: false, requireAge: true }).partner_age).toBeUndefined();
+    expect(validate(f, null, { requireMembership: false, requireAge: true, requirePartnerAge: true }).partner_age).toBeDefined();
+  });
+});

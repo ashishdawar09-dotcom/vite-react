@@ -1,10 +1,7 @@
 import { supabase } from "./supabase";
 import { notifyCourtAllocated } from "./notifications";
 import type { Database } from "./database.types";
-import type {
-  Category, Match, PendingRegistration, Player, PlayerCategory,
-  PublicRegistrationPayload, Team, Tournament,
-} from "../types";
+import type { Category, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
 
 // Bridge alias: the generated Insert type the typed Supabase client expects
 // for `matches`. Different from `Partial<Match>` because the DB requires the
@@ -709,6 +706,50 @@ export async function listPendingRegistrations(
     throw error;
   }
   return (data ?? []) as PendingRegistration[];
+}
+
+// Partner waiver page (/waiver/:token) → waiver-consent Edge Function. Public:
+// the token from the emailed link is the only credential.
+export type PartnerWaiverInfo = {
+  alreadyAccepted: boolean;
+  tournament: {
+    name: string; event_date: string | null; venue_name: string | null;
+    waiver_text: string; waiver_version: string | null;
+    rules_url: string | null; waiver_url: string | null;
+  };
+  category: string | null;
+  player_name: string;
+  partner_name: string | null;
+};
+
+export async function callWaiverConsent<T = Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/waiver-consent`;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify(body),
+    });
+    const json = (await resp.json().catch(() => ({}))) as { success?: boolean; error?: string } & T;
+    if (!resp.ok || !json.success) return { ok: false, error: json.error ?? `HTTP ${resp.status}` };
+    return { ok: true, data: json };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Waiver acceptances for a tournament (admin-only via RLS). Newest first.
+export async function listWaiverConsents(tournament_id: string): Promise<WaiverConsent[]> {
+  const { data, error } = await supabase
+    .from("waiver_consents")
+    .select("id, registration_id, tournament_id, role, participant_name, participant_email, participant_age, guardian_name, signature, waiver_version, accepted_at")
+    .eq("tournament_id", tournament_id)
+    .order("accepted_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as WaiverConsent[];
 }
 
 export async function approveRegistration(

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/react";
-import { listPendingRegistrations } from "../lib/db";
+import { listPendingRegistrations, listWaiverConsents } from "../lib/db";
 import { supabase } from "../lib/supabase";
-import type { PendingRegistration } from "../types";
+import type { PendingRegistration, WaiverConsent } from "../types";
 
 type State = {
   pending: PendingRegistration[];
+  consents: WaiverConsent[];
   loading: boolean;
   error: string | null;
 };
@@ -18,21 +19,26 @@ export function usePendingRegistrations(
   tournamentId: string | null | undefined,
   isAdmin: boolean,
 ): State & { refetch: () => Promise<void>; removeLocal: (id: string) => void } {
-  const [state, setState] = useState<State>({ pending: [], loading: false, error: null });
+  const [state, setState] = useState<State>({ pending: [], consents: [], loading: false, error: null });
   const debounceRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     if (!tournamentId || !isAdmin) {
-      setState({ pending: [], loading: false, error: null });
+      setState({ pending: [], consents: [], loading: false, error: null });
       return;
     }
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const rows = await listPendingRegistrations(tournamentId, "pending");
-      setState({ pending: rows, loading: false, error: null });
+      const [rows, consents] = await Promise.all([
+        listPendingRegistrations(tournamentId, "pending"),
+        // Consent records are shown alongside; a failure here shouldn't hide entries.
+        listWaiverConsents(tournamentId).catch(() => [] as WaiverConsent[]),
+      ]);
+      setState({ pending: rows, consents, loading: false, error: null });
     } catch (e) {
       setState({
         pending: [],
+        consents: [],
         loading: false,
         error: e instanceof Error ? e.message : String(e),
       });

@@ -15,6 +15,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { verifyStripeSignature } from "../_shared/stripe.ts";
+import { sendPartnerWaiverEmail } from "../_shared/waiver.ts";
 
 type StripeEvent = {
   id: string;
@@ -68,6 +69,8 @@ Deno.serve(async (req: Request) => {
           .eq("stripe_checkout_session_id", sessionId)
           .in("status", ["awaiting_payment", "payment_expired"]);
         if (error) throw new Error(error.message);
+        // Paid: now ask the doubles partner to accept the waiver.
+        if (regId) await sendPartnerWaiverEmail(supabase, regId, "https://badminton.adawar.org");
       }
 
       if (event.type === "checkout.session.expired") {
