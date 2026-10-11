@@ -182,6 +182,10 @@ export type PendingRegistration = {
   partner_consent_token: string | null;
   partner_waiver_email_status: string | null;   // null | 'sent' | 'failed: …'
   partner_waiver_emailed_at: string | null;
+  confirmation_email_status: string | null;     // null | 'sending' | 'sent' | 'failed: …'
+  confirmation_emailed_at: string | null;
+  approval_email_status: string | null;
+  approval_emailed_at: string | null;
 };
 
 export type FeeType = "standard" | "youth" | "student";

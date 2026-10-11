@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "../../components/Toast";
 import { approveRegistration, rejectRegistration } from "../../lib/db";
+import { sendApprovalEmail } from "../../lib/notifications";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, FeeType, PendingRegistration, WaiverConsent } from "../../types";
 import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
@@ -82,7 +83,12 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
     setBusy("approve");
     try {
       await approveRegistration(reg.id);
-      toast.success(`Approved — ${reg.player_name}${reg.partner_name ? " & " + reg.partner_name : ""} added`);
+      const email = await sendApprovalEmail(reg.id);
+      toast.success(`Approved — ${reg.player_name}${reg.partner_name ? " & " + reg.partner_name : ""} added` +
+        (email.sent ? " · “You're in” email sent" : ""));
+      if (!email.sent && email.status !== "already sent") {
+        toast.error(`The “You're in” email didn't send (${email.status}). Let them know directly.`);
+      }
       if (!reduce) {
         confetti({ particleCount: 60, spread: 60, startVelocity: 30, origin: { y: 0.4 } });
       }
@@ -238,6 +244,13 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
             {reg.player_fee_type && FEE_LABEL[reg.player_fee_type] && <Badge tone="info">{FEE_LABEL[reg.player_fee_type]}</Badge>}
             {reg.partner_fee_type && FEE_LABEL[reg.partner_fee_type] && <Badge tone="info">Partner: {FEE_LABEL[reg.partner_fee_type]}</Badge>}
           </div>
+          {reg.confirmation_email_status && reg.confirmation_email_status !== "sending" && (
+            <div>
+              {reg.confirmation_email_status === "sent"
+                ? "Confirmation email sent"
+                : `Confirmation email failed: ${reg.confirmation_email_status.replace(/^failed:\s*/, "")}`}
+            </div>
+          )}
           {waiverRequired && (
             <div>
               <Badge tone={playerConsent ? "good" : "neutral"}>{playerConsent ? "Waiver ✓" : "No waiver on file"}</Badge>

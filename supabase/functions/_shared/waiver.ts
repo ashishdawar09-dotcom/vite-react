@@ -1,9 +1,10 @@
-// Waiver consent: validation, the stored record, and the partner email.
+// Waiver consent: validation and the stored record.
 //
 // A tournament with waiver_text requires every participant to accept the
 // regulations, the waiver and the codes of conduct before playing. The
 // registering player accepts on the form; a doubles partner accepts through
-// a one-time link emailed to them. Under-19s (BC's age of majority) need a
+// a one-time link in their copy of the confirmation email
+// (registration_emails.ts). Under-19s (BC's age of majority) need a
 // parent or guardian to accept, and the typed signature must match the name
 // of whoever is accepting.
 
@@ -111,73 +112,4 @@ export async function recordConsent(
     user_agent: (req.headers.get("user-agent") ?? "").slice(0, 300) || null,
   });
   return error ? error.message : null;
-}
-
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
-
-// Emails the doubles partner their consent link, unless they've already
-// accepted for this registration or there's nothing to send. Never throws:
-// the admin card shows the link to share by hand if the email doesn't arrive.
-export async function sendPartnerWaiverEmail(
-  supabase: SupabaseClient,
-  registrationId: string,
-  appOrigin: string,
-): Promise<void> {
-  try {
-    const key = Deno.env.get("RESEND_API_KEY");
-    if (!key) {
-      await supabase.from("pending_registrations")
-        .update({ partner_waiver_email_status: "failed: email not configured" }).eq("id", registrationId);
-      return;
-    }
-    const { data: reg } = await supabase
-      .from("pending_registrations")
-      .select("id, player_name, partner_name, partner_email, partner_consent_token, tournament_id, category_id")
-      .eq("id", registrationId)
-      .maybeSingle();
-    if (!reg?.partner_email || !reg.partner_consent_token) return;
-    const { count } = await supabase
-      .from("waiver_consents")
-      .select("id", { count: "exact", head: true })
-      .eq("registration_id", reg.id)
-      .eq("role", "partner");
-    if ((count ?? 0) > 0) return;
-    const [{ data: t }, { data: c }] = await Promise.all([
-      supabase.from("tournaments").select("name, event_date").eq("id", reg.tournament_id).maybeSingle(),
-      supabase.from("categories").select("name").eq("id", reg.category_id).maybeSingle(),
-    ]);
-    const tournament = t?.name ?? "the tournament";
-    const link = `${appOrigin}/waiver/${reg.partner_consent_token}`;
-    const partner = reg.partner_name?.trim() || "there";
-    const text =
-      `Hi ${partner},\n\n` +
-      `${reg.player_name} has entered you as their partner in ${c?.name ?? "doubles"} at ${tournament}.\n\n` +
-      `Before you can play, please read the competition regulations and accept the waiver here:\n${link}\n\n` +
-      `It takes about two minutes. If you weren't expecting this, you can ignore this email.\n`;
-    const html =
-      `<p>Hi ${esc(partner)},</p>` +
-      `<p>${esc(reg.player_name)} has entered you as their partner in <strong>${esc(c?.name ?? "doubles")}</strong> at <strong>${esc(tournament)}</strong>.</p>` +
-      `<p>Before you can play, please read the competition regulations and accept the waiver:</p>` +
-      `<p><a href="${esc(link)}">Read and accept the waiver</a></p>` +
-      `<p>It takes about two minutes. If you weren't expecting this, you can ignore this email.</p>`;
-    const from = Deno.env.get("REGISTRATION_FROM_EMAIL") ?? `${tournament.replace(/[<>"]/g, "")} <no-reply@adawar.org>`;
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [reg.partner_email], subject: `Please accept the waiver for ${tournament}`, text, html }),
-    });
-    const detail = res.ok ? "" : (await res.text()).slice(0, 160);
-    if (!res.ok) console.error("partner waiver email failed:", res.status, detail);
-    await supabase.from("pending_registrations").update({
-      partner_waiver_email_status: res.ok ? "sent" : `failed: ${res.status} ${detail}`.slice(0, 200),
-      partner_waiver_emailed_at: new Date().toISOString(),
-    }).eq("id", reg.id);
-  } catch (e) {
-    console.error("partner waiver email failed:", e instanceof Error ? e.message : String(e));
-    await supabase.from("pending_registrations").update({
-      partner_waiver_email_status: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200),
-      partner_waiver_emailed_at: new Date().toISOString(),
-    }).eq("id", registrationId);
-  }
 }

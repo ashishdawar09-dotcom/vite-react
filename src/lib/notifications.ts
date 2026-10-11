@@ -25,6 +25,31 @@ export async function notifyCourtAllocated(matchId: string): Promise<void> {
   }
 }
 
+/**
+ * Sends the "You're in!" email (player + partner) for an approved
+ * registration via the `registration-email` edge function. Never throws:
+ * returns whether it was sent so the admin can be told, and the approval
+ * itself is never undone by an email problem.
+ */
+export async function sendApprovalEmail(registrationId: string): Promise<{ sent: boolean; status: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke("registration-email", {
+      body: { registration_id: registrationId },
+    });
+    if (error) throw error;
+    return data as { sent: boolean; status: string };
+  } catch (e) {
+    Sentry.addBreadcrumb({
+      category: "notification",
+      level: "warning",
+      message: "registration-email failed",
+      data: { registrationId, error: String(e) },
+    });
+    console.warn("registration-email failed for", registrationId, e);
+    return { sent: false, status: String(e) };
+  }
+}
+
 export type Recipient = { player_id: string; email: string };
 
 /**

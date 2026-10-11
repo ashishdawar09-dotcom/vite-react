@@ -14,7 +14,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { allow, allowClient, appOrigin, isUuid, json, serveWithCors } from "../_shared/http.ts";
 import { cardCents, etransferCents, playerShare } from "../_shared/pricing.ts";
 import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
-import { type ConsentInput, parseAge, recordConsent, sendPartnerWaiverEmail, validateConsent } from "../_shared/waiver.ts";
+import { sendRegistrationReceived } from "../_shared/registration_emails.ts";
+import { type ConsentInput, parseAge, recordConsent, validateConsent } from "../_shared/waiver.ts";
 
 
 type Payload = {
@@ -334,8 +335,9 @@ async function handle(req: Request): Promise<Response> {
     }
 
     if (!payByCard) {
-      // Card entries email the partner once payment completes (stripe-webhook).
-      if (waiverRequired && partnerProvided) await sendPartnerWaiverEmail(supabase, ins.id, appOrigin(req));
+      // Confirmation to the player and partner (with the partner's waiver
+      // link). Card entries get theirs once payment completes (stripe-webhook).
+      await sendRegistrationReceived(supabase, ins.id, appOrigin(req));
       return json({ success: true, registrationId: ins.id }, 200);
     }
 
