@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
   addDays,
+  adminNewEntry,
   buildIcs,
   calendarUrl,
   clockTime,
@@ -96,4 +97,29 @@ Deno.test("approval email and calendar invite use Vancouver time", () => {
   assertStringIncludes(ics, "DTSTART;TZID=America/Vancouver:20261121T093000");
   assertStringIncludes(ics, "LOCATION:UFV Athletic Centre – North Gym\\, 1395 McKenzie Road\\, Abbotsford\\, BC");
   assert(ics.includes("\r\n"));
+});
+
+Deno.test("directors' alert: what to check, contact details, escaped", () => {
+  const base = data();
+  const e = adminNewEntry({
+    tournament: base.tournament,
+    category: base.category,
+    reg: {
+      ...base.reg,
+      player_email: "sam@example.com", player_phone: "604 555 0100", player_age: 16, player_fee_type: "youth",
+      partner_email: "ana@example.com", partner_phone: null, partner_age: 34, partner_fee_type: "standard",
+      comments: "<script>x</script>", submitted_at: "2026-10-11T18:31:14Z",
+    },
+    waiverRequired: true, playerWaiver: true, partnerWaiver: false,
+    adminUrl: "https://badminton.adawar.org",
+  });
+  assertEquals(e.subject, "New entry: Sam Lee & Ana Diaz · Mixed Doubles · e-Transfer to match");
+  assertStringIncludes(e.html, "e-Transfer of <strong");
+  assertStringIncludes(e.html, "SL-123");
+  assertStringIncludes(e.html, "mailto:sam@example.com");
+  assertStringIncludes(e.html, "age 16 · youth rate");
+  assertStringIncludes(e.html, "Partner: Pending");
+  assertStringIncludes(e.html, "Sun, Oct 11, 11:31 a.m.");
+  assert(!e.html.includes("<script>"));
+  assertStringIncludes(e.text, "Player: Sam Lee, sam@example.com, 604 555 0100, age 16 · youth rate");
 });

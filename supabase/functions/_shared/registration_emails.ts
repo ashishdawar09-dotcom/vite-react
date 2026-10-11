@@ -5,7 +5,7 @@
 // registration, a payment webhook or an approval.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-import { buildIcs, type EmailData, registrationApproved, registrationReceived } from "./emails.ts";
+import { adminNewEntry, buildIcs, type EmailData, registrationApproved, registrationReceived } from "./emails.ts";
 import { sendEmail } from "./mailer.ts";
 
 const ASSET_BASE = Deno.env.get("EMAIL_ASSET_BASE") ?? "https://shuttlestorm.adawar.org/email";
@@ -13,11 +13,11 @@ const PRIVACY_URL = Deno.env.get("EMAIL_PRIVACY_URL") ?? "https://shuttlestorm.a
 
 // Single literals so supabase-js can infer the row types.
 const REG_COLUMNS =
-  "id, tournament_id, category_id, status, player_name, player_email, partner_name, partner_email, payment_method, payment_reference, amount_due_cents, payment_paid_full_for_partner, partner_consent_token";
+  "id, tournament_id, category_id, status, submitted_at, player_name, player_email, player_phone, player_age, player_fee_type, partner_name, partner_email, partner_phone, partner_age, partner_fee_type, payment_method, payment_reference, amount_due_cents, payment_paid_full_for_partner, partner_consent_token, comments";
 const T_COLUMNS =
-  "id, name, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, waiver_text, reply_to_email";
+  "id, name, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, waiver_text, reply_to_email, admin_notify_emails";
 
-type Kind = "confirmation" | "approval";
+type Kind = "confirmation" | "approval" | "admin";
 
 const short = (s: string) => s.slice(0, 200);
 
@@ -58,14 +58,20 @@ async function load(supabase: SupabaseClient, regId: string) {
 
 const outcome = (who: string, err: string | null) => (err ? `${who} failed: ${err}` : null);
 
-// "We've got your registration". For card entries call only once paid.
-// Replaces the separate partner waiver email: the partner's copy carries
-// their waiver link, and partner_waiver_email_status records that send.
+// "We've got your registration" to the player and partner, then the
+// directors' alert. For card entries call only once paid.
 export async function sendRegistrationReceived(
   supabase: SupabaseClient,
   regId: string,
   appOrigin: string,
 ): Promise<void> {
+  await confirmToPlayers(supabase, regId, appOrigin);
+  await notifyDirectors(supabase, regId, appOrigin);
+}
+
+// Replaces the separate partner waiver email: the partner's copy carries
+// their waiver link, and partner_waiver_email_status records that send.
+async function confirmToPlayers(supabase: SupabaseClient, regId: string, appOrigin: string): Promise<void> {
   try {
     if (!(await claim(supabase, regId, "confirmation"))) return;
     const loaded = await load(supabase, regId);
@@ -110,6 +116,36 @@ export async function sendRegistrationReceived(
     const msg = e instanceof Error ? e.message : String(e);
     console.error("registration email failed:", msg);
     await finish(supabase, regId, "confirmation", `failed: ${msg}`);
+  }
+}
+
+// Directors' alert for a new entry, to tournaments.admin_notify_emails.
+// Replies go to the player. Claimed separately from the player's email.
+async function notifyDirectors(supabase: SupabaseClient, regId: string, appOrigin: string): Promise<void> {
+  try {
+    const loaded = await load(supabase, regId);
+    const to = (loaded?.t.admin_notify_emails ?? []).filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (!loaded || !to.length) return;
+    if (!(await claim(supabase, regId, "admin"))) return;
+    const { reg, t, c } = loaded;
+    const { data: consents } = await supabase.from("waiver_consents").select("role").eq("registration_id", reg.id);
+    const roles = new Set((consents ?? []).map((x: { role: string }) => x.role));
+    const mail = adminNewEntry({
+      tournament: t,
+      category: c,
+      reg,
+      waiverRequired: !!t.waiver_text,
+      playerWaiver: roles.has("player"),
+      partnerWaiver: roles.has("partner"),
+      adminUrl: Deno.env.get("ADMIN_APP_URL") ?? appOrigin,
+    });
+    const err = await sendEmail({ to, fromName: t.name, replyTo: reg.player_email, ...mail });
+    if (err) console.error("directors' email failed:", err);
+    await finish(supabase, regId, "admin", err ? `failed: ${err}` : "sent");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("directors' email failed:", msg);
+    await finish(supabase, regId, "admin", `failed: ${msg}`);
   }
 }
 

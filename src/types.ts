@@ -186,6 +186,8 @@ export type PendingRegistration = {
   confirmation_emailed_at: string | null;
   approval_email_status: string | null;
   approval_emailed_at: string | null;
+  admin_email_status: string | null;            // directors' new-entry alert
+  admin_emailed_at: string | null;
 };
 
 export type FeeType = "standard" | "youth" | "student";

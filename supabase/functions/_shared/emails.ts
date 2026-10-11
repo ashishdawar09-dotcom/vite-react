@@ -294,10 +294,10 @@ function players(d: EmailData): string {
   return names.join(" &amp; ");
 }
 
-function paymentRow(d: EmailData): [string, string] {
-  const amt = money(d.reg.amount_due_cents);
-  if (d.reg.payment_method === "card") return ["Payment", `${amt ? `${amt} · ` : ""}Paid by card`];
-  const ref = d.reg.payment_reference?.trim();
+function paymentRow(reg: EmailRegistration): [string, string] {
+  const amt = money(reg.amount_due_cents);
+  if (reg.payment_method === "card") return ["Payment", `${amt ? `${amt} · ` : ""}Paid by card`];
+  const ref = reg.payment_reference?.trim();
   return ["Payment", `${amt ? `${amt} · ` : ""}e-Transfer${ref ? ` (ref ${esc(ref)})` : ""}`];
 }
 
@@ -405,7 +405,7 @@ export function registrationReceived(d: EmailData): RenderedEmail {
   const details: [string, string][] = [
     ["Event", esc(d.category.name)],
     [d.category.team_size === 2 ? "Players" : "Player", players(d)],
-    paymentRow(d),
+    paymentRow(d.reg),
     ["Status", isPartner && waiverLink ? "Waiting for your waiver" : paidCard ? "Paid · awaiting confirmation" : "Awaiting confirmation"],
   ];
 
@@ -456,7 +456,7 @@ export function registrationApproved(d: EmailData): RenderedEmail {
   const details: [string, string][] = [
     ["Event", esc(d.category.name)],
     [d.category.team_size === 2 ? "Players" : "Player", players(d)],
-    paymentRow(d),
+    paymentRow(d.reg),
     ["Status", `<span style="color:${C.volt};font-weight:700">Confirmed</span>`],
   ];
   const steps = [drawStep(1, d), arriveStep(2, d)];
@@ -483,6 +483,104 @@ export function registrationApproved(d: EmailData): RenderedEmail {
     ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
     calendarUrl(t) && `\nAdd to calendar: ${calendarUrl(t)}`,
     textFooter(d),
+  ]);
+  return { subject, html, text };
+}
+
+// ---------- directors' alert for a new entry ----------
+
+export type AdminEntryData = {
+  tournament: { name: string };
+  category: { name: string; team_size: number };
+  reg: EmailRegistration & {
+    player_email: string;
+    player_phone: string | null;
+    player_age: number | null;
+    player_fee_type: string | null;
+    partner_email: string | null;
+    partner_phone: string | null;
+    partner_age: number | null;
+    partner_fee_type: string | null;
+    comments: string | null;
+    submitted_at: string;
+  };
+  waiverRequired: boolean;
+  playerWaiver: boolean;
+  partnerWaiver: boolean;
+  adminUrl: string;
+};
+
+const FEE: Record<string, string> = { youth: "youth rate", student: "student rate (check ID)" };
+
+function person(name: string | null, email: string | null, phone: string | null, age: number | null, fee: string | null) {
+  const bits = [
+    name ? `<strong style="color:${C.bone}">${esc(name)}</strong>` : null,
+    email ? `<a href="mailto:${esc(email)}" style="color:${C.bone}">${esc(email)}</a>` : null,
+    phone ? esc(phone) : null,
+    [age !== null ? `age ${age}` : null, fee && FEE[fee] ? FEE[fee] : null].filter(Boolean).join(" · ") || null,
+  ].filter(Boolean);
+  return bits.join("<br>");
+}
+
+export function adminNewEntry(d: AdminEntryData): RenderedEmail {
+  const r = d.reg;
+  const card = r.payment_method === "card";
+  const amt = money(r.amount_due_cents);
+  const ref = r.payment_reference?.trim();
+  const subject = `New entry: ${r.player_name.trim()}${r.partner_name ? ` & ${r.partner_name.trim()}` : ""} · ${d.category.name}` +
+    (card ? " · paid" : " · e-Transfer to match");
+  const when = new Date(r.submitted_at).toLocaleString("en-CA", {
+    timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const todo = card
+    ? `Paid by card${amt ? ` (${amt})` : ""}. Review it and approve.`
+    : `Look for an e-Transfer of <strong style="color:${C.bone}">${esc(amt ?? "the entry fee")}</strong>` +
+      `${ref ? ` with reference <strong style="color:${C.bone}">${esc(ref)}</strong>` : ""}, then approve.`;
+  const waiver = (ok: boolean) => ok ? `<span style="color:${C.volt}">Accepted</span>` : "Pending";
+  const rows: [string, string][] = [
+    ["Event", esc(d.category.name)],
+    ["Player", person(r.player_name, r.player_email, r.player_phone, r.player_age, r.player_fee_type)],
+    ...(r.partner_name || r.partner_email
+      ? [["Partner", person(r.partner_name, r.partner_email, r.partner_phone, r.partner_age, r.partner_fee_type)] as [string, string]]
+      : d.category.team_size === 2 ? [["Partner", "None named (looking for a partner)"] as [string, string]] : []),
+    paymentRow(r),
+    ...(d.waiverRequired
+      ? [["Waiver", `Player: ${waiver(d.playerWaiver)}${r.partner_name || r.partner_email ? ` · Partner: ${waiver(d.partnerWaiver)}` : ""}`] as [string, string]]
+      : []),
+    ...(r.comments?.trim() ? [["Comments", esc(r.comments.trim()).replace(/\r?\n/g, "<br>")] as [string, string]] : []),
+    ["Submitted", esc(when)],
+  ];
+  const admin = safeUrl(d.adminUrl);
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>${esc(subject)}</title>
+<style>body{margin:0;padding:0;background:${C.ink}} @media (max-width:620px){ .px{padding-left:20px!important;padding-right:20px!important}
+  .k{width:76px!important;padding:12px 8px 12px 14px!important;letter-spacing:1px!important} .v{padding:12px 14px 12px 8px!important} }</style>
+</head>
+<body style="margin:0;padding:0;background:${C.ink}" bgcolor="${C.ink}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.ink}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.ink2}" style="width:100%;max-width:600px;background:${C.ink2};border-radius:18px">
+  <tr><td class="px" style="padding:32px 32px 8px">
+    ${kicker(`${d.tournament.name} · directors`)}
+    <h1 style="margin:0 0 14px;font-family:${SANS};font-size:30px;line-height:1.1;font-weight:800;color:${C.bone}">New entry: ${esc(firstName(r.player_name))}${r.partner_name ? ` &amp; ${esc(firstName(r.partner_name))}` : ""}</h1>
+    ${p(todo)}
+  </td></tr>
+  <tr><td class="px" style="padding:8px 32px 28px">${detailsCard(rows)}</td></tr>
+  ${admin ? `<tr><td class="px" style="padding:0 32px 32px">${button(admin, "Open the admin app")}</td></tr>` : ""}
+  <tr><td class="px" style="padding:20px 32px;border-top:1px solid ${C.line}">
+    ${p("Reply to this email to write to the player directly. The player has been sent their own confirmation.", `font-size:13px;color:${C.mute};margin:0`)}
+  </td></tr>
+</table></td></tr></table>
+</body></html>`;
+  const text = textBlock([
+    `New entry for ${d.tournament.name}`,
+    "",
+    strip(todo),
+    "",
+    ...rows.map(([k, v]) => `${k}: ${strip(v.replace(/<br>/g, ", "))}`),
+    "",
+    admin && `Admin app: ${admin}`,
+    "Reply to this email to write to the player directly.",
   ]);
   return { subject, html, text };
 }
