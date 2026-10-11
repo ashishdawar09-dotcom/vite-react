@@ -424,14 +424,6 @@ export default function App() {
     return teamById[last[0].winner_id] ?? null;
   })();
 
-  const resetAll = async () => {
-    if (!guard() || !currentCategoryId) return;
-    if (!confirm(`Wipe teams and matches for "${currentCategory?.name}" category?`)) return;
-    await db.deleteMatchesForCategory(currentCategoryId);
-    await db.deleteTeamsForCategory(currentCategoryId);
-    await db.setCategoryPhase(currentCategoryId, "none");
-  };
-
   // Open the court picker for a pending match (must have both teams)
   const startMatchHandler = (id: string) => {
     if (!guard()) return;
@@ -953,7 +945,6 @@ export default function App() {
             selectedFormatLabel={selectedFormatLabel}
             setSelectedFormatLabel={setSelectedFormatLabel}
             onStartGroupStage={(override) => { void startGroupStage(override); }}
-            resetAll={resetAll}
             btn={btn}
           />
           </Suspense>
