@@ -1,8 +1,9 @@
 // Google Analytics 4 for the public registration page only.
 //
 // Loads /consent.js (the same Consent Mode v2 loader the Shuttle Storm and
-// adawar.org sites use): ads storage always denied, analytics denied with a
-// banner for EEA/UK/Swiss visitors, granted elsewhere. Nothing loads while
+// adawar.org sites use) with ad measurement on: analytics and ad storage are
+// denied with a banner for EEA/UK/Swiss visitors and granted elsewhere;
+// personalised ads are always off. Nothing loads while
 // GA_MEASUREMENT_ID is empty. The ID isn't a secret; it ships in the page.
 //
 // The admin app, scoreboards and spectator pages are not tracked.
@@ -25,6 +26,7 @@ export function initAnalytics(): Promise<void> {
     s.src = "/consent.js";
     s.dataset.ga = GA_MEASUREMENT_ID;
     s.dataset.privacy = PRIVACY_URL;
+    s.dataset.ads = "on"; // we advertise registration with Google Ads
     s.onload = () => resolve();
     s.onerror = () => resolve(); // blocked by an extension: carry on untracked
     document.head.appendChild(s);
