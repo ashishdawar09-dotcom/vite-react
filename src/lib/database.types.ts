@@ -317,12 +317,16 @@ export type Database = {
       pending_registrations: {
         Row: {
           amount_due_cents: number | null
+          approval_email_status: string | null
+          approval_emailed_at: string | null
           approved_partner_id: string | null
           approved_player_id: string | null
           approved_team_id: string | null
           card_payment_status: string | null
           category_id: string
           comments: string | null
+          confirmation_email_status: string | null
+          confirmation_emailed_at: string | null
           group_choice: string | null
           id: string
           paid_at: string | null
@@ -356,12 +360,16 @@ export type Database = {
         }
         Insert: {
           amount_due_cents?: number | null
+          approval_email_status?: string | null
+          approval_emailed_at?: string | null
           approved_partner_id?: string | null
           approved_player_id?: string | null
           approved_team_id?: string | null
           card_payment_status?: string | null
           category_id: string
           comments?: string | null
+          confirmation_email_status?: string | null
+          confirmation_emailed_at?: string | null
           group_choice?: string | null
           id?: string
           paid_at?: string | null
@@ -395,12 +403,16 @@ export type Database = {
         }
         Update: {
           amount_due_cents?: number | null
+          approval_email_status?: string | null
+          approval_emailed_at?: string | null
           approved_partner_id?: string | null
           approved_player_id?: string | null
           approved_team_id?: string | null
           card_payment_status?: string | null
           category_id?: string
           comments?: string | null
+          confirmation_email_status?: string | null
+          confirmation_emailed_at?: string | null
           group_choice?: string | null
           id?: string
           paid_at?: string | null
@@ -742,6 +754,7 @@ export type Database = {
           phase: string
           registration_deadline: string | null
           registration_open: boolean
+          reply_to_email: string | null
           rounds_per_pair: number
           rules_url: string | null
           slug: string | null
@@ -770,6 +783,7 @@ export type Database = {
           phase?: string
           registration_deadline?: string | null
           registration_open?: boolean
+          reply_to_email?: string | null
           rounds_per_pair?: number
           rules_url?: string | null
           slug?: string | null
@@ -798,6 +812,7 @@ export type Database = {
           phase?: string
           registration_deadline?: string | null
           registration_open?: boolean
+          reply_to_email?: string | null
           rounds_per_pair?: number
           rules_url?: string | null
           slug?: string | null
