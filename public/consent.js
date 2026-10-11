@@ -1,10 +1,14 @@
 /*
  * Google Analytics 4 with Consent Mode v2.
  *
- * Usage: <script src="/consent.js" data-ga="G-XXXXXXXXXX" data-privacy="/privacy" defer></script>
+ * Usage: <script src="/consent.js" data-ga="G-XXXXXXXXXX" data-privacy="/privacy" [data-ads="on"] defer></script>
  * With data-ga empty, nothing loads and no banner shows.
  *
- * - Ads storage is always denied (no advertising features are used).
+ * - Without data-ads="on", advertising storage is always denied.
+ * - With data-ads="on" (sites we advertise with Google Ads), ad_storage and
+ *   ad_user_data follow the same choice as analytics, so ad clicks can be
+ *   tied to registrations. ad_personalization stays denied everywhere: no
+ *   remarketing or personalised ads.
  * - Visitors who appear to be in the EEA, UK or Switzerland start with
  *   analytics denied and see a banner. Detection is the browser time zone;
  *   Google's IP-based regional default below is the backstop, so an EU
@@ -17,6 +21,7 @@
   var script = document.currentScript;
   var GA_ID = script && script.getAttribute("data-ga");
   var PRIVACY = (script && script.getAttribute("data-privacy")) || "/privacy";
+  var ADS = !!script && script.getAttribute("data-ads") === "on";
   if (!GA_ID) return;
 
   var KEY = "analytics-consent"; // "granted" | "denied"
@@ -32,15 +37,19 @@
   window.gtag = gtag;
 
   var europe = inEurope();
-  var denied = { ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" };
-  gtag("consent", "default", Object.assign({ analytics_storage: "denied", region: REGIONS, wait_for_update: 500 }, denied));
-  gtag("consent", "default", Object.assign({ analytics_storage: europe ? "denied" : "granted" }, denied));
+  // One choice drives analytics and, where enabled, ad measurement.
+  function consentFor(v) {
+    var ads = ADS ? v : "denied";
+    return { analytics_storage: v, ad_storage: ads, ad_user_data: ads, ad_personalization: "denied" };
+  }
+  gtag("consent", "default", Object.assign(consentFor("denied"), { region: REGIONS, wait_for_update: 500 }));
+  gtag("consent", "default", consentFor(europe ? "denied" : "granted"));
 
   function read() { try { return localStorage.getItem(KEY); } catch { return null; } }
   function write(v) { try { localStorage.setItem(KEY, v); } catch { /* private mode */ } }
 
   var stored = read();
-  if (stored === "granted" || stored === "denied") gtag("consent", "update", { analytics_storage: stored });
+  if (stored === "granted" || stored === "denied") gtag("consent", "update", consentFor(stored));
 
   var s = document.createElement("script");
   s.async = true;
@@ -61,7 +70,7 @@
   function close() { if (banner) { banner.remove(); banner = null; } }
   function choose(v) {
     write(v);
-    gtag("consent", "update", { analytics_storage: v });
+    gtag("consent", "update", consentFor(v));
     close();
   }
 
@@ -86,10 +95,13 @@
     banner = document.createElement("div");
     banner.className = "consent";
     banner.setAttribute("role", "dialog");
-    banner.setAttribute("aria-label", "Analytics cookies");
+    banner.setAttribute("aria-label", ADS ? "Analytics and advertising cookies" : "Analytics cookies");
     banner.innerHTML =
-      '<p>We use Google Analytics cookies to count visits and see which pages are useful. ' +
-      'No advertising. The site works the same either way. <a href="' + PRIVACY + '">Privacy policy</a></p>' +
+      (ADS
+        ? '<p>We use Google Analytics and Google Ads cookies to count visits and see whether our ads lead to registrations. ' +
+          'No personalised ads. The site works the same either way. <a href="' + PRIVACY + '">Privacy policy</a></p>'
+        : '<p>We use Google Analytics cookies to count visits and see which pages are useful. ' +
+          'No advertising. The site works the same either way. <a href="' + PRIVACY + '">Privacy policy</a></p>') +
       '<div class="consent-actions"><button type="button" class="yes">Accept</button>' +
       '<button type="button" class="no">Decline</button></div>';
     banner.querySelector(".yes").addEventListener("click", function () { choose("granted"); });
