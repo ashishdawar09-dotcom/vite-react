@@ -123,3 +123,21 @@ Deno.test("directors' alert: what to check, contact details, escaped", () => {
   assert(!e.html.includes("<script>"));
   assertStringIncludes(e.text, "Player: Sam Lee, sam@example.com, 604 555 0100, age 16 · youth rate");
 });
+
+Deno.test("e-Transfer confirmation gives the player nothing to do and no deadline", () => {
+  const e = registrationReceived(data({ partnerWaiverPending: false }));
+  assertStringIncludes(e.text, "There's nothing else you need to do");
+  assert(!/make sure|48 hours|within \d/i.test(e.text), "no task or turnaround promise");
+});
+
+Deno.test("doubles entry without a partner is told about pairing", () => {
+  const solo = data({ reg: { ...data().reg, partner_name: null, amount_due_cents: 4000 } });
+  const e = registrationReceived(solo);
+  assertStringIncludes(e.html, "To be paired");
+  assertStringIncludes(e.html, "Partner pairings are posted by <strong");
+  assertStringIncludes(e.text, "Thursday, November 19");
+  assertStringIncludes(e.text, "Player: Sam Lee\n");
+  const a = registrationApproved(solo);
+  assertStringIncludes(a.text, "We'll pair you with another player if one is available; pairings are posted by Thursday, November 19.");
+  assert(!registrationReceived(data()).html.includes("To be paired"));
+});

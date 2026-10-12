@@ -289,6 +289,18 @@ function layout(o: {
 
 // ---------- shared copy ----------
 
+// Doubles entry without a partner: the directors pair them if they can.
+const needsPartner = (d: EmailData) => d.category.team_size === 2 && !d.reg.partner_name?.trim();
+
+function pairingDate(d: EmailData): string | null {
+  return d.tournament.event_date ? longDate(addDays(d.tournament.event_date, -2), { year: false }) : null;
+}
+
+function peopleRows(d: EmailData): [string, string][] {
+  if (!needsPartner(d)) return [[d.category.team_size === 2 ? "Players" : "Player", players(d)]];
+  return [["Player", players(d)], ["Partner", "To be paired. We'll match you with another player if one is available."]];
+}
+
 function players(d: EmailData): string {
   const names = [d.reg.player_name, d.reg.partner_name].filter((n): n is string => !!n?.trim()).map(esc);
   return names.join(" &amp; ");
@@ -309,7 +321,10 @@ function drawStep(n: number, d: EmailData): Step {
     gif: "step-draw.gif",
     alt: "Draw bracket filling in",
     title: "Watch for the draw",
-    html: `Draws and start times are published${by ? ` by <strong style="color:${C.bone}">${esc(by)}</strong>` : " before the event"}. ` +
+    html: (needsPartner(d) && pairingDate(d)
+      ? `Partner pairings are posted by <strong style="color:${C.bone}">${esc(pairingDate(d)!)}</strong>, and draws and start times` +
+        `${by ? ` by <strong style="color:${C.bone}">${esc(by)}</strong>` : " before the event"}. `
+      : `Draws and start times are published${by ? ` by <strong style="color:${C.bone}">${esc(by)}</strong>` : " before the event"}. `) +
       `You'll know your first match and court before you leave home.`,
   };
 }
@@ -395,8 +410,8 @@ export function registrationReceived(d: EmailData): RenderedEmail {
       html: isPartner
         ? `${esc(firstName(d.reg.player_name))} has submitted the entry for you both. You'll get a “You're in” email once a director confirms it.`
         : paidCard
-        ? "Your card payment is received and your entry is in the queue for review, usually within 48 hours."
-        : "We'll match your e-Transfer to this entry, usually within 48 hours. Make sure the reference above is in the transfer message.",
+        ? "Your payment is received. There's nothing else you need to do: we'll email you as soon as your place is confirmed."
+        : "Your e-Transfer reference is on file. There's nothing else you need to do: we'll email you as soon as your place is confirmed.",
     };
   if (!isPartner && d.partnerWaiverPending) {
     step1.html += " We've also emailed your partner a link to accept the waiver; your entry is confirmed once they do.";
@@ -404,7 +419,7 @@ export function registrationReceived(d: EmailData): RenderedEmail {
 
   const details: [string, string][] = [
     ["Event", esc(d.category.name)],
-    [d.category.team_size === 2 ? "Players" : "Player", players(d)],
+    ...peopleRows(d),
     paymentRow(d.reg),
     ["Status", isPartner && waiverLink ? "Waiting for your waiver" : paidCard ? "Paid · awaiting confirmation" : "Awaiting confirmation"],
   ];
@@ -452,10 +467,13 @@ export function registrationApproved(d: EmailData): RenderedEmail {
   const when = longDate(t.event_date);
   const intro = `Your entry in <strong style="color:${C.bone}">${esc(d.category.name)}</strong> is confirmed` +
     `${d.category.team_size === 2 && d.reg.partner_name ? ` with ${esc(isPartner ? d.reg.player_name : d.reg.partner_name)}` : ""}. ` +
+    (needsPartner(d)
+      ? `We'll pair you with another player if one is available; pairings are posted by ${esc(pairingDate(d) ?? "the draw")}. `
+      : "") +
     `See you on court${when ? ` on ${esc(when)}` : ""}.`;
   const details: [string, string][] = [
     ["Event", esc(d.category.name)],
-    [d.category.team_size === 2 ? "Players" : "Player", players(d)],
+    ...peopleRows(d),
     paymentRow(d.reg),
     ["Status", `<span style="color:${C.volt};font-weight:700">Confirmed</span>`],
   ];

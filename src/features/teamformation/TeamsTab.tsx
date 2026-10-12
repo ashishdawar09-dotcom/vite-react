@@ -15,7 +15,8 @@ import type { Category, TeamWithPlayers, Tournament } from "../../types";
  *      cards (Recommended / More games / Compact / Super / Ultra Compact) leading to a
  *      "Start Group Stage" CTA.
  *
- * Plus a "Reset This Tournament" admin button at the bottom.
+ * There is deliberately no reset button: wiping teams and matches is done
+ * by hand on request, never from the app.
  */
 export function TeamsTab({
   tournament,
@@ -33,7 +34,6 @@ export function TeamsTab({
   selectedFormatLabel,
   setSelectedFormatLabel,
   onStartGroupStage,
-  resetAll,
   btn,
 }: {
   tournament: Tournament;
@@ -51,7 +51,6 @@ export function TeamsTab({
   selectedFormatLabel: FormatPlan["label"];
   setSelectedFormatLabel: (l: FormatPlan["label"]) => void;
   onStartGroupStage: (override?: { groupsCount: number; topNAdvance: number; roundsPerPair: number }) => void;
-  resetAll: () => Promise<void>;
   btn: (bg?: string, clr?: string) => React.CSSProperties;
 }) {
   const formatOptions = teamsView.length >= 2 ? recommendFormats(teamsView.length) : [];
@@ -194,12 +193,6 @@ export function TeamsTab({
             </div>
           )}
         </>
-      )}
-
-      {isAdmin && (
-        <div style={{ textAlign: "center", marginTop: 20 }}>
-          <button onClick={resetAll} style={{ ...btn("#E63946"), padding: "10px 22px", fontSize: 13, borderRadius: 10 }}>🔄 Reset This Tournament</button>
-        </div>
       )}
     </div>
   );

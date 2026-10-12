@@ -341,11 +341,6 @@ export async function deleteTeam(id: string) {
   if (error) throw error;
 }
 
-export async function deleteTeamsForCategory(category_id: string) {
-  const { error } = await supabase.from("teams").delete().eq("category_id", category_id);
-  if (error) throw error;
-}
-
 export async function deleteTeamsContainingPlayer(player_id: string, category_id?: string) {
   let q = supabase.from("teams").delete().or(`p1_id.eq.${player_id},p2_id.eq.${player_id}`);
   if (category_id) q = q.eq("category_id", category_id);
@@ -371,11 +366,6 @@ export async function insertMatches(rows: Partial<Match>[]) {
 
 export async function updateMatch(id: string, patch: Partial<Match>) {
   const { error } = await supabase.from("matches").update(patch).eq("id", id);
-  if (error) throw error;
-}
-
-export async function deleteMatchesForCategory(category_id: string) {
-  const { error } = await supabase.from("matches").delete().eq("category_id", category_id);
   if (error) throw error;
 }
 
