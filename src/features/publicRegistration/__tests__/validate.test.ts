@@ -161,3 +161,19 @@ describe("waiver and age", () => {
     expect(validate(f, null, { requireMembership: false, requireAge: true, requirePartnerAge: true }).partner_age).toBeDefined();
   });
 });
+
+describe("category age bands", () => {
+  const boys: Category = { ...singles, id: "b", name: "Boys' Singles", age_band: "kid" };
+  const youth: Category = { ...singles, id: "y", name: "Youth Boys' Singles", age_band: "teen" };
+
+  it("rejects a 15-year-old in a junior (8–12) event and suggests youth", () => {
+    const errs = validate({ ...happyPath(), category_id: "b", player_age: "15" }, boys);
+    expect(errs.category_id).toMatch(/ages 8–12.*youth category/);
+  });
+
+  it("accepts the right age, and lets younger players play up", () => {
+    expect(validate({ ...happyPath(), category_id: "b", player_age: "11" }, boys).category_id).toBeUndefined();
+    expect(validate({ ...happyPath(), category_id: "y", player_age: "15" }, youth).category_id).toBeUndefined();
+    expect(validate({ ...happyPath(), category_id: "s", player_age: "15" }, singles).category_id).toBeUndefined();
+  });
+});

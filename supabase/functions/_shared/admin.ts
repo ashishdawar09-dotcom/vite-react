@@ -16,7 +16,9 @@ export async function requireAdmin(req: Request): Promise<string | null> {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: { user } } = await userClient.auth.getUser();
+    // Pass the token: without a stored session, getUser() reports
+    // "Auth session missing" and every admin call was refused.
+    const { data: { user } } = await userClient.auth.getUser(authHeader.slice("Bearer ".length));
     if (!user?.email) return null;
     const email = user.email.toLowerCase();
     const admin = createClient(

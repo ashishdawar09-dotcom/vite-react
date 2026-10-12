@@ -1,4 +1,5 @@
 import type { Category } from "../../types";
+import { ageProblem } from "./ageEligibility";
 
 export type FormState = {
   player_email: string;
@@ -143,6 +144,8 @@ export function validate(
 
   const age = parseAge(form.player_age);
   if (requireAge && age === null) errs.player_age = "Enter the player's age (4–110)";
+  const tooOld = ageProblem(selectedCategory, age);
+  if (tooOld) errs.category_id = tooOld;
   if (requirePartnerAge && parseAge(form.partner_age) === null) errs.partner_age = "Enter your partner's age (4–110)";
 
   if (requireWaiver) {
