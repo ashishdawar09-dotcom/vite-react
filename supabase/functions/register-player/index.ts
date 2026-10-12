@@ -16,6 +16,7 @@ import { cardCents, etransferCents, playerShare } from "../_shared/pricing.ts";
 import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
 import { sendRegistrationReceived } from "../_shared/registration_emails.ts";
 import { type ConsentInput, parseAge, recordConsent, validateConsent } from "../_shared/waiver.ts";
+import { ageProblem } from "../_shared/ages.ts";
 
 
 type Payload = {
@@ -151,7 +152,7 @@ async function handle(req: Request): Promise<Response> {
     // ---- Validation: category belongs to tournament ----
     const { data: c, error: cErr } = await supabase
       .from("categories")
-      .select("id, name, tournament_id, team_size, allow_solo_signup, price, price_basis")
+      .select("id, name, tournament_id, team_size, allow_solo_signup, price, price_basis, age_band")
       .eq("id", body.category_id)
       .maybeSingle();
     if (cErr || !c || c.tournament_id !== body.tournament_id) {
@@ -190,6 +191,8 @@ async function handle(req: Request): Promise<Response> {
     if (ageNeeded && playerAge === null) {
       return json({ success: false, error: "Please enter the player's age." }, 400);
     }
+    const ageErr = ageProblem(c, playerAge);
+    if (ageErr) return json({ success: false, error: ageErr }, 400);
     let consent = null;
     if (waiverRequired) {
       const v = validateConsent({ ...body.consent, age: playerAge }, t, body.player_name!.trim());
