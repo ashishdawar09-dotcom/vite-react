@@ -899,7 +899,6 @@ function CategoryPicker({ categories, value, onChange, isMobile }: CategoryPicke
                 <span>{c.team_size === 1 ? "Singles" : "Doubles"}</span>
                 {c.age_band && <span>• {AGE_BAND_LABEL[c.age_band]}</span>}
                 {price && <span>• {price}</span>}
-                {c.allow_solo_signup && <span style={{ color: CYAN_DARK }}>• solo OK</span>}
               </div>
             </button>
           );

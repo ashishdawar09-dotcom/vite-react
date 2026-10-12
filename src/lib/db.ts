@@ -698,6 +698,20 @@ export async function listPendingRegistrations(
   return (data ?? []) as PendingRegistration[];
 }
 
+// Payments report (/payments): approved entries plus entries waiting for an
+// admin to approve. Card entries only reach "pending" once Stripe confirms the
+// payment, so neither status includes unpaid card checkouts.
+export async function listPaymentRegistrations(tournament_id: string): Promise<PendingRegistration[]> {
+  const { data, error } = await supabase
+    .from("pending_registrations")
+    .select("*")
+    .eq("tournament_id", tournament_id)
+    .in("status", ["approved", "pending"])
+    .order("submitted_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as PendingRegistration[];
+}
+
 // Partner waiver page (/waiver/:token) → waiver-consent Edge Function. Public:
 // the token from the emailed link is the only credential.
 export type PartnerWaiverInfo = {

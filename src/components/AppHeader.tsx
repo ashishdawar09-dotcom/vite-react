@@ -120,6 +120,24 @@ export function AppHeader({
                 display: "inline-flex",
                 alignItems: "center",
               }}>● {email}</span>
+              <a
+                href="/payments"
+                title="Live payments report"
+                style={{
+                  padding: "10px 14px",
+                  minHeight: 44,
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "transparent",
+                  color: "#cbd5e1",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  letterSpacing: 0.5,
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  boxSizing: "border-box",
+                }}>💳 PAYMENTS</a>
               <button
                 onClick={onOpenAdminManager}
                 title="Manage admins"
