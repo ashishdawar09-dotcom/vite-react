@@ -53,6 +53,11 @@ const ResultsPage = lazyWithReload(() =>
     default: m.ResultsPage,
   })),
 )
+const PaymentsPage = lazyWithReload(() =>
+  import('./features/payments/PaymentsPage').then((m) => ({
+    default: m.PaymentsPage,
+  })),
+)
 const PublicPlayerProfilePage = lazyWithReload(() =>
   import('./features/publicSpectator/PublicPlayerProfilePage').then((m) => ({
     default: m.PublicPlayerProfilePage,
@@ -125,6 +130,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/t/:slug/results" element={<ResultsPage />} />
               <Route path="/t/:slug" element={<PublicSpectatorPage />} />
               <Route path="/p/:id" element={<PublicPlayerProfilePage />} />
+              <Route path="/payments" element={<PaymentsPage />} />
               <Route path="*" element={<App />} />
             </Routes>
           </Suspense>
