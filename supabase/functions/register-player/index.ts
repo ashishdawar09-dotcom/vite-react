@@ -12,7 +12,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { allow, allowClient, appOrigin, isUuid, json, serveWithCors } from "../_shared/http.ts";
-import { cardCents, etransferCents, playerShare } from "../_shared/pricing.ts";
+import { cardCents, etransferCents, playerShare, STATEMENT_SUFFIX } from "../_shared/pricing.ts";
 import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
 import { sendRegistrationReceived } from "../_shared/registration_emails.ts";
 import { type ConsentInput, parseAge, recordConsent, validateConsent } from "../_shared/waiver.ts";
@@ -373,7 +373,7 @@ async function handle(req: Request): Promise<Response> {
         managed_payments: { enabled: false },
         // The success page tells players Stripe emails their receipt; this
         // makes sure it does, whatever the account's email settings.
-        payment_intent_data: { metadata: meta, receipt_email: playerEmail },
+        payment_intent_data: { metadata: meta, receipt_email: playerEmail, statement_descriptor_suffix: STATEMENT_SUFFIX },
         success_url: `${back}?payment=success&reg=${ins.id}`,
         cancel_url: `${back}?payment=cancelled`,
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
