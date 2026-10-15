@@ -6,6 +6,13 @@
 // an e-Transfer discount, not a card surcharge).
 export const CARD_MARKUP = 0.03;
 
+// What card payments show on bank statements. "ADAWAR" is the Stripe account's
+// shortened descriptor (Dashboard → Settings → Business details); the suffix is
+// sent with each payment. The account is shared with Little Computer School,
+// whose payments keep the full descriptor "LITTLE COMPUTER SCHOOL".
+export const STATEMENT_SUFFIX = "SHUTTLE STORM";
+export const STATEMENT_NAME = `ADAWAR* ${STATEMENT_SUFFIX}`;
+
 export type PricedCategory = {
   team_size: number;
   price: number | string | null;

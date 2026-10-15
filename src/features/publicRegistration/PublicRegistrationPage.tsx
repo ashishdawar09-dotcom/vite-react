@@ -325,7 +325,8 @@ export function PublicRegistrationPage() {
             {cardReturn === "paid"
               ? <>Thanks{form.player_name ? `, ${form.player_name}` : ""}! Your card payment went through and your
                   registration is with the organizers. They'll confirm your spot shortly, and Stripe has
-                  emailed your receipt.</>
+                  emailed your receipt from Adawar Technologies, which runs Shuttle Storm's registration.
+                  The charge shows on your statement as ADAWAR* SHUTTLE STORM.</>
               : <>Thanks, {form.player_name}! An admin will verify your e-transfer reference and
                   confirm your spot shortly. You'll be visible in the player roster once approved.</>}
           </p>
@@ -741,7 +742,7 @@ export function PublicRegistrationPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: spacing.sm }}>
                   {([
                     { v: "etransfer" as const, title: `Interac e-Transfer · ${fmtMoney(etransferDue)}`, sub: "The lower price. Send the e-Transfer, then enter its reference number." },
-                    { v: "card" as const, title: `Card, Apple Pay or Google Pay · ${fmtMoney(cardDue)}`, sub: "Pay now on Stripe's secure checkout page." },
+                    { v: "card" as const, title: `Card, Apple Pay or Google Pay · ${fmtMoney(cardDue)}`, sub: "Pay now on Stripe's secure checkout page. Shows on your statement as ADAWAR* SHUTTLE STORM." },
                   ]).map((o) => {
                     const sel = payMethod === o.v;
                     return (

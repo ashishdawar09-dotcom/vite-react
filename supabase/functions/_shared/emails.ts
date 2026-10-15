@@ -7,6 +7,8 @@
 // frame is its finished state, because Outlook shows only that frame. All
 // player details are live text (never baked into images) and escaped.
 
+import { STATEMENT_NAME } from "./pricing.ts";
+
 export type EmailTournament = {
   name: string;
   event_date: string | null;       // YYYY-MM-DD
@@ -308,7 +310,7 @@ function players(d: EmailData): string {
 
 function paymentRow(reg: EmailRegistration): [string, string] {
   const amt = money(reg.amount_due_cents);
-  if (reg.payment_method === "card") return ["Payment", `${amt ? `${amt} · ` : ""}Paid by card`];
+  if (reg.payment_method === "card") return ["Payment", `${amt ? `${amt} · ` : ""}Paid by card (shows on your statement as ${STATEMENT_NAME})`];
   const ref = reg.payment_reference?.trim();
   return ["Payment", `${amt ? `${amt} · ` : ""}e-Transfer${ref ? ` (ref ${esc(ref)})` : ""}`];
 }
