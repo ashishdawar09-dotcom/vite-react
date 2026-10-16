@@ -11,7 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
-.claude/
+.claude/*
+# Shared Claude Code project settings (plugins) are committed; local overrides are not
+!.claude/settings.json
 
 # Editor directories and files
 .vscode/*
