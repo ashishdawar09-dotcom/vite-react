@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://shuttlestorm.adawar.org/sitemap.xml
