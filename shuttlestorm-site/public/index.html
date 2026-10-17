@@ -22,6 +22,7 @@
 <meta name="twitter:image" content="https://shuttlestorm.adawar.org/og.png">
 <meta name="twitter:image:alt" content="Shuttle Storm ’26 poster: a badminton court under stadium lights, UFV North Gym, Abbotsford, Saturday November 21">
 <script src="/consent.js" data-ga="G-FT7CJBVQ4Z" data-privacy="/privacy" data-ads="on" defer></script>
+<script src="/menu.js" defer></script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -77,7 +78,12 @@ html.lenis,html.lenis body{height:auto}
 @media (max-width:1140px){.nav-links{gap:clamp(14px,2vw,32px)}}
 .nav-links a{font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;transition:opacity .6s var(--ease)}
 .nav-links a:hover{opacity:1}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.nav-burger{display:none;pointer-events:auto;width:44px;height:44px;border-radius:50%;border:1px solid currentColor;background:none;color:inherit;padding:0;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.nav-burger span{display:block;width:16px;height:1.5px;background:currentColor;border-radius:1px}
+@media (max-width:860px){.nav-burger{display:inline-flex}}
 .nav-cta{font-size:13px;letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;border-radius:999px;padding:12px 20px;min-height:44px;display:inline-flex;align-items:center}
+@media (max-width:420px){.nav .wrap{gap:12px}.nav .brand{gap:8px}.nav .brand svg{width:28px;height:28px}.nav .brand b{font-size:11px;letter-spacing:.08em}.nav-cta{font-size:12px;letter-spacing:.08em;padding:10px 13px}.nav-actions{gap:8px}.nav-burger{width:42px;height:42px}}
 
 /* Letterbox intro */
 .bar{position:fixed;left:0;right:0;height:50vh;background:var(--ink);z-index:60;pointer-events:none;display:none}
@@ -525,7 +531,10 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
       <a href="/faq">FAQ</a>
       <a href="/rules">Rules</a>
     </nav>
-    <a class="nav-cta" data-cursor="Go" data-track="begin_registration" href="https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb" target="_blank" rel="noopener">Register</a>
+    <div class="nav-actions">
+      <a class="nav-cta" data-cursor="Go" data-track="begin_registration" href="https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb" target="_blank" rel="noopener">Register</a>
+      <button type="button" class="nav-burger" data-menu-toggle data-menu-max="(max-width:860px)" aria-label="Open menu"><span></span><span></span></button>
+    </div>
   </div>
 </header>
 
@@ -1191,6 +1200,7 @@ document.addEventListener('DOMContentLoaded', function(){
   let lenis = null;
   if (window.Lenis){
     lenis = new Lenis({ lerp: 0.075, wheelMultiplier: 0.9, smoothWheel: true });
+    window.ssLenis = lenis;
     lenis.on('scroll', ScrollTrigger.update);
     gsap.ticker.add(t => lenis.raf(t * 1000));
     gsap.ticker.lagSmoothing(0);
