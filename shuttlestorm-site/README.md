@@ -7,6 +7,9 @@ step. Registration itself lives in the main app (badminton.adawar.org).
 
 - Pages: `public/*.html`. Subpages share `public/page.css` and one header nav
   and footer, so a nav or footer change goes in every page.
+- Phone/tablet menu: `public/menu.js` builds the full-screen menu from its own
+  link list, opened by the `data-menu-toggle` button in each header. Add new
+  pages to that list too.
 - Security headers and CSP: `public/_headers`. `connect-src` must list bare
   `https://analytics.google.com` or GA4 hits are blocked.
 - Sitemap: `public/sitemap.xml`. Add new pages there.
@@ -41,4 +44,5 @@ npx -y wrangler@4 dev --port 8788
 ## Provenance
 
 Built outside git in `~/Developer/shuttlestorm-site` and copied here on
-2026-10-17, matching Cloudflare version `3552e5b7`.
+2026-10-17, matching Cloudflare version `3552e5b7`. Last synced with
+Cloudflare version `d65ebb4b` (phone/tablet menu).
