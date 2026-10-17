@@ -1,0 +1,17 @@
+// Shuttle Storm marketing page → https://shuttlestorm.adawar.org
+// Static assets only (no Worker code). Deploy: npx wrangler deploy
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "shuttlestorm-site",
+  "account_id": "bb2595a278569d07e28c08a4e52fd865",
+  "compatibility_date": "2026-10-03",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./public",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "shuttlestorm.adawar.org", "custom_domain": true }
+  ]
+}
