@@ -47,27 +47,30 @@ const heroFocus = { x: 540, y: 1010 };
 // Push in on "Saturday, November 21", then ease back to the full ages sentence.
 const date = m.homeHero.date[0];
 const dateFocus = { x: atX(date.x + date.w / 2), y: at(heroY, HERO.top, date.y + date.h / 2) };
-const paraFocus = { x: atX(199), y: at(heroY, HERO.top, 737) };
+const paraFocus = { x: atX(205), y: at(heroY, HERO.top, 737) };
 
 // The "$30–40" numeral wraps onto two lines; each line gets its own mark at
 // its measured glyph run. The others are single-line.
 const NUM_MARKS = m.homeNumbers.numeralText.map((n, i) =>
   i === 3
     ? [
-        { x: n.x + 2, y: 399.5, w: 135 },
+        { x: n.x + 2, y: 401.5, w: 135 },
         { x: n.x + 2, y: 449, w: 68 },
       ]
     : [{ x: n.x, y: n.y + n.h - 4, w: n.w }],
 );
 
 // End card: the volt rule leaves the numbers card and runs down as the margin
-// rule of the deadline and address, over the site film's lockup.
+// rule of the deadline and address, over the site film's lockup. The final
+// frame holds the whole numbers card above it, so the stack reads as one page.
 const RULE_X = atX(25);
-const endTop = numbersBottom + 150;
-const urlTop = endTop + 236;
+const endTop = numbersBottom + 110;
+const urlTop = endTop + 200;
 const ruleEnd = urlTop + 56;
-const lockupTop = ruleEnd + 150;
-const endCenter = (numbersBottom - 200 + lockupTop + 330) / 2;
+const lockupTop = ruleEnd + 120;
+const endBottom = lockupTop + 275;
+// Nudged down so the statement card above stays just out of frame.
+const endCenter = (numbersY + endBottom) / 2 + 32;
 
 export const ShuttleStormPromo: React.FC = () => {
   const frame = useCurrentFrame();
@@ -77,13 +80,14 @@ export const ShuttleStormPromo: React.FC = () => {
     { t: 8, ...heroFocus, z: OPEN_Z + 0.01 },
     { t: 26, ...dateFocus, z: 1.5 },
     { t: 40, ...dateFocus, z: 1.5 },
-    { t: 52, ...paraFocus, z: 1.15 },
-    { t: 66, ...paraFocus, z: 1.15 },
+    { t: 52, ...paraFocus, z: 1.1 },
+    { t: 66, ...paraFocus, z: 1.1 },
     { t: 86, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
     { t: 102, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
     { t: 120, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
-    { t: 144, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
-    { t: 166, x: 540, y: endCenter, z: 1 },
+    { t: 138, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
+    // The camera rides down with the rule's head.
+    { t: 164, x: 540, y: endCenter, z: 1 },
     { t: PROMO.duration, x: 540, y: endCenter, z: 1 },
   ]);
 
@@ -94,7 +98,7 @@ export const ShuttleStormPromo: React.FC = () => {
   const rule = ramp(frame, 136, 162);
   const endLines = [0, 1].map((i) => ramp(frame, 146 + i * 6, 162 + i * 6));
   const url = ramp(frame, 166, 176);
-  const lockup = ramp(frame, 170, 186);
+  const lockup = ramp(frame, 164, 182);
 
   return (
     <AbsoluteFill style={{ backgroundColor: WORLD, overflow: "hidden" }}>
@@ -148,7 +152,7 @@ export const ShuttleStormPromo: React.FC = () => {
             width: 1080,
             display: "flex",
             justifyContent: "center",
-            transform: `translateY(${interpolate(lockup, [0, 1], [700, 0], { ...clamp, easing: ease })}px)`,
+            transform: `translateY(${interpolate(lockup, [0, 1], [360, 0], { ...clamp, easing: ease })}px)`,
           }}
         >
           <Lockup size={104} />

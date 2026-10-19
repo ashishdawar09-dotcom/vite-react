@@ -29,7 +29,8 @@ export const PLAYERS = { width: 1080, height: 1920, duration: 300 };
 
 const S = 2.4;
 const X = (1080 - CSS_W * S) / 2;
-const ART = { top: 300, height: 300 };
+// The shuttle art, cropped inside the page's darker side edges.
+const ART = { top: 250, height: 380, left: 10, width: 410 };
 const FEATHERS = { top: 160, height: 170 };
 
 // The register card sits with ~67 px gutters so its step markers stay in frame.
@@ -45,14 +46,14 @@ const headlineY = artY + ART.height * S + 60;
 const factY = headlineY + 290;
 const prizesY = factY + FEATHERS.height * S + 60;
 const prizesBottom = prizesY + 270;
-const dayY = prizesBottom + 260;
+const dayY = prizesBottom + 400;
 const dayH = m.registerDay.h * SD;
 const dayBottom = dayY + dayH;
 
 const stepTop = (i: number) => dayY + (steps[i].y + 2) * SD;
 const stepBottom = (i: number) => dayY + (steps[i].y + steps[i].h - 6) * SD;
 // The card nearly fills the frame; the camera drifts a little with the active step.
-const stepCam = (i: number) => dayY + dayH / 2 + (i - 2) * 70;
+const stepCam = (i: number) => dayY + dayH / 2 + (i - 2) * 60;
 
 // End card: a left-ruled fact stack continuing the thread, then the lockup.
 const endTop = dayBottom + 150;
@@ -61,7 +62,8 @@ const urlTop = deadlineTop + 86;
 const barEnd = urlTop + 50;
 const lockupTop = barEnd + 190;
 // Framed from the step-5 card's bottom to the lockup's date line.
-const endCenter = (dayBottom - 220 + lockupTop + 270) / 2;
+// Steps 3–5 stay in frame above the end card, which sits low and balanced.
+const endCenter = dayBottom + 220;
 
 // Timeline (frames).
 const T = {
@@ -83,10 +85,10 @@ export const ShuttleStormPlayers: React.FC = () => {
     { t: stepAt(i + 1), x: 540, y: stepCam(i), z: 1 },
   ]);
   const cam = cameraAt(frame, [
-    { t: 0, x: 540, y: artY + (ART.height * S) / 2, z: 1.4 },
-    { t: 4, x: 540, y: artY + (ART.height * S) / 2, z: 1.38 },
-    { t: 30, x: 540, y: hookCenter, z: 0.93 },
-    { t: T.leave, x: 540, y: hookCenter, z: 0.93 },
+    // Open with the art filling the frame, and pull back at once.
+    { t: 0, x: 560, y: artY + (ART.height * S) / 2, z: 1.8 },
+    { t: 30, x: 540, y: hookCenter, z: 0.9 },
+    { t: T.leave, x: 540, y: hookCenter, z: 0.9 },
     ...stepKeys.slice(0, -1),
     { t: END, x: 540, y: stepCam(4), z: 1 },
     { t: END + 22, x: 540, y: endCenter, z: 1 },
@@ -120,18 +122,29 @@ export const ShuttleStormPlayers: React.FC = () => {
     { ...clamp, easing: ease },
   );
   const showBar = frame >= T.thread1[0];
-  const active = Math.max(0, Math.min(4, Math.floor((frame - stepAt(0)) / T.stepEvery)));
+  // A step lights as the bar's head crosses its title.
+  const active = Math.max(0, Math.min(4, Math.floor((frame - stepAt(0) - 3) / T.stepEvery)));
   const inSteps = frame >= stepAt(0) - 4 && frame < END + 4;
 
   const endLines = [0, 1].map((i) => ramp(frame, END + 6 + i * 5, END + 20 + i * 5));
   const deadline = ramp(frame, END + 18, END + 28);
   const url = ramp(frame, END + 22, END + 32);
-  const lockup = ramp(frame, END + 26, END + 40);
+  const lockup = ramp(frame, END + 8, END + 26);
 
   return (
     <AbsoluteFill style={{ backgroundColor: WORLD, overflow: "hidden" }}>
       <World cam={cam} width={PLAYERS.width} height={PLAYERS.height}>
-        <SiteCrop file="site-home-everypoint" imageHeight={932} top={ART.top} height={ART.height} scale={S} x={X} y={artY} />
+        <SiteCrop
+          file="site-home-everypoint"
+          imageHeight={932}
+          top={ART.top}
+          height={ART.height}
+          left={ART.left}
+          width={ART.width}
+          scale={S}
+          x={(1080 - ART.width * S) / 2}
+          y={artY}
+        />
 
         <div style={{ position: "absolute", left: TEXT_X, top: headlineY }}>
           <RevealLines lines={[{ text: "Feather" }, { text: "shuttles.", color: VOLT }]} progress={feather} size={118} />
@@ -187,7 +200,7 @@ export const ShuttleStormPlayers: React.FC = () => {
           </Mono>
         </div>
         <div style={{ position: "absolute", left: TEXT_X + 44, top: urlTop, opacity: url }}>
-          <Mono size={38} color={BONE} tracking="0.04em">
+          <Mono size={40} color={BONE} tracking="0.04em">
             shuttlestorm.adawar.org/register
           </Mono>
         </div>
@@ -200,7 +213,7 @@ export const ShuttleStormPlayers: React.FC = () => {
             width: 1080,
             display: "flex",
             justifyContent: "center",
-            transform: `translateY(${interpolate(lockup, [0, 1], [900, 0], { ...clamp, easing: ease })}px)`,
+            transform: `translateY(${interpolate(lockup, [0, 1], [400, 0], { ...clamp, easing: ease })}px)`,
           }}
         >
           <Lockup size={100} />
