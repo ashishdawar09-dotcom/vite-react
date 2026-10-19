@@ -1,0 +1,24 @@
+{
+  "critic": "independent",
+  "referenceId": "openmontage-hook",
+  "verdict": "reject",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 6,
+    "concept_specificity": 7,
+    "product_authenticity": 8,
+    "mobile_readability": 9,
+    "composition": 6,
+    "motion_causality": 5,
+    "material_restraint": 9
+  },
+  "hardFailures": [],
+  "notes": [
+    "Content is accurate and nothing is invented. Every sponsor matches sponsors.html in order: ADW (presenting), Kirti Law Corporation, Novelty Physiotherapy & Wellness, Pizza 24, The Polly Fox, Abbotsford Dental Centre and IBJ Cafe Burgers & Boba. The intro copy, 'Back the storm.' copy and both buttons are verbatim. (778) 964-6999 matches the footer in index.html and sponsors.html. SHUTTLESTORM.ADAWAR.ORG/SPONSORS matches the canonical URL in sitemap.xml. shuttle-storm-mark.svg is byte-identical to favicon.svg. The logo tiles keep the site tile's 16:10 aspect (about 458x286 in frame vs 1185x741 capture), with no recolor or distortion. No neon, glow or added gradients; ADW's cyan D and soft card wash are the site's own CSS.",
+    "Volt underlines line up correctly once fully drawn. At frame 40, 'local' on line 1 and 'businesses back local badminton' on line 2 are underlined exactly. At frame 20 the line 2 underline is mid-draw. At frames 180–190 'BACK THE' is underlined, which is an exact span. Readability at 360 px is good on all three scenes (frames 25, 150 and 265).",
+    "Weak reference inheritance and causality. openmontage-hook asks for a tight open on a crowded surface, a pullback that reveals one connected world, and surfaces collapsing toward a centre with outputs as consequences. Instead the candidate (a) shows one small text card (frames 0–45), (b) scrolls it away, (c) slides seven tiles in from the left and right with a stagger into a plain 2-column grid (frames 55–90), (d) holds that grid static for about 2.6 s (frames 90–168), then (e) scrolls to the join block (frames 170–185). The tiles do not converge on anything. The wall does not cause the 'Back the storm' ask; it is just the next section. This reads as stagger-in plus a disconnected card grid (rejected-patterns: 'scale/fade/stagger without causal meaning', 'disconnected card grid').",
+    "Dead space and travel. Frames 0–45: the intro card fills only y≈590–1240, so about 65% of the 9:16 frame is empty charcoal at the hook. Frames 51–60 are near-empty mid-travel: the intro card leaves the top while only a sliver of the ADW block ('W'/'NSOR') is on screen. Frames 175–200: about 300 px of empty gap between the join card and the lockup before the phone number fades in at about frame 205.",
+    "Orphaned and clipped surfaces. Frames 90–170, the whole wall hold: an empty dark slab (the bottom of the intro card, y 0–95) stays parked at the top edge with no content. The ADW block (frames 60–175) is a crop of site-sponsors-adw.png with the bottom border and ADW body cut off just under 'PRESENTING SPONSOR'. Both the ADW block and the join block (frames 180–269) sit inside a second rounded wrapper card wider than the screenshot. This leaves about 37 px dark gutters at each side and a double border, the screenshot's own hairline inset inside the wrapper. The site does not render that.",
+    "Fixes: (1) Open tight. Scale the intro surface so the lede and underline fill most of the frame width and height, or start already inside the page with the sponsors section partly visible, so no 65% void remains. (2) Make convergence causal and centred, per openmontage-hook. Have the six tiles and the ADW block physically gather toward the underlined 'local businesses back local badminton' line or the ADW centre, then pull back so the wall and the 'Back the storm' block share one connected frame. The ask should arrive as the wall's consequence (for example the wall compresses or slides up to reveal or dock the join block), not after a separate scroll. (3) Cut the static wall hold to ≤1.2 s and remove the empty travel at frames 51–60. (4) Remove the orphan intro-card strip during the wall (scroll it fully off or keep it legibly in frame). (5) Drop the outer wrapper cards. Show each screenshot at its own border edge, full-bleed to a 16 px gutter, and crop ADW at a clean boundary that keeps its bottom hairline (or show the full block). (6) Tighten the end layout so the phone number, URL and lockup sit directly under the join card. Keep the ≈2 s stable end hold that currently runs from about frame 210."
+  ]
+}
