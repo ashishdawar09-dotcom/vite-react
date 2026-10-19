@@ -24,7 +24,7 @@ The site is near-black ink (#06080D) with bone text (#ECEEF2), a single flat vol
 
 ## Motion plan
 
-Hold tight on the real "05 CATEGORIES" link while the cursor arrives and taps (flat press veil). The categories page replaces the menu in the same phone and scrolls to its table while the camera eases out. Hold while a flat volt marker passes all eleven rows with a tabular counter 01→11. The rows lift out (staggered), leaving empty slots, the phone drops away and the camera pulls back to the wall; the brand lockup appears above and the register page's real deadline line arrives below with a volt underline. Stable end hold of about 1.5 s.
+Open framed on the real phone menu, with the cursor arriving at "05 CATEGORIES"; the tap shows the site's own :active state (the link text turns volt, menu.js `a:active{color:#D4FF3A}`), then a clean cut to /categories, which scrolls to its table while the camera eases out. A fast (~0.9 s) flat volt marker passes all eleven rows with a tabular counter 01→11. The rows lift out together (no overlap) and grow into a frame-filling wall grouped by the page's Group/Ages columns (Juniors · 8–12, Youth · 13–17, Adults · 18+, Masters · 50+); at full size each row is re-set verbatim in the site's own type and colours (Archivo 600 bone names, #C4CAD6 fees, mono #8F97A8 group labels) so it reads at phone size, while the phone drops away. The lockup appears in the site's brand style (600, 125% wide, .14em), and the register page's deadline arrives in its mono eyebrow style, in bone at readable size, with a volt underline. Stable end hold of about 2 s.
 
 ## Avoid
 

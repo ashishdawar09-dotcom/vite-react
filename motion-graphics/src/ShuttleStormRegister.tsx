@@ -12,7 +12,8 @@ import { loadFont } from "@remotion/fonts";
 // Shuttle Storm ’26 — one tap on Categories opens eleven events, juniors to
 // masters; entries close Nov 18. 9:16, warm-light world, tsenta-one-click-wall
 // mechanism. Every surface is a real screenshot of shuttlestorm-site/public at
-// 430 CSS px (3x), and every overlay position below is measured from the DOM.
+// 430 CSS px (3x), every overlay position is measured from the DOM, and the end
+// wall re-sets the categories page's own table data in the site's own styles.
 
 // The site's own typefaces, bundled locally (OFL) so renders work offline.
 const ARCHIVO = "Archivo";
@@ -21,6 +22,7 @@ loadFont({
   family: ARCHIVO,
   url: staticFile("fonts/Archivo-latin-variable.woff2"),
   weight: "100 900",
+  stretch: "62% 125%",
 });
 loadFont({
   family: MONO,
@@ -36,9 +38,14 @@ export const HEIGHT = 1920;
 const PAPER = "#F3EEE4";
 const INK = "#1B1A17";
 const MUTED = "#6F6A60";
-const VOLT = "#D4FF3A";
 const DEVICE = "#14161B";
+// Site tokens (page.css).
 const SITE_INK = "#06080D";
+const VOLT = "#D4FF3A";
+const BONE = "#ECEEF2";
+const TD = "#C4CAD6";
+const MUTE = "#8F97A8";
+const LINE = "rgba(236, 238, 242, 0.12)";
 
 // Phone geometry (world px). The screen shows a 430×932 CSS viewport.
 const CSS_W = 430;
@@ -54,55 +61,84 @@ const PHONE = { x: (WIDTH - PHONE_W) / 2, y: (HEIGHT - PHONE_H) / 2 };
 const SCREEN = { x: PHONE.x + BEZ, y: PHONE.y + BEZ };
 
 // Measured DOM rects (CSS px).
-// Menu link "05 Categories" → /categories (text spans x 56–299).
+// Menu link "05 Categories" → /categories; its text spans x 56–299, y 321–367.
 const MENU_LINK = { x: 17.2, y: 315.3, w: 395.6, h: 57.8 };
-const MENU_TEXT_CX = 178;
+const MENU_TEXT = { x: 54, y: 322, w: 250, h: 44 };
 const CATEGORIES_PAGE_H = 2424;
 const TABLE_X = 17.2;
 const TABLE_W = 395.6;
-// Row crops keep 10 CSS px of page margin each side so the marker tick sits beside the text.
-const CROP_X = TABLE_X - 10;
-const CROP_W = TABLE_W + 20;
 const CATS_SCROLL = 360;
-// [top, height, group index] for the eleven rows of the category table.
-const ROWS: [number, number, number][] = [
-  [426.1, 45.75, 0],
-  [471.8, 45.75, 0],
-  [517.6, 45.75, 1],
-  [563.3, 45.75, 1],
-  [609.1, 70.5, 1],
-  [679.6, 70.5, 1],
-  [750.1, 45.75, 2],
-  [795.8, 70.5, 2],
-  [866.3, 70.5, 2],
-  [936.8, 70.5, 2],
-  [1007.3, 70.5, 3],
-];
-// Register page eyebrow: "Entries close 11:59 pm, Wednesday, / November 18, 2026".
-const DEADLINE_CROP = { x: 17.2, y: 150, h: 46 };
-const DEADLINE_LINES = [
-  { y: 168.5, x0: 17.2, x1: 333 },
-  { y: 187.5, x0: 17.2, x1: 175 },
-];
 
-// End-frame wall: the same eleven rows, grouped Juniors / Youth / Adults / Masters.
-const WALL_S = 2.05;
-const WALL_X = (WIDTH - CROP_W * WALL_S) / 2;
-const WALL_Y = 262;
-const GROUP_GAP = 26;
-const wallTops: number[] = [];
+type Category = { name: string; fee: string; top: number; h: number };
+type Group = { label: string; rows: Category[] };
+// The categories page table, verbatim (rows measured from the DOM).
+const GROUPS: Group[] = [
+  {
+    label: "Juniors · 8–12",
+    rows: [
+      { name: "Boys’ singles", fee: "$30", top: 426.1, h: 45.75 },
+      { name: "Girls’ singles", fee: "$30", top: 471.8, h: 45.75 },
+    ],
+  },
+  {
+    label: "Youth · 13–17",
+    rows: [
+      { name: "Youth boys’ singles", fee: "$30", top: 517.6, h: 45.75 },
+      { name: "Youth girls’ singles", fee: "$30", top: 563.3, h: 45.75 },
+      { name: "Youth boys’ doubles", fee: "$30 per player", top: 609.1, h: 70.5 },
+      { name: "Youth girls’ doubles", fee: "$30 per player", top: 679.6, h: 70.5 },
+    ],
+  },
+  {
+    label: "Adults · 18+",
+    rows: [
+      { name: "Men’s singles", fee: "$40", top: 750.1, h: 45.75 },
+      { name: "Men’s doubles", fee: "$40 per player", top: 795.8, h: 70.5 },
+      { name: "Women’s doubles", fee: "$40 per player", top: 866.3, h: 70.5 },
+      { name: "Mixed doubles", fee: "$40 per player", top: 936.8, h: 70.5 },
+    ],
+  },
+  {
+    label: "Masters · 50+",
+    rows: [
+      { name: "Super doubles (men, women or mixed)", fee: "$40 per player", top: 1007.3, h: 70.5 },
+    ],
+  },
+];
+const ROWS = GROUPS.flatMap((g) => g.rows);
+
+// End-frame layout (frame px).
+const MARGIN = 56;
+const WALL_W = WIDTH - MARGIN * 2;
+const TILE_PAD = 26;
+const HEADER_H = 58;
+const NAME_SIZE = 50;
+const ROW_H = 78;
+const ROW_H_2 = 130; // the one two-line name
+const GROUP_GAP = 22;
+const LOCKUP_Y = 52;
+const COUNTER_Y = 168;
+const WALL_Y = 270;
+
+type Box = { x: number; y: number; w: number; h: number };
+const rowBoxes: Box[] = [];
+const groupBoxes: Box[] = [];
 {
   let y = WALL_Y;
-  ROWS.forEach(([, h, g], i) => {
-    if (i > 0 && g !== ROWS[i - 1][2]) y += GROUP_GAP;
-    wallTops.push(y);
-    y += h * WALL_S;
-  });
+  for (const g of GROUPS) {
+    const top = y;
+    y += TILE_PAD + HEADER_H;
+    for (const r of g.rows) {
+      const h = r.name.length > 24 ? ROW_H_2 : ROW_H;
+      rowBoxes.push({ x: MARGIN + TILE_PAD, y, w: WALL_W - TILE_PAD * 2, h });
+      y += h;
+    }
+    y += TILE_PAD - 8;
+    groupBoxes.push({ x: MARGIN, y: top, w: WALL_W, h: y - top });
+    y += GROUP_GAP;
+  }
 }
-const WALL_BOTTOM = wallTops[10] + ROWS[10][1] * WALL_S;
-const DEADLINE_Y = WALL_BOTTOM + 24;
-const DEADLINE_S = 2.5;
-const COUNTER_Y = 150;
+const DEADLINE_Y = groupBoxes[3].y + groupBoxes[3].h + 34;
 
 const ease = Easing.inOut(Easing.cubic);
 const clamp = {
@@ -110,76 +146,18 @@ const clamp = {
   extrapolateRight: "clamp",
 } as const;
 
-const linkFocus = {
-  x: SCREEN.x + MENU_TEXT_CX * K,
+const linkCenter = {
+  x: SCREEN.x + (MENU_LINK.x + MENU_LINK.w / 2) * K,
   y: SCREEN.y + (MENU_LINK.y + MENU_LINK.h / 2) * K,
 };
-const tableBottom = SCREEN.y + (ROWS[10][0] + ROWS[10][1] - CATS_SCROLL) * K;
+const scanFocusY =
+  (COUNTER_Y + SCREEN.y + (ROWS[10].top + ROWS[10].h - CATS_SCROLL) * K) / 2;
 
 // Camera: hold → travel → hold. Repeated keys are holds.
-const KEY_T = [0, 16, 34, 96, 128, DURATION];
-const KEY_X = [linkFocus.x, linkFocus.x, WIDTH / 2, WIDTH / 2, WIDTH / 2, WIDTH / 2];
-const KEY_Y = [
-  linkFocus.y,
-  linkFocus.y,
-  (COUNTER_Y + tableBottom) / 2,
-  (COUNTER_Y + tableBottom) / 2,
-  HEIGHT / 2,
-  HEIGHT / 2,
-];
-const KEY_Z = [2.4, 2.4, 1.54, 1.54, 1, 1];
-
-// A row of the real category table, cropped from the screenshot at scale s.
-const RowCrop: React.FC<{ index: number; s: number; marked: number }> = ({
-  index,
-  s,
-  marked,
-}) => {
-  const [top, h] = ROWS[index];
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: CROP_W * s,
-        height: h * s,
-        overflow: "hidden",
-        backgroundColor: SITE_INK,
-      }}
-    >
-      <Img
-        src={staticFile("research/site-categories.png")}
-        style={{
-          position: "absolute",
-          left: -CROP_X * s,
-          top: -top * s,
-          width: CSS_W * s,
-          height: CATEGORIES_PAGE_H * s,
-          maxWidth: "none",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: CROP_W * s,
-          height: h * s,
-          backgroundColor: `rgba(212, 255, 58, ${marked * 0.13})`,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 8 * s,
-          width: 3 * s,
-          height: (h - 16) * s * marked,
-          backgroundColor: VOLT,
-        }}
-      />
-    </div>
-  );
-};
+const KEY_T = [0, 18, 34, 76, 106, DURATION];
+const KEY_X = [linkCenter.x, linkCenter.x, WIDTH / 2, WIDTH / 2, WIDTH / 2, WIDTH / 2];
+const KEY_Y = [linkCenter.y, linkCenter.y, scanFocusY, scanFocusY, HEIGHT / 2, HEIGHT / 2];
+const KEY_Z = [1.88, 1.88, 1.54, 1.54, 1, 1];
 
 const Cursor: React.FC<{ x: number; y: number; opacity: number; pressed: number }> = ({
   x,
@@ -210,6 +188,48 @@ const Cursor: React.FC<{ x: number; y: number; opacity: number; pressed: number 
   </svg>
 );
 
+// One category, set like the site's table (name in bone, fee in td grey).
+const RowText: React.FC<{ row: Category; last: boolean }> = ({ row, last }) => (
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 24,
+      paddingLeft: 22,
+      paddingRight: 22,
+      borderBottom: last ? "none" : `1.5px solid ${LINE}`,
+    }}
+  >
+    <div
+      style={{
+        fontFamily: ARCHIVO,
+        fontWeight: 600,
+        fontSize: NAME_SIZE,
+        lineHeight: 1.12,
+        color: BONE,
+        maxWidth: 620,
+      }}
+    >
+      {row.name}
+    </div>
+    <div
+      style={{
+        fontFamily: ARCHIVO,
+        fontWeight: 500,
+        fontSize: 32,
+        color: TD,
+        whiteSpace: "nowrap",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {row.fee}
+    </div>
+  </div>
+);
+
 export const ShuttleStormRegister: React.FC = () => {
   const frame = useCurrentFrame();
 
@@ -217,46 +237,47 @@ export const ShuttleStormRegister: React.FC = () => {
   const fy = interpolate(frame, KEY_T, KEY_Y, { ...clamp, easing: ease });
   const z = interpolate(frame, KEY_T, KEY_Z, { ...clamp, easing: ease });
 
-  // Tap on the real "05 Categories" menu link.
-  const cursorX = interpolate(frame, [0, 11], [linkFocus.x + 150, linkFocus.x + 70], {
+  // Tap on the real "05 Categories" menu link; the site's :active state turns it volt.
+  const textCenterX = SCREEN.x + (MENU_TEXT.x + MENU_TEXT.w * 0.62) * K;
+  const cursorX = interpolate(frame, [0, 10], [textCenterX + 120, textCenterX], {
     ...clamp,
     easing: Easing.out(Easing.cubic),
   });
-  const cursorY = interpolate(frame, [0, 11], [linkFocus.y + 120, linkFocus.y + 4], {
+  const cursorY = interpolate(frame, [0, 10], [linkCenter.y + 150, linkCenter.y], {
     ...clamp,
     easing: Easing.out(Easing.cubic),
   });
-  const pressed = interpolate(frame, [11, 14, 17, 21], [0, 1, 1, 0], clamp);
-  const cursorOpacity = interpolate(frame, [20, 28], [1, 0], clamp);
+  const pressed = interpolate(frame, [10, 13, 17, 20], [0, 1, 1, 0], clamp);
+  const active = frame >= 11 && frame < 20 ? 1 : 0;
+  const cursorOpacity = frame < 20 ? 1 : 0;
 
-  // The link navigates: /categories replaces the menu, then scrolls to its table.
-  const pageIn = interpolate(frame, [17, 24], [0, 1], clamp);
-  const scroll = interpolate(frame, [26, 42], [0, CATS_SCROLL], { ...clamp, easing: ease });
+  // The link navigates: a clean cut to /categories, which scrolls to its table.
+  const onCategories = frame >= 20;
+  const scroll = interpolate(frame, [22, 38], [0, CATS_SCROLL], { ...clamp, easing: ease });
 
   // A marker passes all eleven real rows; the counter follows it.
-  const ROW_START = 46;
-  const ROW_STEP = 4.2;
+  const ROW_START = 40;
+  const ROW_STEP = 2.7;
   const markedAt = (i: number) =>
-    interpolate(frame, [ROW_START + i * ROW_STEP, ROW_START + i * ROW_STEP + 4], [0, 1], clamp);
+    interpolate(frame, [ROW_START + i * ROW_STEP, ROW_START + i * ROW_STEP + 3], [0, 1], clamp);
   const rowsDone = Math.max(1, Math.min(11, Math.floor((frame - ROW_START) / ROW_STEP) + 1));
 
-  // The rows lift out of the phone and regroup as a wall; the phone drops away.
-  const LIFT_START = 98;
-  const liftAt = (i: number) =>
-    interpolate(frame, [LIFT_START + i * 1.6, LIFT_START + i * 1.6 + 22], [0, 1], {
-      ...clamp,
-      easing: ease,
-    });
-  const phoneDrop = interpolate(frame, [100, 126], [0, 2300], {
+  // The rows lift out together (no overlap), grow into the wall, and the phone
+  // drops away beneath them.
+  const lift = interpolate(frame, [78, 106], [0, 1], { ...clamp, easing: ease });
+  // Clean swap from the screenshot crop to the re-set row once it is near full size.
+  const swap = lift >= 0.94 ? 1 : 0;
+  const phoneDrop = interpolate(frame, [80, 104], [0, 2300], {
     ...clamp,
     easing: Easing.in(Easing.quad),
   });
+  const groupsIn = interpolate(frame, [101, 105], [0, 1], clamp);
+  const lockupIn = interpolate(frame, [100, 114], [0, 1], clamp);
 
-  // The register page's real deadline line arrives under the wall.
-  const deadlineIn = interpolate(frame, [134, 148], [0, 1], { ...clamp, easing: ease });
-  const line1 = interpolate(frame, [148, 158], [0, 1], { ...clamp, easing: ease });
-  const line2 = interpolate(frame, [156, 164], [0, 1], { ...clamp, easing: ease });
-  const lockupIn = interpolate(frame, [112, 128], [0, 1], clamp);
+  // The register page's deadline, set in the site's eyebrow style, then underlined.
+  const deadlineIn = interpolate(frame, [114, 128], [0, 1], { ...clamp, easing: ease });
+  const line1 = interpolate(frame, [128, 140], [0, 1], { ...clamp, easing: ease });
+  const line2 = interpolate(frame, [138, 148], [0, 1], { ...clamp, easing: ease });
 
   return (
     <AbsoluteFill style={{ backgroundColor: PAPER, overflow: "hidden" }}>
@@ -269,28 +290,28 @@ export const ShuttleStormRegister: React.FC = () => {
           transformOrigin: `${fx}px ${fy}px`,
         }}
       >
-        {/* Identity lockup, revealed by the pullback. */}
+        {/* Identity lockup in the site's brand style (600, 125% wide, .14em). */}
         <div
           style={{
             position: "absolute",
-            left: WALL_X,
-            top: 46,
+            left: MARGIN,
+            top: LOCKUP_Y,
             display: "flex",
             alignItems: "center",
-            gap: 26,
+            gap: 24,
             opacity: lockupIn,
           }}
         >
-          <Img src={staticFile("research/shuttle-storm-mark.svg")} style={{ width: 84, height: 84 }} />
+          <Img src={staticFile("research/shuttle-storm-mark.svg")} style={{ width: 82, height: 82 }} />
           <div
             style={{
               fontFamily: ARCHIVO,
-              fontWeight: 500,
-              fontSize: 50,
-              letterSpacing: "0.04em",
+              fontWeight: 600,
+              fontStretch: "125%",
+              fontSize: 44,
+              letterSpacing: "0.14em",
               color: INK,
               textTransform: "uppercase",
-              lineHeight: 1,
               whiteSpace: "nowrap",
             }}
           >
@@ -302,20 +323,20 @@ export const ShuttleStormRegister: React.FC = () => {
         <div
           style={{
             position: "absolute",
-            left: interpolate(liftAt(0), [0, 1], [SCREEN.x + CROP_X * K, WALL_X]),
+            left: interpolate(lift, [0, 1], [SCREEN.x + (TABLE_X - 6) * K, MARGIN]),
             top: COUNTER_Y,
             fontFamily: MONO,
             fontWeight: 500,
             color: INK,
             display: "flex",
             alignItems: "baseline",
-            gap: 22,
+            gap: 20,
             whiteSpace: "nowrap",
             fontVariantNumeric: "tabular-nums",
             opacity: interpolate(frame, [ROW_START - 4, ROW_START + 2], [0, 1], clamp),
           }}
         >
-          <span style={{ fontSize: 76, lineHeight: 1 }}>{String(rowsDone).padStart(2, "0")}</span>
+          <span style={{ fontSize: 72, lineHeight: 1 }}>{String(rowsDone).padStart(2, "0")}</span>
           <span style={{ fontSize: 34, letterSpacing: "0.16em", color: MUTED }}>/ 11 CATEGORIES</span>
         </div>
 
@@ -354,153 +375,221 @@ export const ShuttleStormRegister: React.FC = () => {
                 transformOrigin: "0 0",
               }}
             >
-              <Img
-                src={staticFile("research/site-menu.png")}
-                style={{ position: "absolute", width: CSS_W, height: CSS_H }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  left: MENU_LINK.x,
-                  top: MENU_LINK.y,
-                  width: MENU_LINK.w,
-                  height: MENU_LINK.h,
-                  backgroundColor: `rgba(236, 238, 242, ${pressed * 0.1})`,
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  width: CSS_W,
-                  height: CATEGORIES_PAGE_H,
-                  transform: `translateY(${-scroll}px)`,
-                  opacity: pageIn,
-                }}
-              >
-                <Img
-                  src={staticFile("research/site-categories.png")}
-                  style={{ width: CSS_W, height: CATEGORIES_PAGE_H, display: "block" }}
-                />
-                {ROWS.map(([top, h], i) => (
-                  <React.Fragment key={i}>
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: TABLE_X,
-                        top,
-                        width: TABLE_W,
-                        height: h,
-                        backgroundColor: `rgba(212, 255, 58, ${markedAt(i) * 0.13})`,
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: CROP_X,
-                        top: top + 8,
-                        width: 3,
-                        height: (h - 16) * markedAt(i),
-                        backgroundColor: VOLT,
-                      }}
-                    />
-                    {/* Once a row lifts out, its slot in the page is left empty. */}
-                    {liftAt(i) > 0 ? (
+              {onCategories ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    width: CSS_W,
+                    height: CATEGORIES_PAGE_H,
+                    transform: `translateY(${-scroll}px)`,
+                  }}
+                >
+                  <Img
+                    src={staticFile("research/site-categories.png")}
+                    style={{ width: CSS_W, height: CATEGORIES_PAGE_H, display: "block" }}
+                  />
+                  {ROWS.map((r, i) => (
+                    <React.Fragment key={i}>
                       <div
                         style={{
                           position: "absolute",
-                          left: CROP_X,
-                          top,
-                          width: CROP_W,
-                          height: h,
-                          backgroundColor: SITE_INK,
+                          left: TABLE_X,
+                          top: r.top,
+                          width: TABLE_W,
+                          height: r.h,
+                          backgroundColor: `rgba(212, 255, 58, ${markedAt(i) * 0.13})`,
                         }}
                       />
-                    ) : null}
-                  </React.Fragment>
-                ))}
-              </div>
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: TABLE_X - 10,
+                          top: r.top + 8,
+                          width: 3,
+                          height: (r.h - 16) * markedAt(i),
+                          backgroundColor: VOLT,
+                        }}
+                      />
+                    </React.Fragment>
+                  ))}
+                  {/* Once the rows lift out, the table area is left empty. */}
+                  {lift > 0 ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: ROWS[0].top,
+                        width: CSS_W,
+                        height: ROWS[10].top + ROWS[10].h - ROWS[0].top,
+                        backgroundColor: SITE_INK,
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <Img
+                    src={staticFile("research/site-menu.png")}
+                    style={{ position: "absolute", width: CSS_W, height: CSS_H }}
+                  />
+                  {/* :active — the white link text turns volt (multiply keeps the ink black). */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: MENU_TEXT.x,
+                      top: MENU_TEXT.y,
+                      width: MENU_TEXT.w,
+                      height: MENU_TEXT.h,
+                      backgroundColor: VOLT,
+                      mixBlendMode: "multiply",
+                      opacity: active,
+                    }}
+                  />
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Lifted rows: from their place in the phone to the grouped wall. */}
-        {ROWS.map(([top, , g], i) => {
-          const t = liftAt(i);
-          if (t <= 0) return null;
-          const fromX = SCREEN.x + CROP_X * K;
-          const fromY = SCREEN.y + (top - CATS_SCROLL) * K;
-          const s = interpolate(t, [0, 1], [K, WALL_S]);
-          const first = i === 0 || ROWS[i - 1][2] !== g;
-          const last = i === 10 || ROWS[i + 1][2] !== g;
+        {/* Group tiles: Juniors / Youth / Adults / Masters, from the Group and Ages columns. */}
+        {GROUPS.map((g, gi) => (
+          <div
+            key={g.label}
+            style={{
+              position: "absolute",
+              left: groupBoxes[gi].x,
+              top: groupBoxes[gi].y,
+              width: groupBoxes[gi].w,
+              height: groupBoxes[gi].h,
+              borderRadius: 22,
+              backgroundColor: SITE_INK,
+              opacity: groupsIn,
+              boxShadow: "0 18px 40px rgba(40, 32, 20, 0.12)",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: TILE_PAD + 22,
+                top: TILE_PAD + 4,
+                fontFamily: MONO,
+                fontWeight: 500,
+                fontSize: 28,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: MUTE,
+              }}
+            >
+              {g.label}
+            </div>
+          </div>
+        ))}
+
+        {/* Each real row travels from the phone to its slot, then is re-set at wall size. */}
+        {ROWS.map((r, i) => {
+          if (lift <= 0) return null;
+          const from: Box = {
+            x: SCREEN.x + TABLE_X * K,
+            y: SCREEN.y + (r.top - CATS_SCROLL) * K,
+            w: TABLE_W * K,
+            h: r.h * K,
+          };
+          const to = rowBoxes[i];
+          const box = {
+            x: interpolate(lift, [0, 1], [from.x, to.x]),
+            y: interpolate(lift, [0, 1], [from.y, to.y]),
+            w: interpolate(lift, [0, 1], [from.w, to.w]),
+            h: interpolate(lift, [0, 1], [from.h, to.h]),
+          };
+          const s = box.w / TABLE_W;
+          const groupIndex = GROUPS.findIndex((g) => g.rows.includes(r));
+          const groupRows = GROUPS[groupIndex].rows;
+          const lastInGroup = groupRows[groupRows.length - 1] === r;
           return (
             <div
               key={i}
               style={{
                 position: "absolute",
-                left: interpolate(t, [0, 1], [fromX, WALL_X]),
-                top: interpolate(t, [0, 1], [fromY, wallTops[i]]),
-                borderTopLeftRadius: first ? 16 * t : 0,
-                borderTopRightRadius: first ? 16 * t : 0,
-                borderBottomLeftRadius: last ? 16 * t : 0,
-                borderBottomRightRadius: last ? 16 * t : 0,
+                left: box.x,
+                top: box.y,
+                width: box.w,
+                height: box.h,
                 overflow: "hidden",
-                boxShadow: `0 ${12 * t}px ${28 * t}px rgba(40, 32, 20, ${0.1 * t})`,
+                backgroundColor: SITE_INK,
               }}
             >
-              <RowCrop index={i} s={s} marked={markedAt(i)} />
+              <div style={{ position: "absolute", inset: 0, opacity: 1 - swap }}>
+                <Img
+                  src={staticFile("research/site-categories.png")}
+                  style={{
+                    position: "absolute",
+                    left: -TABLE_X * s,
+                    top: -r.top * s,
+                    width: CSS_W * s,
+                    height: CATEGORIES_PAGE_H * s,
+                    maxWidth: "none",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundColor: "rgba(212, 255, 58, 0.13)",
+                  }}
+                />
+              </div>
+              <div style={{ position: "absolute", inset: 0, opacity: swap }}>
+                <RowText row={r} last={lastInGroup} />
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 12,
+                  width: 4,
+                  height: box.h - 24,
+                  backgroundColor: VOLT,
+                }}
+              />
             </div>
           );
         })}
 
-        {/* The real deadline line from /register, underlined. */}
+        {/* The register page's deadline line, in its eyebrow style, underlined. */}
         <div
           style={{
             position: "absolute",
-            left: WALL_X,
+            left: MARGIN,
             top: DEADLINE_Y + (1 - deadlineIn) * 40,
-            width: CROP_W * WALL_S,
-            height: (DEADLINE_CROP.h + 12) * DEADLINE_S,
-            borderRadius: 16,
-            overflow: "hidden",
+            width: WALL_W,
+            borderRadius: 22,
             backgroundColor: SITE_INK,
+            padding: "26px 48px 30px",
             opacity: deadlineIn,
+            fontFamily: MONO,
+            fontWeight: 500,
+            fontSize: 38,
+            lineHeight: 1.5,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: BONE,
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              left: (10 - DEADLINE_CROP.x) * DEADLINE_S,
-              top: 6 * DEADLINE_S,
-              width: CSS_W * DEADLINE_S,
-              height: DEADLINE_CROP.h * DEADLINE_S,
-              overflow: "hidden",
-            }}
-          >
-            <Img
-              src={staticFile("research/site-register.png")}
-              style={{
-                position: "absolute",
-                left: 0,
-                top: -DEADLINE_CROP.y * DEADLINE_S,
-                width: CSS_W * DEADLINE_S,
-                height: CSS_H * DEADLINE_S,
-                maxWidth: "none",
-              }}
-            />
-            {DEADLINE_LINES.map((l, i) => (
+          {["Entries close 11:59 pm,", "Wednesday, November 18, 2026"].map((text, i) => (
+            <div key={text} style={{ position: "relative", width: "fit-content" }}>
+              {text}
               <div
-                key={i}
                 style={{
                   position: "absolute",
-                  left: l.x0 * DEADLINE_S,
-                  top: (l.y - DEADLINE_CROP.y) * DEADLINE_S,
-                  height: 2.5 * DEADLINE_S,
-                  width: (l.x1 - l.x0) * DEADLINE_S * (i === 0 ? line1 : line2),
+                  left: 0,
+                  bottom: 2,
+                  height: 4,
+                  width: `${(i === 0 ? line1 : line2) * 100}%`,
                   backgroundColor: VOLT,
                 }}
               />
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
 
         <Cursor x={cursorX} y={cursorY} opacity={cursorOpacity} pressed={pressed} />
