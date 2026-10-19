@@ -1,0 +1,27 @@
+{
+  "critic": "independent",
+  "referenceId": "kickbacks-same-run-editor",
+  "verdict": "reject",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 7,
+    "concept_specificity": 8,
+    "product_authenticity": 9,
+    "mobile_readability": 8,
+    "composition": 7,
+    "motion_causality": 7,
+    "material_restraint": 8
+  },
+  "hardFailures": [],
+  "notes": [
+    "Authenticity checks out. All four surfaces match the real captures in public/research (site-home-hero, site-categories, site-home-facts, site-register). The end-card mark matches favicon.svg / shuttle-storm-mark.svg exactly (identical files), with no recolour or glow. Every headline is verbatim on the site or is one of the organisers' claims: SAT · NOV 21, UFV NORTH GYM, ABBOTSFORD BC, 11 CATEGORIES, JUNIORS TO MASTERS., ENTRIES CLOSE NOV 18, $30–40, PER PLAYER, PER CATEGORY, NOV 21 2026 • UFV NORTH GYM • ABBOTSFORD BC, plus FEATHER SHUTTLES. GREAT PRIZES. from the user, shown with no invented specifics. No hard failure.",
+    "Overlay alignment is accurate. The underlines under 'Saturday, November 21' and the ages line (f30–f45), the eleven row bars (f100–f155), the '16 feathers' underline (f185–f250) and the two-line 'Entries close…' underline (f300–f345) all sit on the measured text.",
+    "Causality breaks at two stops. Stop 1 (f30–f75): the volt mark underlines 'Eleven categories for juniors, youth and adults, from age 8 to 50+', but the headline that lands is 'UFV NORTH GYM / ABBOTSFORD, BC'. That line is never marked, because 'UFV Athletic Centre in Abbotsford' stays unmarked, and the marked ages line has no consequence. Stop 4 (f330–f345): '$30–40 / PER PLAYER, PER CATEGORY' lands although the visible Entry fees list ($40 / $30 / $30) is never marked. Fix: mark 'UFV Athletic Centre in Abbotsford' and drop the ages mark (or make the headline match it). At stop 4, draw a mark on the $40 and $30 fee lines before the fee range lands.",
+    "Dead space: the left 60% of the frame is completely empty for about 0.3 s after every pull-back, before the headline starts (measured runs f34–43, f131–139, f221–229, f310–318; see f130 and f315, where only the card sits at the right edge). Each page transition also passes through near-empty charcoal (f85–88, f175–178 with about 80% empty frame, f265–269 with only a page corner visible). Fix: start the headline reveal as the pull-back begins, or keep the page larger and centred until the headline pushes it right. Close the gaps between pages in the world so a surface always fills most of the frame during each 22-frame pan.",
+    "Reference fidelity: in the reference the working surface fills the frame edge to edge. Here every stop settles into the same small rounded page card (about 575 px wide, about 30% of the frame) beside a headline in a charcoal void, for most of each stop (f60–f85, f155–f170, f250–f265, f330–f355). The push-ins are faithful; the settled states read as a repeated card-in-void template. Fix: settle each page at 40–45% of the frame width so the page stays the world.",
+    "Inconsistent layout: the facts card settles at x 1240–1885 with a 35 px right margin (f230–f260), while the other cards sit at about 1240–1815 with a 105 px margin. Match its scale and margin to the others.",
+    "At 1.75× on the facts page (f180–f215), the site's own dark text-shadow halos show as blotchy smudges behind '565 km/h', '16 feathers' and 'Since 1992'. They are authentic, but they read as dirt at this scale. A shallower push-in on this stop (about 1.4×) would soften them. No glow, gradient, glass or coloured shadow is added; the accents are flat volt.",
+    "Readability at 640 px wide (phone page): the headlines are clearly readable (f70, f155, f250, f345), and the end-card lockup, date line and URL are readable (f445). The settled page cards' body text drops to about 5–6 px, which is acceptable only because the marked line is shown at push-in scale first.",
+    "End hold: the end card is fully settled from about f372 to f449 (about 2.6 s), centred and clean, with no pops or clipping at the end. Headline mask reveals (f45, f140, f230, f320) are clean, with no overlaps between the headlines and the page cards."
+  ]
+}

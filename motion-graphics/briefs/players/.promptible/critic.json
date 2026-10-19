@@ -1,0 +1,29 @@
+{
+  "critic": "independent",
+  "referenceId": "openmontage-claude-pipeline",
+  "verdict": "reject",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 7,
+    "concept_specificity": 8,
+    "product_authenticity": 9,
+    "mobile_readability": 7,
+    "composition": 6,
+    "motion_causality": 6,
+    "material_restraint": 8
+  },
+  "hardFailures": [
+    "Major dead space and empty travel: after step 5 the camera follows the thread into an empty frame. Frames 184-206 are 99.8% background (non-background coverage is 0.12-0.18%), with only a 1-2 px volt line in the top quarter, and frames 188-206 have zero motion (about 0.6 s frozen on an empty frame). From frame 160 to frame 230 the lower 45-70% of the frame is also empty. This is the rejected 'empty travel before action' pattern."
+  ],
+  "notes": [
+    "Claims verified against shuttlestorm-site/public. '16 feathers / Set into a cork base... outruns a race car' matches index.html:612 and site-home-facts.png. The five steps (frames 76-184) are the register page's real 'Your day, start to finish' (register.html:69-75). '11 categories / ages 8 to 50+' matches index.html:555 ('Eleven categories... from age 8 to 50+'). 'Entries close Nov 18' and the /register URL are on the site. The date line 'NOV 21 2026 • UFV NORTH GYM • ABBOTSFORD BC' is verbatim from the film end card (index.html:722). The mark is byte-identical to favicon.svg and is not recoloured. 'FEATHER SHUTTLES.' and 'GREAT PRIZES.' are organiser (user) claims, shown with no invented amounts or types. I found no fabricated content.",
+    "The shuttle art in frames 0-68 has a green halo. It comes from the site's own three.js volt PointLight (index.html, 'Every point' section) and matches site-home-everypoint.png as captured. It is authentic, not a video-added glow, so it is not a hard failure. It is still the most effect-like element on screen.",
+    "Overlay alignment: the 'thick volt marker' for the active step is pushed against the frame edge. In frames 104-160 it measures x=0-1 (2 px) at 1080 width, so it is effectively clipped. It only becomes a readable ~9 px bar at frames 176-180, once the camera pulls back. The register card bleeds past both frame edges: 'Your day, start to finish' starts at x≈12 and step numbers at x≈20 (frame 104). The text has no gutter.",
+    "Causality is broken at the hand-off. In frames 80-96 the thread ends at the card's top centre (x=540), but the step marker lives at x=0, so the thread never visibly reaches step 1. After that the progression is a page scroll plus dim/brighten (frames 104-160). The thread restarts below the card at frame 180 and runs into the empty void described above.",
+    "Timing: each step holds only about 0.3 s static plus about 0.27 s travel (static at frames 104-112, 121-129, 138-146 and 155-163). The bold step titles are readable; the body copy is not in that time. 'GREAT PRIZES.' completes around frame 52 and the camera leaves at frame 58, a hold of about 0.2 s. Meanwhile about 0.6 s is spent on the empty frames 188-206.",
+    "Transient clipping during the opening pull-back: in frame 12 the '16 feathers' card enters at the bottom with its glyphs cut off, and in frame 16 its body text is cut at the left edge ('Set', 'weighs'). This is brief, but the headline sequence (frames 20-28) reveals cleanly with masks.",
+    "End card (frames 236-299, about 2.1 s hold, no pops) is top-heavy. Content spans y≈0-1400 with about 520 px of empty space below. A thread dangles from the top edge with no visible origin. At a 360 px phone width the date line (~8 px) and URL (~9 px) are too small to read comfortably. The lockup and '11 CATEGORIES / AGES 8 TO 50+' read well.",
+    "Reference fidelity: the candidate inherits the one-thread pipeline grammar, but not the reference's density, where every stop is a distinct, full real surface. The middle is a single scrolled text page, and the thread is a straight line that travels through emptiness instead of bridging surfaces.",
+    "Fixes: (1) Cut frames ~180-230. Bring the end card up as the thread leaves step 5, keeping the step-5 card bottom in frame while '11 CATEGORIES' rises, and give the saved ~0.8 s to step holds (≥0.6 s static each) and a ≥0.5 s 'GREAT PRIZES.' hold. (2) Scale the register card to leave ≥48 px side gutters so the volt marker sits fully visible at its measured DOM position, and route the thread's head into the step-1 marker so the line visibly drives each step. (3) During steps 3-5, centre the active step vertically instead of letting the card rise and leave the lower half empty (content ends at y≈1016 by frame 160). (4) Centre the end-card stack vertically or end the thread at the lockup, and enlarge the date line and URL to ≥32 px at 1080 width."
+  ]
+}

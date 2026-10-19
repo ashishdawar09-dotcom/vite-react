@@ -1,0 +1,28 @@
+{
+  "critic": "independent",
+  "referenceId": "kickbacks-same-run-editor",
+  "verdict": "reject",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 7,
+    "concept_specificity": 7,
+    "product_authenticity": 9,
+    "mobile_readability": 7,
+    "composition": 7,
+    "motion_causality": 7,
+    "material_restraint": 9
+  },
+  "hardFailures": [],
+  "notes": [
+    "No hard failures. Every on-screen fact matches shuttlestorm-site/public: hero sentence (index.html:555), statement (563), numbers 11 / 8 / 50+ / $30–40 with their captions (597-600), film end-card date line 'Nov 21 2026 · UFV North Gym · Abbotsford BC' (722), entries close November 18 (6, 744, 786), canonical domain shuttlestorm.adawar.org (8). The mark is favicon.svg with its own #06080D tile, not recoloured or redrawn. Surfaces are the real captures (site-home-hero/statement/numbers.png). The video adds no glow, gradient or glass; the spotlight beams are the site's own hero art.",
+    "Timing (per-frame luma diff): hero push f9-27, date and ages underlines f27-48, travel f49-70, statement underline f71-88, travel f89-108, numeral underlines f109-134, travel to end card f135-155, end-card reveal f156-175, fully static from f176 to f239 (2.13 s hold). No pops or jumps. Underlines line up with the measured glyph runs (f040 hero, f072 statement, f120 numerals).",
+    "Composition / clipping, f000-f008: the opening push crops the real nav. The mark's left arc touches x=0 and the menu pill is cut at the right edge, worse than in the source capture, which keeps about 50 px of left padding. Fix: open at about 0.95x so the hero card's own left and right padding is visible and the nav mark is whole.",
+    "Composition, end card f176-f239: the mark plus SHUTTLE/STORM lockup runs from x≈12 to x≈1064 (16 px right margin), so the wordmark nearly touches the frame edge and sits under the right-side UI on 9:16 platforms. Meanwhile about 580 px above and below the stack is empty. Fix: scale the lockup to about 80% of frame width (≈110 px side margins) and use the freed space to enlarge the date/venue line and the URL.",
+    "Mobile readability at 360 px wide (phone/f236, f044, f124): the event fact 'NOV 21 2026 · UFV NORTH GYM · ABBOTSFORD BC' and 'SHUTTLESTORM.ADAWAR.ORG' render at about 7-8 px cap height. The underlined hero facts ('Saturday, November 21', the ages sentence) are body copy at about 11 px, and the numeral captions are about 9 px. The event date is the core message but it is the smallest text in the end state. Fix: push in harder on the hero paragraph (≈1.5x, letting the paragraph run off-frame while 'Saturday, November 21' is centred), and give the date/venue line at least 34 px at 1080 width on the end card.",
+    "Dead space, f108-f134: the numbers card ends near y≈1450, leaving the bottom ≈25% of the frame as empty charcoal for almost a second while the underlines draw. A previous-card fragment cuts across the top. Fix: centre the numbers card vertically, or push in so the 2x2 grid fills the frame height.",
+    "Overlay quality, f120-f134: the $30–40 numeral wraps to two lines in the capture, and the volt marker sits only under '$30–', about 6 px above the top of '40'. It reads like a strike-through between the lines and leaves '40' unmarked. Fix: draw the marker under '40' (the last line of the value), or mark both lines at their own glyph widths.",
+    "Causality and reference fidelity: in the reference the payoff stays attached to the working surface. Here the page world is dropped at f135-f155: the numbers card exits upward and a separate lockup slides in diagonally from the lower left, partly off-frame at f140-f144, into empty charcoal. That reads as a disconnected end card arriving rather than a consequence of the page. Fix: travel to the end card through the site's own film section (section.film / rl-viewport) so the lockup comes from the real page, or keep the last underline as the bridge, for example by having the volt rule extend into the end-card rule.",
+    "Concept specificity: 'Scroll the site, highlight facts, cut to logo card' is grounded in authentic material but would fit any event website. It does not yet show what is particular to this event, such as the categories, the court or the film's own motion. The fixes above for the end card and transition would lift this.",
+    "Averages 7.75 with four scores below 8, so this is rejected. Factual content and material restraint are strong. The rework is framing, scale and the end-card bridge, not research."
+  ]
+}

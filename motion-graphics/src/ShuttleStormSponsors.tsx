@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame } from "remotion";
 import {
   CSS_W,
   LINE,
@@ -13,7 +13,6 @@ import {
   WORLD,
   cameraAt,
   clamp,
-  ease,
   m,
   ramp,
   World,
@@ -63,16 +62,17 @@ const joinY = dockedBottom + 30;
 const joinX = (1080 - JOIN.width * JOIN_S) / 2;
 const contactY = joinY + JOIN.height * JOIN_S + 34;
 
-// Scattered starting spots (fragments around the lower frame, some cut by the edges).
-const SCATTER = [
-  { x: -150, y: 900, w: 330 },
-  { x: 700, y: 820, w: 360 },
-  { x: 420, y: 1200, w: 300 },
-  { x: -60, y: 1450, w: 340 },
-  { x: 820, y: 1380, w: 320 },
-  { x: 360, y: 1680, w: 340 },
-];
-const ADW_SCATTER = { x: 120, y: 860, s: 1.6 };
+// Scattered starting spots: each tile starts out along its own ray from the
+// grid's centre (so no two paths cross), some cut by the frame edges.
+const gridCx = (WALL.tiles[0].x + WALL.tiles[2].x + WALL.tiles[2].w) / 2;
+const gridCy = (WALL.tiles[0].y + WALL.tiles[5].y + WALL.tiles[5].w * TILE_RATIO) / 2;
+const SCATTER = WALL.tiles.map((t) => {
+  const cx = t.x + t.w / 2;
+  const cy = t.y + (t.w * TILE_RATIO) / 2;
+  const w = t.w * 1.08;
+  return { x: gridCx + (cx - gridCx) * 2.1 - w / 2, y: gridCy + (cy - gridCy) * 2.3 + 110 - (w * TILE_RATIO) / 2, w };
+});
+const ADW_SCATTER = { x: -620, y: WALL.adw.y, s: WALL.adw.s };
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -80,27 +80,36 @@ export const ShuttleStormSponsors: React.FC = () => {
   const frame = useCurrentFrame();
 
   const cam = cameraAt(frame, [
-    { t: 0, x: 540, y: introY + 330, z: 1.06 },
+    { t: 0, x: 540, y: 960, z: 1.03 },
     { t: 30, x: 540, y: 960, z: 1 },
     { t: SPONSORS.duration, x: 540, y: 960, z: 1 },
   ]);
 
   const lede = ramp(frame, 6, 24);
-  const converge = ramp(frame, 30, 64);
-  const dock = ramp(frame, 98, 128);
-  const backTheStorm = ramp(frame, 132, 146);
-  const contact = ramp(frame, 136, 150);
-  const lockup = ramp(frame, 144, 158);
+  // Tiles converge staggered; ADW slides in on its own row.
+  const convergeAt = (i: number) => ramp(frame, 26 + i * 4, 56 + i * 4);
+  const converge = ramp(frame, 26, 60);
+  // The wall rises and tightens first; the ask then docks under it.
+  const dock = ramp(frame, 96, 118);
+  const askIn = interpolate(frame, [112, 132], [0, 1], { ...clamp, easing: Easing.out(Easing.quad) });
+  const backTheStorm = ramp(frame, 134, 148);
+  const contact = ramp(frame, 138, 152);
+  const lockup = ramp(frame, 146, 160);
 
   const placeTile = (i: number) => {
     const a = SCATTER[i];
     const b = WALL.tiles[i];
     const c = DOCKED.tiles[i];
-    const x = mix(mix(a.x, b.x, converge), c.x, dock);
-    const y = mix(mix(a.y, b.y, converge), c.y, dock);
-    const w = mix(mix(a.w, b.w, converge), c.w, dock);
+    const k = convergeAt(i);
+    const x = mix(mix(a.x, b.x, k), c.x, dock);
+    const y = mix(mix(a.y, b.y, k), c.y, dock);
+    const w = mix(mix(a.w, b.w, k), c.w, dock);
     return { x, y, w };
   };
+  const last = placeTile(5);
+  const wallBottom = last.y + last.w * TILE_RATIO;
+  // The ask never overlaps the wall: its top stays at least 30 px under it.
+  const askY = Math.max(interpolate(askIn, [0, 1], [1930, joinY]), wallBottom + 30);
   const adwX = mix(mix(ADW_SCATTER.x, (1080 - ADW.width * WALL.adw.s) / 2, converge), (1080 - ADW.width * DOCKED.adw.s) / 2, dock);
   const adwY = mix(mix(ADW_SCATTER.y, WALL.adw.y, converge), DOCKED.adw.y, dock);
   const adwS = mix(mix(ADW_SCATTER.s, WALL.adw.s, converge), DOCKED.adw.s, dock);
@@ -162,7 +171,7 @@ export const ShuttleStormSponsors: React.FC = () => {
           height={JOIN.height}
           scale={JOIN_S}
           x={joinX}
-          y={interpolate(dock, [0, 1], [2000, joinY], { ...clamp, easing: ease })}
+          y={askY}
           radius={6}
         >
           <Underline lines={sp.join.title} progress={backTheStorm} thickness={2.4} />
