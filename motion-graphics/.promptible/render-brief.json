@@ -1,7 +1,7 @@
 {
   "version": 3,
   "status": "AWAITING_CRITIC",
-  "createdAt": "2026-10-19T06:30:56.961Z",
+  "createdAt": "2026-10-19T06:37:01.915Z",
   "format": "9:16",
   "dimensions": {
     "width": 1080,
@@ -14,7 +14,7 @@
   "referenceVideoSha": "c8ee2b878406f42553acd43ed3cd4fb0de49f0fc2e4450bdeaaa05168122d2d1",
   "referenceSheetSha": "927371a077071145f840cfb44f57c4dfa51d5d175be56ce7c05c50b6c46f1672",
   "researchManifest": "/home/user/vite-react/motion-graphics/.promptible/research-manifest.json",
-  "researchManifestSha": "fc0fa965e9f3b5553dea4abc30d03d838a619248725afc0909ce9097168c342b",
+  "researchManifestSha": "d3cedc791a4a14f83332634d24df2c83a2052852757af3fd419d3bdd72a637e1",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26",
@@ -23,11 +23,11 @@
   "requestedDuration": 7,
   "referenceObservations": "/home/user/vite-react/motion-graphics/.promptible/reference-observations.md",
   "referenceObservationsSha": "2c1f1bf6670b34c9b724b133da1cd26098075b10987f3fa87402d60aee807270",
-  "referenceInspectedAt": "2026-10-19T06:30:57.081Z",
+  "referenceInspectedAt": "2026-10-19T06:37:01.993Z",
   "candidateRender": "/home/user/vite-react/motion-graphics/out/candidate.mp4",
-  "candidateRenderSha": "073e7c52a353d369ee99324aea458faba1c1439ed50d096bf6f641c981467132",
+  "candidateRenderSha": "017cb86dd353d98aee46fc9ef10685b7265515349386026cd2aac1c19213e30f",
   "candidateSheet": "/home/user/vite-react/motion-graphics/.promptible/candidate-contact-sheet.jpg",
-  "candidateSheetSha": "bc074edfa62e83b7324067323a79c6db4cabaa8d4c2750b337e8434ce9990a29",
+  "candidateSheetSha": "b7138628308b7036a6756c1e0bacaf6b724eeb95944a4dd1cd5482c5c8c141a8",
   "candidateProbe": "/home/user/vite-react/motion-graphics/.promptible/candidate-probe.json",
-  "candidateCreatedAt": "2026-10-19T06:30:57.760Z"
+  "candidateCreatedAt": "2026-10-19T06:37:02.656Z"
 }

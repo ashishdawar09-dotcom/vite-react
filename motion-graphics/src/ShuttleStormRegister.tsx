@@ -116,8 +116,8 @@ const tap = {
   x: SCREEN.x + (MENU_TEXT.x + MENU_TEXT.w * 0.55) * K,
   y: SCREEN.y + (MENU_TEXT.y + MENU_TEXT.h / 2) * K,
 };
-// Opening frame: the whole phone menu, from its header (mark + name) down.
-const menuFocus = { x: WIDTH / 2, y: PHONE.y - 10 + HEIGHT / 1.7 / 2 };
+// Opening frame: tight on "05 CATEGORIES" (numeral included), HOME to VENUE.
+const menuFocus = { x: SCREEN.x + 165 * K, y: tap.y - 6 * K };
 // Page frame: tight on the page's own claim and the first rows of its table
 // (CSS x 17–299, y 195–695), so the full eleven are only seen in the reveal.
 const pageFocus = { x: SCREEN.x + 158 * K, y: SCREEN.y + 445 * K };
@@ -125,10 +125,25 @@ const pageFocus = { x: SCREEN.x + 158 * K, y: SCREEN.y + 445 * K };
 const CLAIM = { x: 17.2, y: 271.1, w: 281.4, h: 19 };
 
 // Camera: hold → travel → hold. Repeated keys are holds.
-const KEY_T = [0, 18, 32, 60, 90, DURATION];
-const KEY_X = [menuFocus.x, menuFocus.x, pageFocus.x, pageFocus.x, WIDTH / 2, WIDTH / 2];
-const KEY_Y = [menuFocus.y, menuFocus.y, pageFocus.y, pageFocus.y, HEIGHT / 2, HEIGHT / 2];
-const KEY_Z = [1.7, 1.7, 2.75, 2.75, 1, 1];
+// The page hold is a slow push (2.6 → 2.85) rather than a static frame.
+const KEY_T = [0, 18, 32, 56, 86, DURATION];
+const KEY_X = [
+  menuFocus.x,
+  menuFocus.x,
+  pageFocus.x,
+  pageFocus.x,
+  WIDTH / 2,
+  WIDTH / 2,
+];
+const KEY_Y = [
+  menuFocus.y,
+  menuFocus.y,
+  pageFocus.y,
+  pageFocus.y,
+  HEIGHT / 2,
+  HEIGHT / 2,
+];
+const KEY_Z = [2.6, 2.6, 2.6, 2.85, 1, 1];
 
 export const ShuttleStormRegister: React.FC = () => {
   const frame = useCurrentFrame();
@@ -139,29 +154,47 @@ export const ShuttleStormRegister: React.FC = () => {
 
   // A fingertip lands on the real "05 Categories" link; the site's :active state
   // (menu.js: .ss-menu-list a:active{color:#D4FF3A}) turns its text volt.
-  const touchIn = interpolate(frame, [4, 9], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
+  const touchIn = interpolate(frame, [4, 9], [0, 1], {
+    ...clamp,
+    easing: Easing.out(Easing.cubic),
+  });
   const pressed = interpolate(frame, [9, 12, 16, 19], [0, 1, 1, 0], clamp);
   const touchVisible = frame >= 4 && frame < 20;
   const active = frame >= 11 && frame < 20 ? 1 : 0;
 
   // The link navigates: a clean cut to /categories; its own claim is underlined.
   const onCategories = frame >= 20;
-  const claimLine = interpolate(frame, [36, 50], [0, 1], { ...clamp, easing: ease });
+  const claimLine = interpolate(frame, [34, 46], [0, 1], {
+    ...clamp,
+    easing: ease,
+  });
 
   // The rows break out of the page together (no overlap) and, as the camera pulls
   // back, all eleven are revealed as a full-frame wall; the emptied phone shrinks
   // and drops out fast.
-  const lift = interpolate(frame, [60, 90], [0, 1], { ...clamp, easing: ease });
-  const phoneOut = interpolate(frame, [62, 76], [0, 1], {
+  const lift = interpolate(frame, [56, 86], [0, 1], { ...clamp, easing: ease });
+  const phoneOut = interpolate(frame, [58, 78], [0, 1], {
     ...clamp,
-    easing: Easing.in(Easing.cubic),
+    easing: ease,
   });
 
   // Lockup slides down into frame, the deadline card slides up, both opaque.
-  const lockupIn = interpolate(frame, [84, 100], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
-  const deadlineIn = interpolate(frame, [92, 108], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
-  const line1 = interpolate(frame, [110, 122], [0, 1], { ...clamp, easing: ease });
-  const line2 = interpolate(frame, [120, 128], [0, 1], { ...clamp, easing: ease });
+  const lockupIn = interpolate(frame, [80, 96], [0, 1], {
+    ...clamp,
+    easing: Easing.out(Easing.cubic),
+  });
+  const deadlineIn = interpolate(frame, [88, 104], [0, 1], {
+    ...clamp,
+    easing: Easing.out(Easing.cubic),
+  });
+  const line1 = interpolate(frame, [106, 118], [0, 1], {
+    ...clamp,
+    easing: ease,
+  });
+  const line2 = interpolate(frame, [116, 124], [0, 1], {
+    ...clamp,
+    easing: ease,
+  });
 
   const s = interpolate(lift, [0, 1], [K, WALL_S]);
 
@@ -187,13 +220,16 @@ export const ShuttleStormRegister: React.FC = () => {
             gap: 22,
           }}
         >
-          <Img src={staticFile("research/shuttle-storm-mark.svg")} style={{ width: 76, height: 76 }} />
+          <Img
+            src={staticFile("research/shuttle-storm-mark.svg")}
+            style={{ width: 76, height: 76 }}
+          />
           <div
             style={{
               fontFamily: ARCHIVO,
               fontWeight: 600,
               fontStretch: "125%",
-              fontSize: 34,
+              fontSize: 30,
               letterSpacing: "0.14em",
               color: INK,
               textTransform: "uppercase",
@@ -222,7 +258,9 @@ export const ShuttleStormRegister: React.FC = () => {
           }}
         >
           <span style={{ fontSize: 46, lineHeight: 1 }}>11</span>
-          <span style={{ fontSize: 22, letterSpacing: "0.16em", color: MUTED }}>CATEGORIES</span>
+          <span style={{ fontSize: 28, letterSpacing: "0.12em", color: MUTED }}>
+            CATEGORIES
+          </span>
         </div>
 
         {/* The phone: menu → categories page. */}
@@ -236,7 +274,8 @@ export const ShuttleStormRegister: React.FC = () => {
             borderRadius: 72,
             backgroundColor: DEVICE,
             transform: `translateY(${phoneOut * 2300}px) scale(${1 - 0.35 * phoneOut})`,
-            boxShadow: "0 40px 80px rgba(40, 32, 20, 0.16), 0 8px 18px rgba(40, 32, 20, 0.12)",
+            boxShadow:
+              "0 40px 80px rgba(40, 32, 20, 0.16), 0 8px 18px rgba(40, 32, 20, 0.12)",
           }}
         >
           <div
@@ -261,29 +300,54 @@ export const ShuttleStormRegister: React.FC = () => {
               }}
             >
               {onCategories ? (
-                lift > 0 ? null : (
-                  <div style={{ position: "absolute", width: CSS_W, height: CATEGORIES_PAGE_H }}>
-                    <Img
-                      src={staticFile("research/site-categories.png")}
-                      style={{ width: CSS_W, height: CATEGORIES_PAGE_H, display: "block" }}
-                    />
+                <div
+                  style={{
+                    position: "absolute",
+                    width: CSS_W,
+                    height: CATEGORIES_PAGE_H,
+                  }}
+                >
+                  <Img
+                    src={staticFile("research/site-categories.png")}
+                    style={{
+                      width: CSS_W,
+                      height: CATEGORIES_PAGE_H,
+                      display: "block",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: CLAIM.x,
+                      top: CLAIM.y + CLAIM.h - 1,
+                      width: CLAIM.w * claimLine,
+                      height: 1.6,
+                      backgroundColor: VOLT,
+                    }}
+                  />
+                  {/* Once the rows lift out, their slots in the page are left empty. */}
+                  {lift > 0 ? (
                     <div
                       style={{
                         position: "absolute",
-                        left: CLAIM.x,
-                        top: CLAIM.y + CLAIM.h - 1,
-                        width: CLAIM.w * claimLine,
-                        height: 1.6,
-                        backgroundColor: VOLT,
+                        left: 0,
+                        top: ROWS[0][0],
+                        width: CSS_W,
+                        height: ROWS[10][0] + ROWS[10][1] - ROWS[0][0],
+                        backgroundColor: SITE_INK,
                       }}
                     />
-                  </div>
-                )
+                  ) : null}
+                </div>
               ) : (
                 <>
                   <Img
                     src={staticFile("research/site-menu.png")}
-                    style={{ position: "absolute", width: CSS_W, height: CSS_H }}
+                    style={{
+                      position: "absolute",
+                      width: CSS_W,
+                      height: CSS_H,
+                    }}
                   />
                   {/* :active — the white link text turns volt (multiply keeps the ink black). */}
                   <div
@@ -315,8 +379,16 @@ export const ShuttleStormRegister: React.FC = () => {
                   key={i}
                   style={{
                     position: "absolute",
-                    left: interpolate(lift, [0, 1], [SCREEN.x + CROP_X * K, MARGIN]),
-                    top: interpolate(lift, [0, 1], [SCREEN.y + top * K, wallTops[i]]),
+                    left: interpolate(
+                      lift,
+                      [0, 1],
+                      [SCREEN.x + CROP_X * K, MARGIN],
+                    ),
+                    top: interpolate(
+                      lift,
+                      [0, 1],
+                      [SCREEN.y + top * K, wallTops[i]],
+                    ),
                     width: CROP_W * s,
                     height: h * s,
                     overflow: "hidden",
