@@ -30,7 +30,8 @@
     "render": "remotion render ShuttleStormRegister out/shuttle-storm-register-9x16.mp4",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
-    "capture-site": "node scripts/capture-site.mjs"
+    "capture-site": "node scripts/capture-site.mjs",
+    "render:all": "for id in ShuttleStormPromo ShuttleStormSponsors ShuttleStormPlayers ShuttleStormWebsite ShuttleStormRegister; do remotion render $id out/$id.mp4; done"
   },
   "allowScripts": {
     "esbuild": false

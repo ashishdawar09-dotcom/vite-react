@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "status": "AWAITING_CRITIC",
+  "createdAt": "2026-10-19T14:32:23.230Z",
+  "format": "9:16",
+  "dimensions": {
+    "width": 1080,
+    "height": 1920
+  },
+  "background": "clean-dark",
+  "referenceId": "openmontage-claude-pipeline",
+  "referenceVideo": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/openmontage-claude-pipeline.mp4",
+  "referenceSheet": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/openmontage-claude-pipeline-contact-sheet.jpg",
+  "referenceVideoSha": "3af51afa723465e1a074cacdb6a1a21fcce8d35d769d0d70ddb5e4d102f60a3b",
+  "referenceSheetSha": "6f74e579e0f64c134b546e28c92bcbad9c3c68fa6094055dc4b50fa700a5d7de",
+  "researchManifest": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/research-manifest.json",
+  "researchManifestSha": "a1bf9f932239a747c5a377477bbf7ab8285e00f3cddacc5823370831d566ac09",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26 players",
+  "claimSource": "user",
+  "beat": "Players: feather shuttles and great prizes; your day from registering online to semi-finals and finals; 11 categories, ages 8 to 50+; entries close Nov 18",
+  "requestedDuration": 10,
+  "referenceObservations": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/reference-observations.md",
+  "referenceObservationsSha": "a096532a81be7a1e551f38ae46250ef75816351bd45f8ac4ce2e9e28b496024a",
+  "referenceInspectedAt": "2026-10-19T14:32:23.347Z",
+  "candidateRender": "/home/user/vite-react/motion-graphics/out/players.mp4",
+  "candidateRenderSha": "6cd4bdf851896a41df10a63fa87093fe86cb8ba362b3fd703b3ca6b2105e6159",
+  "candidateSheet": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/candidate-contact-sheet.jpg",
+  "candidateSheetSha": "0d5fd9abfbc5cbe9cea5e175db457e53f0dc6703008db4982deb870100f5a742",
+  "candidateProbe": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/candidate-probe.json",
+  "candidateCreatedAt": "2026-10-19T14:32:24.471Z"
+}

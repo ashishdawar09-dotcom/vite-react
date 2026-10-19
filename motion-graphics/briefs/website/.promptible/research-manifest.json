@@ -1,0 +1,51 @@
+{
+  "version": 3,
+  "status": "RESEARCH_READY",
+  "createdAt": "2026-10-19T14:32:24.558Z",
+  "cacheKey": "5600c87faf8d4492a4756a1ea98cfb08f7ef0240db566633df7307384e17aeda",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26 website",
+  "referenceId": "kickbacks-same-run-editor",
+  "brief": "/home/user/vite-react/motion-graphics/briefs/website/.promptible/research-brief.md",
+  "briefSha": "fd2b30610e777025282ce2a3416897f45ed1ba82487a9f0cfbdc9abd07dff39d",
+  "sources": [
+    "https://shuttlestorm.adawar.org/",
+    "https://shuttlestorm.adawar.org/categories",
+    "https://shuttlestorm.adawar.org/register"
+  ],
+  "logos": [
+    {
+      "kind": "logo",
+      "path": "/home/user/vite-react/motion-graphics/public/research/shuttle-storm-mark.svg",
+      "sha256": "64b9e4f3eb2ded6cd3c6ab53fba6578771c831356e4c734664db87ac5ac90790",
+      "bytes": 683
+    }
+  ],
+  "surfaces": [
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-home-hero.png",
+      "sha256": "171c9a3352338c8b2362e4a07e5916c36fda634f8cc761ac2cbcc2cb0c584620",
+      "bytes": 952532
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-categories.png",
+      "sha256": "895d9e877dbcca0acc2af43f3898c0447ae3bdc7412ba272388f73bde8a05599",
+      "bytes": 737401
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-home-facts.png",
+      "sha256": "12eb89661ce2b04f65efb30b5d31721a9bcaef9b7c58bf986b7b7366d4d55eed",
+      "bytes": 295604
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-register.png",
+      "sha256": "3a35a137c370fba205031d7ef892c77aa0d84e8918b732cdf250ca359602b9e0",
+      "bytes": 311828
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "status": "AWAITING_CRITIC",
+  "createdAt": "2026-10-19T14:32:21.798Z",
+  "format": "9:16",
+  "dimensions": {
+    "width": 1080,
+    "height": 1920
+  },
+  "background": "clean-dark",
+  "referenceId": "openmontage-hook",
+  "referenceVideo": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/openmontage-hook.mp4",
+  "referenceSheet": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/openmontage-hook-contact-sheet.jpg",
+  "referenceVideoSha": "cd6f13666c7a812aa1114f004afc7131c5054a2f418d544d5f60a3788756418b",
+  "referenceSheetSha": "819b62a4edcd39a55671917a84334c000d124f60b3a7601d9b8f2b6fc1afc952",
+  "researchManifest": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/research-manifest.json",
+  "researchManifestSha": "ead3f1fac18977b226076d144f18ed004812ecc3e19e3e67ff639560f8f11072",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26 sponsors",
+  "claimSource": "user",
+  "beat": "Sponsors: local businesses back Shuttle Storm ’26 — presenting sponsor ADW and six supporters; Back the storm, call the tournament directors",
+  "requestedDuration": 9,
+  "referenceObservations": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/reference-observations.md",
+  "referenceObservationsSha": "0e03e4077bce24b64b43f68295ef4c11d2401082632eeeead201c50ee0de01bf",
+  "referenceInspectedAt": "2026-10-19T14:32:21.885Z",
+  "candidateRender": "/home/user/vite-react/motion-graphics/out/sponsors.mp4",
+  "candidateRenderSha": "c7b265eff8e208059523200f2dbf99defb6a0917f91710029c8018fe70c1d065",
+  "candidateSheet": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/candidate-contact-sheet.jpg",
+  "candidateSheetSha": "0e3625a0bec250dd5d85d154e2c740686ef3173852cc2cd12887fa63ba116f53",
+  "candidateProbe": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/candidate-probe.json",
+  "candidateCreatedAt": "2026-10-19T14:32:22.774Z"
+}

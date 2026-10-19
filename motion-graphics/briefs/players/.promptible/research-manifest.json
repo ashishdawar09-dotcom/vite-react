@@ -1,0 +1,44 @@
+{
+  "version": 3,
+  "status": "RESEARCH_READY",
+  "createdAt": "2026-10-19T14:32:22.888Z",
+  "cacheKey": "92157fb1c28853a5bb9e36ed33212c14859e44e54ac55f076919f26507d21d44",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26 players",
+  "referenceId": "openmontage-claude-pipeline",
+  "brief": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/research-brief.md",
+  "briefSha": "63e81e3bd830bb40403209d79e399742d4a5399a26bb99a901d951c0eb31e5f4",
+  "sources": [
+    "https://shuttlestorm.adawar.org/",
+    "https://shuttlestorm.adawar.org/register"
+  ],
+  "logos": [
+    {
+      "kind": "logo",
+      "path": "/home/user/vite-react/motion-graphics/public/research/shuttle-storm-mark.svg",
+      "sha256": "64b9e4f3eb2ded6cd3c6ab53fba6578771c831356e4c734664db87ac5ac90790",
+      "bytes": 683
+    }
+  ],
+  "surfaces": [
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-home-everypoint.png",
+      "sha256": "221adfd1b6fd6d74caae195bc04b6f9b567f2f48b8780431178ab1cfe3a873c3",
+      "bytes": 621856
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-home-facts.png",
+      "sha256": "12eb89661ce2b04f65efb30b5d31721a9bcaef9b7c58bf986b7b7366d4d55eed",
+      "bytes": 295604
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-register-day.png",
+      "sha256": "eee4aebeaa136b1026d626c078b038fa57520fb9cb1b1992cc51575c172c28ad",
+      "bytes": 296270
+    }
+  ]
+}

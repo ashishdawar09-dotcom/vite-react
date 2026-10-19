@@ -1,0 +1,67 @@
+{
+  "version": 3,
+  "status": "RESEARCH_READY",
+  "createdAt": "2026-10-19T14:32:21.536Z",
+  "cacheKey": "7b11dc9ef57cd881fb144f18ed23f1e0aa14817de59597aba34eb7ccb6191a37",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26 sponsors",
+  "referenceId": "openmontage-hook",
+  "brief": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/research-brief.md",
+  "briefSha": "c3a7ce66119c1ef30e619631c38711afc0e3c130da1e7a52327e4a49da4f690d",
+  "sources": [
+    "https://shuttlestorm.adawar.org/sponsors"
+  ],
+  "logos": [
+    {
+      "kind": "logo",
+      "path": "/home/user/vite-react/motion-graphics/public/research/shuttle-storm-mark.svg",
+      "sha256": "64b9e4f3eb2ded6cd3c6ab53fba6578771c831356e4c734664db87ac5ac90790",
+      "bytes": 683
+    }
+  ],
+  "surfaces": [
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsors-intro.png",
+      "sha256": "a02bec12a6e553278ebc94b514a73e16ee2f3dbf5b9d0d3caccde83ff4c78b5c",
+      "bytes": 88386
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsors-adw.png",
+      "sha256": "869193c27006ab9388d80c4aeba119900e9f585093cfbc40472b196b2791460d",
+      "bytes": 587349
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsors-join.png",
+      "sha256": "b5f59a75cab8e6e1470c052f8109f4e4643554bfc84461e5cb522329df1b03a9",
+      "bytes": 103647
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsor-kirti.png",
+      "sha256": "6d42284f9812a37ab202d68351c995bb974abcf4ccd1d4e52ede8e3d7c8fec05",
+      "bytes": 102084
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsor-novelty.png",
+      "sha256": "f8e4c446e0c95eacf8f8a4c27198955834e474e6f741a92925f7336a9b461d64",
+      "bytes": 115875
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsor-pizza.png",
+      "sha256": "6373e548710f3ff1e9f1985fec59614d951fe57b439a9b2098e3fb8a17d80a7b",
+      "bytes": 105784
+    },
+    {
+      "kind": "surface",
+      "path": "/home/user/vite-react/motion-graphics/public/research/site-sponsor-polly.png",
+      "sha256": "df7c88123accdc21228ad83f49cdfaddacba7f12bce6bc56d70eddceac56ede8",
+      "bytes": 112847
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "status": "AWAITING_CRITIC",
+  "createdAt": "2026-10-19T14:32:24.662Z",
+  "format": "16:9",
+  "dimensions": {
+    "width": 1920,
+    "height": 1080
+  },
+  "background": "clean-dark",
+  "referenceId": "kickbacks-same-run-editor",
+  "referenceVideo": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/kickbacks-same-run-editor.mp4",
+  "referenceSheet": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/kickbacks-same-run-editor-contact-sheet.jpg",
+  "referenceVideoSha": "046ead08cd510826973e8a020e092239095ab4a414982ffbec7117a4bc515172",
+  "referenceSheetSha": "4d65cc76e13c0032f30207ece0a1660ef65f1ff74fc729d05070dd0de62710b8",
+  "researchManifest": "/home/user/vite-react/motion-graphics/briefs/website/.promptible/research-manifest.json",
+  "researchManifestSha": "f0987c2b04c02d4372cdf7211200d8375e41c7623b521456228234ca9eaf21b0",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26 website",
+  "claimSource": "user",
+  "beat": "Website film (16:9, 15 s) for the home page's 'Watch the storm' slot: Sat Nov 21 at UFV North Gym; 11 categories, juniors to masters; feather shuttles, great prizes; 0–40, entries close Nov 18",
+  "requestedDuration": 15,
+  "referenceObservations": "/home/user/vite-react/motion-graphics/briefs/website/.promptible/reference-observations.md",
+  "referenceObservationsSha": "7562e248d0d6abe01218287cf5ca6959a789b5252c775f9da3d7ac5382d90257",
+  "referenceInspectedAt": "2026-10-19T14:32:24.761Z",
+  "candidateRender": "/home/user/vite-react/motion-graphics/out/website.mp4",
+  "candidateRenderSha": "c4ab02e85b0349b3d7490f60c58dce9c2badc242380443c4880d9fb453bb364d",
+  "candidateSheet": "/home/user/vite-react/motion-graphics/briefs/website/.promptible/candidate-contact-sheet.jpg",
+  "candidateSheetSha": "fb8182bf899e1b40e1c96225bc1c0231a7f39822d6454497c4b9e48668d169e3",
+  "candidateProbe": "/home/user/vite-react/motion-graphics/briefs/website/.promptible/candidate-probe.json",
+  "candidateCreatedAt": "2026-10-19T14:32:26.001Z"
+}
