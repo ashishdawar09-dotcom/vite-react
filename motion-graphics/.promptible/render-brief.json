@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "status": "AWAITING_CRITIC",
+  "createdAt": "2026-10-19T06:02:23.653Z",
+  "format": "9:16",
+  "dimensions": {
+    "width": 1080,
+    "height": 1920
+  },
+  "background": "warm-light",
+  "referenceId": "tsenta-one-click-wall",
+  "referenceVideo": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/tsenta-one-click-wall.mp4",
+  "referenceSheet": "/home/user/vite-react/.claude/skills/motion-graphics/assets/references/tsenta-one-click-wall-contact-sheet.jpg",
+  "referenceVideoSha": "c8ee2b878406f42553acd43ed3cd4fb0de49f0fc2e4450bdeaaa05168122d2d1",
+  "referenceSheetSha": "927371a077071145f840cfb44f57c4dfa51d5d175be56ce7c05c50b6c46f1672",
+  "researchManifest": "/home/user/vite-react/motion-graphics/.promptible/research-manifest.json",
+  "researchManifestSha": "592b3aecc59eb35ebe243709d00de5a962cd36dbc94b6e22a89bae7968cac55c",
+  "researchMode": "authentic",
+  "visualMode": "product-ui",
+  "product": "Shuttle Storm ’26",
+  "claimSource": "user",
+  "beat": "One tap on Categories in the site menu opens eleven categories, juniors to masters; entries close Nov 18",
+  "requestedDuration": 7,
+  "referenceObservations": "/home/user/vite-react/motion-graphics/.promptible/reference-observations.md",
+  "referenceObservationsSha": "2c1f1bf6670b34c9b724b133da1cd26098075b10987f3fa87402d60aee807270",
+  "referenceInspectedAt": "2026-10-19T06:02:23.737Z",
+  "candidateRender": "/home/user/vite-react/motion-graphics/out/candidate.mp4",
+  "candidateRenderSha": "4bf5e5733a5f7568131d5f8840f8f34abe7ccc7cdf712bf35556288fdf1661d8",
+  "candidateSheet": "/home/user/vite-react/motion-graphics/.promptible/candidate-contact-sheet.jpg",
+  "candidateSheetSha": "a44afbc93283f38037ec6aa6db1da0b63dcc6253ca281435b1664b22e1ffd773",
+  "candidateProbe": "/home/user/vite-react/motion-graphics/.promptible/candidate-probe.json",
+  "candidateCreatedAt": "2026-10-19T06:03:11.210Z"
+}

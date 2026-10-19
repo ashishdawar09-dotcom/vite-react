@@ -11,7 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
-.claude/
+.claude/*
+# Shared agent skills (Remotion motion graphics) are committed; other local Claude state stays ignored
+!.claude/skills/
 
 # Editor directories and files
 .vscode/*
