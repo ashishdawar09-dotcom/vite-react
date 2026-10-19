@@ -15,6 +15,7 @@ import { ShuttleSVG } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
 import { toast } from "./components/Toast";
 import { byeAdvances, defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
+import { planSinglesDraw } from "./lib/pairing";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { AppFooter } from "./components/AppFooter";
 import { MoreDrawer, type TabId } from "./components/MoreDrawer";
@@ -76,6 +77,8 @@ export default function App() {
   // match slot when set. null = closed.
   const [promotePickerFor, setPromotePickerFor] = useState<{ matchId: string; side: "a" | "b" } | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Blocks a second Start Group Stage tap while the first is still writing.
+  const startingGroupStage = useRef(false);
 
   // Navigate to a specific player's profile from anywhere (search, etc.).
   const showProfile = (playerId: string) => {
@@ -153,6 +156,9 @@ export default function App() {
     active,
     paired,
     unpaired,
+    partnerNeedsByPlayer,
+    unpairedCountByCategory,
+    singlesEntrants,
     invalidTeamsInCategory,
     numCourts,
     projectedMatches,
@@ -220,38 +226,23 @@ export default function App() {
     const url = await db.uploadPlayerPhoto(id, f);
     await db.updatePlayer(id, { photo_url: url });
   };
-  const openPartnerPicker = (pid: string) => {
+  // Partners are only chosen in doubles categories. From the "All" view the
+  // caller passes the doubles category; we switch to it so the picker lists
+  // that category's unpaired players. Singles players are never paired:
+  // they're entered on their own when the group stage starts.
+  const openPartnerPicker = (pid: string, categoryId?: string) => {
     if (!guard()) return;
-    if (!currentCategoryId || !currentCategory) { toast("Select a specific category first (not 'All') to pair teams.", "warn"); return; }
-    if (currentCategory.team_size === 1) {
-      // For singles, just create a 1-player team
-      void createSoloTeam(pid);
-      return;
-    }
+    const catId = categoryId ?? currentCategoryId;
+    const cat = catId ? catById[catId] : null;
+    if (!catId || !cat) { toast("Select a specific category first (not 'All') to pair teams.", "warn"); return; }
+    if (cat.team_size !== 2) return;
+    if (catId !== currentCategoryId) setCurrentCategoryId(catId);
     setPartnerPicker(pid);
-  };
-  const createSoloTeam = async (pid: string) => {
-    if (!current || !currentCategoryId) return;
-    await db.createTeam(current.id, currentCategoryId, pid, null, teamsView.length);
   };
   const assignPartner = async (p1Id: string, p2Id: string) => {
     if (!current || !currentCategoryId) return;
     await db.createTeam(current.id, currentCategoryId, p1Id, p2Id, teamsView.length);
     setPartnerPicker(null);
-  };
-  const autoGen = async () => {
-    if (!guard() || !current || !currentCategory || !currentCategoryId) return;
-    const sh = shuffle(unpaired);
-    let order = teamsView.length;
-    if (currentCategory.team_size === 1) {
-      for (const p of sh) {
-        await db.createTeam(current.id, currentCategoryId, p.id, null, order++);
-      }
-    } else {
-      for (let i = 0; i + 1 < sh.length; i += 2) {
-        await db.createTeam(current.id, currentCategoryId, sh[i].id, sh[i + 1].id, order++);
-      }
-    }
   };
 
   const startGroupStage = async (override?: { groupsCount: number; topNAdvance: number; roundsPerPair: number }) => {
@@ -259,11 +250,15 @@ export default function App() {
     const cat = categories.find(c => c.id === currentCategoryId);
     if (!cat) return;
 
+    // Singles: every active player in the category is entered on their own.
+    // Doubles: the teams formed on the Players tab.
+    const isSingles = cat.team_size === 1;
+
     // Resolution order for format params:
     //   1. Explicit override from the Teams tab format-card click (most authoritative)
     //   2. The category's saved values (groups_count > 0 / top_n_advance > 0)
     //   3. Planner default for the current team count
-    const N = teamsView.length;
+    const N = isSingles ? singlesEntrants.length : teamsView.length;
     let groupsCount = override?.groupsCount ?? cat.groups_count ?? 0;
     let topNAdvance = override?.topNAdvance ?? cat.top_n_advance ?? 0;
     const roundsPerPair = override?.roundsPerPair ?? pendingRounds;
@@ -278,20 +273,52 @@ export default function App() {
       if (topNAdvance <= 0) topNAdvance = plan.topNAdvance;
     }
 
-    // Persist the choices so the knockout stage reads the same values.
-    await db.updateCategory(currentCategoryId, {
-      rounds_per_pair: roundsPerPair,
-      groups_count: groupsCount,
-      top_n_advance: topNAdvance,
-    });
-
-    if (groupsCount === 0 || groupSizes.length === 0) {
-      toast("Too few teams to start a tournament. Add more teams first.", "warn");
+    // Checked before anything is written.
+    if (N < 2 || groupsCount === 0 || groupSizes.length === 0) {
+      toast(isSingles
+        ? "Too few players to start. At least 2 active players are needed."
+        : "Too few teams to start a tournament. Add more teams first.", "warn");
       return;
     }
+    if (startingGroupStage.current) return;
+    startingGroupStage.current = true;
+    try {
+      // Singles: give each entrant a one-player team, reusing any they
+      // already have, so nobody is entered twice.
+      let entrants: TeamView[] = teamsView;
+      if (isSingles) {
+        const { existing, toCreate } = planSinglesDraw(singlesEntrants.map(p => p.id), teamsView);
+        const entrantById = new Map(singlesEntrants.map(p => [p.id, p]));
+        const created = await db.createSoloTeams(
+          current.id,
+          currentCategoryId,
+          toCreate.map(id => entrantById.get(id)!),
+          teamsView.length,
+        );
+        entrants = [
+          ...existing,
+          ...created.map(t => ({ ...t, p1: entrantById.get(t.p1_id)!, p2: null })),
+        ];
+      }
 
+      // Persist the choices so the knockout stage reads the same values.
+      await db.updateCategory(currentCategoryId, {
+        rounds_per_pair: roundsPerPair,
+        groups_count: groupsCount,
+        top_n_advance: topNAdvance,
+      });
+
+      await insertGroupStage(entrants, groupsCount, groupSizes, roundsPerPair);
+    } finally {
+      startingGroupStage.current = false;
+    }
+  };
+
+  // Writes the round-robin matches for the given entrants and opens the Groups tab.
+  const insertGroupStage = async (entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number) => {
+    if (!current || !currentCategoryId) return;
     // Distribute shuffled teams across groups by explicit sizes.
-    const sh = shuffle(teamsView);
+    const sh = shuffle(entrants);
     const gs: TeamView[][] = [];
     let idx = 0;
     for (let g = 0; g < groupsCount; g++) {
@@ -625,16 +652,17 @@ export default function App() {
   // Sync selected format card to whatever the category has saved (or default
   // to "Recommended" if there's no saved match). Re-runs when team count
   // changes (which can change the available options).
+  const entrantCount = currentCategory?.team_size === 1 && currentCategory.phase === "none" ? singlesEntrants.length : teamsView.length;
   useEffect(() => {
-    if (!currentCategory || teamsView.length < 2) return;
-    const opts = recommendFormats(teamsView.length);
+    if (!currentCategory || entrantCount < 2) return;
+    const opts = recommendFormats(entrantCount);
     const match = opts.find(o =>
       o.groupsCount === currentCategory.groups_count &&
       o.topNAdvance === currentCategory.top_n_advance &&
       o.roundsPerPair === currentCategory.rounds_per_pair,
     );
     setSelectedFormatLabel(match?.label ?? "Recommended");
-  }, [currentCategory?.id, currentCategory?.groups_count, currentCategory?.top_n_advance, currentCategory?.rounds_per_pair, teamsView.length]);
+  }, [currentCategory?.id, currentCategory?.groups_count, currentCategory?.top_n_advance, currentCategory?.rounds_per_pair, entrantCount]);
 
   const btn = (bg = "#3A86FF", clr = "#fff"): React.CSSProperties => ({ background: bg, color: clr, border: "none", borderRadius: 10, padding: "10px 20px", cursor: "pointer", fontWeight: 600, fontSize: 14, transition: "all .2s", boxShadow: `0 2px 8px ${bg}33` });
   const tabBtn = (t: typeof tab, label: string, icon: string) => {
@@ -875,7 +903,8 @@ export default function App() {
             handleDeletePlayer={handleDeletePlayer}
             handlePhoto={handlePhoto}
             openPartnerPicker={openPartnerPicker}
-            autoGen={autoGen}
+            partnerNeedsByPlayer={partnerNeedsByPlayer}
+            unpairedCountByCategory={unpairedCountByCategory}
             fileRefs={fileRefs}
             paired={paired}
             unpaired={unpaired}
@@ -937,6 +966,7 @@ export default function App() {
             currentCategory={currentCategory ?? null}
             catById={catById}
             teamsView={teamsView}
+            singlesEntrants={singlesEntrants}
             invalidTeamsInCategory={invalidTeamsInCategory}
             phase={phase}
             isAdmin={isAdmin}

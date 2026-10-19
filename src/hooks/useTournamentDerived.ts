@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useScheduling } from "./useScheduling";
+import { partnerNeeds } from "../lib/pairing";
 import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
 
 export type TeamView = Team & { p1: Player; p2: Player | null };
@@ -182,9 +183,32 @@ export function useTournamentDerived(
     () => new Set(teamsView.flatMap(t => [t.p1_id, t.p2_id]).filter((id): id is string => id !== null)),
     [teamsView],
   );
-  const unpaired = useMemo(
-    () => active.filter(p => !paired.has(p.id)),
-    [active, paired],
+  // Doubles categories each active player still needs a partner in. Singles
+  // players never appear: they're entered alone at group-stage start.
+  const partnerNeedsByPlayer = useMemo(
+    () => partnerNeeds(players, playerCategoryMap, categories, teams),
+    [players, playerCategoryMap, categories, teams],
+  );
+  const unpairedCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const cids of partnerNeedsByPlayer.values()) {
+      for (const cid of cids) counts.set(cid, (counts.get(cid) ?? 0) + 1);
+    }
+    return counts;
+  }, [partnerNeedsByPlayer]);
+
+  // Players who still need a partner. In a singles category nobody does; in
+  // "All" it's anyone missing a partner in at least one doubles category.
+  const unpaired = useMemo(() => {
+    if (!currentCategoryId) return active.filter(p => partnerNeedsByPlayer.has(p.id));
+    if (currentCategory?.team_size === 1) return [];
+    return active.filter(p => !paired.has(p.id));
+  }, [active, paired, currentCategoryId, currentCategory, partnerNeedsByPlayer]);
+
+  // Everyone who'll be entered when a singles category's group stage starts.
+  const singlesEntrants = useMemo(
+    () => currentCategory?.team_size === 1 ? active : [],
+    [currentCategory, active],
   );
 
   // Teams currently in the viewed category whose players don't all belong
@@ -228,6 +252,9 @@ export function useTournamentDerived(
     active,
     paired,
     unpaired,
+    partnerNeedsByPlayer,
+    unpairedCountByCategory,
+    singlesEntrants,
     invalidTeamsInCategory,
     // scheduling pass-through (single source of truth for projected match
     // wall-clocks, court allocation, and overall tournament-delta state).

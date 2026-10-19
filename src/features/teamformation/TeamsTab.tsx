@@ -1,7 +1,7 @@
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { Av } from "../../components/ui";
 import { recommendFormats, describeFormat, type FormatPlan } from "../../lib/formatPlanner";
-import type { Category, TeamWithPlayers, Tournament } from "../../types";
+import type { Category, Player, TeamWithPlayers, Tournament } from "../../types";
 
 /**
  * Team formation + tournament format chooser.
@@ -15,6 +15,10 @@ import type { Category, TeamWithPlayers, Tournament } from "../../types";
  *      cards (Recommended / More games / Compact / Super / Ultra Compact) leading to a
  *      "Start Group Stage" CTA.
  *
+ * Singles categories before the group stage list every active player in
+ * the category instead: they are all entered when the stage starts, so
+ * there is no pairing step and no per-player remove (use Sit Out).
+ *
  * There is deliberately no reset button: wiping teams and matches is done
  * by hand on request, never from the app.
  */
@@ -26,6 +30,7 @@ export function TeamsTab({
   currentCategory,
   catById,
   teamsView,
+  singlesEntrants,
   invalidTeamsInCategory,
   phase,
   isAdmin,
@@ -43,6 +48,7 @@ export function TeamsTab({
   currentCategory: Category | null;
   catById: Record<string, Category | undefined>;
   teamsView: TeamWithPlayers[];
+  singlesEntrants: Player[];
   invalidTeamsInCategory: TeamWithPlayers[];
   phase: "none" | "group" | "knockout";
   isAdmin: boolean;
@@ -53,7 +59,11 @@ export function TeamsTab({
   onStartGroupStage: (override?: { groupsCount: number; topNAdvance: number; roundsPerPair: number }) => void;
   btn: (bg?: string, clr?: string) => React.CSSProperties;
 }) {
-  const formatOptions = teamsView.length >= 2 ? recommendFormats(teamsView.length) : [];
+  const singlesDraw = currentCategory?.team_size === 1 && phase === "none";
+  const cards = singlesDraw
+    ? singlesEntrants.map(p => ({ key: p.id, teamId: null, category_id: currentCategory.id, p1: p, p2: null }))
+    : teamsView.map(t => ({ key: t.id, teamId: t.id, category_id: t.category_id, p1: t.p1, p2: t.p2 }));
+  const formatOptions = cards.length >= 2 ? recommendFormats(cards.length) : [];
   const selectedPlan = formatOptions.find(o => o.label === selectedFormatLabel) ?? formatOptions[0];
   const courts = Math.max(1, tournament.num_courts || 1);
   const matchMinutes = currentCategory?.match_minutes ?? 12;
@@ -83,7 +93,7 @@ export function TeamsTab({
               ⚠ {invalidTeamsInCategory.length} invalid team{invalidTeamsInCategory.length === 1 ? "" : "s"} detected
             </div>
             <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.4 }}>
-              {invalidTeamsInCategory.length === 1 ? "One team has" : "These teams have"} a player who isn't assigned to <strong>{currentCategory?.name ?? "this category"}</strong>. Likely from an Auto-Pair bug now fixed. Clean them up to restore correct counts.
+              {invalidTeamsInCategory.length === 1 ? "One team has" : "These teams have"} a player who isn't assigned to <strong>{currentCategory?.name ?? "this category"}</strong>. Clean them up to restore correct counts.
             </div>
           </div>
           <button
@@ -96,16 +106,16 @@ export function TeamsTab({
         </div>
       )}
 
-      {teamsView.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 50, color: "#94a3b8" }}><p>No teams yet.</p></div>
+      {cards.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 50, color: "#94a3b8" }}><p>{singlesDraw ? "No active players in this category yet." : "No teams yet."}</p></div>
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
-            {teamsView.map((t, i) => (
-              <div key={t.id} style={{ background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e8ecf1", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden" }}>
+            {cards.map((t, i) => (
+              <div key={t.key} style={{ background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e8ecf1", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, background: `linear-gradient(90deg,${t.p1.color},${t.p2?.color ?? t.p1.color})` }} />
-                {isAdmin && phase === "none" && (
-                  <button onClick={() => removeTeam(t.id)} title="Remove team" style={{ position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: "50%", border: "none", background: "#fef2f2", color: "#dc2626", cursor: "pointer", fontSize: 16, fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                {isAdmin && phase === "none" && t.teamId && (
+                  <button onClick={() => removeTeam(t.teamId)} title="Remove team" style={{ position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: "50%", border: "none", background: "#fef2f2", color: "#dc2626", cursor: "pointer", fontSize: 16, fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
                 )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <span style={{ fontWeight: 800, fontSize: 12, color: "#3A86FF", textTransform: "uppercase", letterSpacing: 2 }}>
@@ -133,12 +143,12 @@ export function TeamsTab({
             ))}
           </div>
 
-          {isAdmin && teamsView.length >= 2 && phase === "none" && formatOptions.length > 0 && (
+          {isAdmin && cards.length >= 2 && phase === "none" && formatOptions.length > 0 && (
             <div style={{ marginTop: 32, padding: "26px 28px", background: "linear-gradient(135deg,#1a1a2e,#2d3a5c)", borderRadius: 18, color: "#fff" }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
                 <div>
                   <div className="font-display" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2.5, color: "#93c5fd", textTransform: "uppercase", marginBottom: 4 }}>Tournament Format</div>
-                  <div style={{ fontSize: 14, color: "#cbd5e1" }}>Choose how the {teamsView.length} teams will compete.</div>
+                  <div style={{ fontSize: 14, color: "#cbd5e1" }}>Choose how the {cards.length} {singlesDraw ? "players" : "teams"} will compete.</div>
                 </div>
                 <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "right", lineHeight: 1.6 }}>
                   Estimates assume<br />{courts} court{courts === 1 ? "" : "s"} · {matchMinutes} min/match
@@ -179,6 +189,11 @@ export function TeamsTab({
                 })}
               </div>
 
+              {singlesDraw && (
+                <div style={{ fontSize: 13, color: "#cbd5e1", marginBottom: 12, textAlign: "center" }}>
+                  All {cards.length} active players will be entered. To leave someone out, use Sit Out on the Players tab.
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <button onClick={handleStart} style={{ ...btn("#84cc16"), padding: "16px 44px", fontSize: 17, borderRadius: 14, fontWeight: 800 }}>
                   📊 Start Group Stage

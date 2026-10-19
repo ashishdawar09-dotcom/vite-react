@@ -336,6 +336,22 @@ export async function createTeam(
   if (error) throw error;
 }
 
+/** One-player teams for a singles draw, inserted in one batch. Returns the new rows. */
+export async function createSoloTeams(
+  tournament_id: string,
+  category_id: string,
+  players: { id: string; name: string }[],
+  first_sort_order: number,
+): Promise<Team[]> {
+  if (!players.length) return [];
+  const rows = players.map((p, i) => ({
+    tournament_id, category_id, p1_id: p.id, p2_id: null, sort_order: first_sort_order + i, name: p.name,
+  }));
+  const { data, error } = await supabase.from("teams").insert(rows).select();
+  if (error) throw error;
+  return (data ?? []) as Team[];
+}
+
 export async function deleteTeam(id: string) {
   const { error } = await supabase.from("teams").delete().eq("id", id);
   if (error) throw error;
