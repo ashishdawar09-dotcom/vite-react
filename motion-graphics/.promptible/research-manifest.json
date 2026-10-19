@@ -1,14 +1,14 @@
 {
   "version": 3,
   "status": "RESEARCH_READY",
-  "createdAt": "2026-10-19T06:25:20.380Z",
-  "cacheKey": "acc711d3b4318b83962e6a58f8d25cb5efb49113451ba19746b88fd2450d672c",
+  "createdAt": "2026-10-19T06:30:56.868Z",
+  "cacheKey": "acaeb9e585dabee97c74489966670f9b151ad18e6e06ca97e093196c77d8b43c",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26",
   "referenceId": "tsenta-one-click-wall",
   "brief": "/home/user/vite-react/motion-graphics/.promptible/research-brief.md",
-  "briefSha": "77eacdb541ed02e9561afe034fbbbdb5ec49daebd0fef2aa813c1da532d30453",
+  "briefSha": "6c8dbf65b7ae4f2187c4ea79af5ff6a3c4c9d38a39572d122c18ae1e7bbc69ca",
   "sources": [
     "https://shuttlestorm.adawar.org/",
     "https://shuttlestorm.adawar.org/categories",
