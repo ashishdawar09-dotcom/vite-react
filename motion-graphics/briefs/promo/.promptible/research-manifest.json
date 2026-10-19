@@ -1,14 +1,14 @@
 {
   "version": 3,
   "status": "RESEARCH_READY",
-  "createdAt": "2026-10-19T18:37:51.176Z",
-  "cacheKey": "5e50b12c461879879ddae295fc3d04f4659e4e41d86a7e738d738387de3dcaf3",
+  "createdAt": "2026-10-19T18:43:37.169Z",
+  "cacheKey": "369e72ff06052d1cd2aac32e13aeb05bc64e0a294292893c3d96f7183d709577",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26 promo",
   "referenceId": "kickbacks-same-run-editor",
   "brief": "/home/user/vite-react/motion-graphics/briefs/promo/.promptible/research-brief.md",
-  "briefSha": "6e9916e4bcc5473d9d79a9bbbffc83e2826bfce79325a69b0eb87ecb1d570dfe",
+  "briefSha": "e6970bc5410308174c731b30b7df93177c8b5df0fb43afa350e845c1bbe21c7d",
   "sources": [
     "https://shuttlestorm.adawar.org/",
     "https://shuttlestorm.adawar.org/register"

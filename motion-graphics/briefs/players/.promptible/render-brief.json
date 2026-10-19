@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "status": "AWAITING_CRITIC",
+  "status": "DELIVERY_AUTHORIZED",
   "createdAt": "2026-10-19T18:37:52.036Z",
   "format": "9:16",
   "dimensions": {
@@ -29,5 +29,9 @@
   "candidateSheet": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/candidate-contact-sheet.jpg",
   "candidateSheetSha": "d2746548827bbd1416799502d2eba7c42c5e08a7e25e3b38bfd1d9ca262e1dba",
   "candidateProbe": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/candidate-probe.json",
-  "candidateCreatedAt": "2026-10-19T18:37:52.764Z"
+  "candidateCreatedAt": "2026-10-19T18:37:52.764Z",
+  "deliveryAuthorizedAt": "2026-10-19T18:42:32.438Z",
+  "critic": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/critic.json",
+  "criticSha": "418fad778c2a5a980866a64386398d3d41e7aa08eec71ec790ff6c1a8b0664ff",
+  "scoreAverage": 8.5
 }

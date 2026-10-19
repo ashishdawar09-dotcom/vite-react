@@ -46,7 +46,9 @@ const OPEN_Z = 0.95;
 const heroFocus = { x: 540, y: 1010 };
 // Push in on "Saturday, November 21", then ease back to the full ages sentence.
 const date = m.homeHero.date[0];
-const dateFocus = { x: atX(date.x + date.w / 2), y: at(heroY, HERO.top, date.y + date.h / 2) };
+// Pivot so the hero's left text edge stays in frame at 1.3×.
+const DATE_Z = 1.3;
+const dateFocus = { x: atX(18) + 540 / DATE_Z - 24, y: at(heroY, HERO.top, date.y + date.h / 2) };
 const paraFocus = { x: atX(205), y: at(heroY, HERO.top, 737) };
 
 // The "$30–40" numeral wraps onto two lines; each line gets its own mark at
@@ -54,7 +56,7 @@ const paraFocus = { x: atX(205), y: at(heroY, HERO.top, 737) };
 const NUM_MARKS = m.homeNumbers.numeralText.map((n, i) =>
   i === 3
     ? [
-        { x: n.x + 2, y: 401.5, w: 135 },
+        { x: n.x + 2, y: 399, w: 135 },
         { x: n.x + 2, y: 449, w: 68 },
       ]
     : [{ x: n.x, y: n.y + n.h - 4, w: n.w }],
@@ -64,13 +66,14 @@ const NUM_MARKS = m.homeNumbers.numeralText.map((n, i) =>
 // rule of the deadline and address, over the site film's lockup. The final
 // frame holds the whole numbers card above it, so the stack reads as one page.
 const RULE_X = atX(25);
-const endTop = numbersBottom + 110;
-const urlTop = endTop + 200;
-const ruleEnd = urlTop + 56;
-const lockupTop = ruleEnd + 120;
-const endBottom = lockupTop + 275;
+const endTop = numbersBottom + 80;
+const urlTop = endTop + 190;
+const ruleEnd = urlTop + 58;
+const lockupTop = ruleEnd + 90;
+const endBottom = lockupTop + 330;
+const END_Z = 0.96;
 // Nudged down so the statement card above stays just out of frame.
-const endCenter = (numbersY + endBottom) / 2 + 32;
+const endCenter = (numbersY + endBottom) / 2 + 80;
 
 export const ShuttleStormPromo: React.FC = () => {
   const frame = useCurrentFrame();
@@ -78,17 +81,19 @@ export const ShuttleStormPromo: React.FC = () => {
   const cam = cameraAt(frame, [
     { t: 0, ...heroFocus, z: OPEN_Z },
     { t: 8, ...heroFocus, z: OPEN_Z + 0.01 },
-    { t: 26, ...dateFocus, z: 1.5 },
-    { t: 40, ...dateFocus, z: 1.5 },
+    { t: 26, ...dateFocus, z: DATE_Z },
+    { t: 40, ...dateFocus, z: DATE_Z },
     { t: 52, ...paraFocus, z: 1.1 },
     { t: 66, ...paraFocus, z: 1.1 },
     { t: 86, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
     { t: 102, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
-    { t: 120, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
-    { t: 138, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
+    // The card sits low in frame, under the statement's last lines, so the
+    // rule has room to leave it.
+    { t: 120, x: 540, y: numbersY + (NUMBERS.height * S) / 2 - 200, z: 1.08 },
+    { t: 138, x: 540, y: numbersY + (NUMBERS.height * S) / 2 - 200, z: 1.08 },
     // The camera rides down with the rule's head.
-    { t: 164, x: 540, y: endCenter, z: 1 },
-    { t: PROMO.duration, x: 540, y: endCenter, z: 1 },
+    { t: 164, x: 540, y: endCenter, z: END_Z },
+    { t: PROMO.duration, x: 540, y: endCenter, z: END_Z },
   ]);
 
   const dateMark = ramp(frame, 26, 38);
@@ -98,7 +103,8 @@ export const ShuttleStormPromo: React.FC = () => {
   const rule = ramp(frame, 136, 162);
   const endLines = [0, 1].map((i) => ramp(frame, 146 + i * 6, 162 + i * 6));
   const url = ramp(frame, 166, 176);
-  const lockup = ramp(frame, 164, 182);
+  // The lockup rises on the same curve as the rule's descent.
+  const lockup = ramp(frame, 152, 178);
 
   return (
     <AbsoluteFill style={{ backgroundColor: WORLD, overflow: "hidden" }}>
@@ -140,7 +146,7 @@ export const ShuttleStormPromo: React.FC = () => {
           <RevealLines lines={[{ text: "Entries close" }, { text: "Nov 18", color: VOLT }]} progress={endLines} size={86} />
         </div>
         <div style={{ position: "absolute", left: RULE_X + 44, top: urlTop, opacity: url }}>
-          <Mono size={42} color={BONE} tracking="0.05em">
+          <Mono size={44} color={BONE} tracking="0.05em">
             shuttlestorm.adawar.org
           </Mono>
         </div>
@@ -155,7 +161,18 @@ export const ShuttleStormPromo: React.FC = () => {
             transform: `translateY(${interpolate(lockup, [0, 1], [360, 0], { ...clamp, easing: ease })}px)`,
           }}
         >
-          <Lockup size={104} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+            <Lockup size={96} dateLine={false} />
+            {/* The site film's date line, set large on two lines for phones. */}
+            <div style={{ marginTop: 30 }}>
+              <Mono size={42} color={BONE} tracking="0.02em">
+                Nov 21 2026
+              </Mono>
+            </div>
+            <Mono size={42} color={BONE} tracking="0.02em">
+              UFV North Gym · Abbotsford BC
+            </Mono>
+          </div>
         </div>
       </World>
     </AbsoluteFill>
