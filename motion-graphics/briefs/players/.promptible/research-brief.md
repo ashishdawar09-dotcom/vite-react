@@ -21,7 +21,7 @@ openmontage-claude-pipeline: one connected pipeline; the camera follows causalit
 
 ## Motion plan
 
-Open tight on the site's own shuttle art and pull back at once as 'FEATHER SHUTTLES.' rises beside the site's real '16 feathers' fact (underlined), then 'GREAT PRIZES.' One flat volt thread then draws down from the promises into step 1 of the register page's real 'Your day, start to finish'; the camera follows its head and stops on each step in turn (steps not in focus dim, a thick volt marker lights the active step). From step 5 the thread continues down to the end card, which builds in reading order: 11 categories, ages 8 to 50+, 'Entries close Nov 18' with its rule, the register URL, then the site film's lockup with a readable date line. ~2 s end hold.
+Open tight on the site's own shuttle art and pull back at once as 'FEATHER SHUTTLES.' rises; the site's real '16 feathers' fact arrives once the pull-back has it whole in frame and is underlined; then 'GREAT PRIZES.' holds for ~0.5 s. One flat volt bar then draws down from the promises into the register page's real 'Your day, start to finish' (shown with ~67 px side gutters), where it becomes each step's marker: it advances through one step at a time as that step lights and the others dim, each step held ~0.6 s static while the card nearly fills the frame. From step 5 the same bar runs straight on as the margin rule of the end card while the step-5 card bottom is still in frame: '11 CATEGORIES / AGES 8 TO 50+', 'Entries close Nov 18', the register URL, then the site film's lockup with a 34 px date line. No empty travel; ~1.6 s end hold.
 
 ## Avoid
 

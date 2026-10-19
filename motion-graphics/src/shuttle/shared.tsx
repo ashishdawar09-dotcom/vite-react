@@ -264,7 +264,7 @@ export const Lockup: React.FC<{ size: number; dateLine?: boolean }> = ({
             {i > 0 ? (
               <div style={{ width: size * 0.06, height: size * 0.06, borderRadius: size, backgroundColor: VOLT }} />
             ) : null}
-            <Mono size={Math.max(28, size * 0.27)} color={BONE} tracking="0.06em">
+            <Mono size={Math.max(34, size * 0.27)} color={BONE} tracking="0.02em">
               {t}
             </Mono>
           </React.Fragment>

@@ -1,7 +1,7 @@
 {
   "version": 3,
   "status": "AWAITING_CRITIC",
-  "createdAt": "2026-10-19T14:48:14.162Z",
+  "createdAt": "2026-10-19T18:29:22.501Z",
   "format": "9:16",
   "dimensions": {
     "width": 1080,
@@ -23,11 +23,11 @@
   "requestedDuration": 8,
   "referenceObservations": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/reference-observations.md",
   "referenceObservationsSha": "0e03e4077bce24b64b43f68295ef4c11d2401082632eeeead201c50ee0de01bf",
-  "referenceInspectedAt": "2026-10-19T14:48:14.262Z",
+  "referenceInspectedAt": "2026-10-19T18:29:22.581Z",
   "candidateRender": "/home/user/vite-react/motion-graphics/out/sponsors.mp4",
-  "candidateRenderSha": "e33110caec640f3042d86084b7a30411fe8221afbe7ac4662ee710d90c0ffce0",
+  "candidateRenderSha": "644d4b57b0c54636b542fccd145316722d2859408da33d65810c314e8aff548b",
   "candidateSheet": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/candidate-contact-sheet.jpg",
-  "candidateSheetSha": "b58c3a3c51135bc47e40a33a8ad2e444d1d5f064560a8e364fea3fd659fee45f",
+  "candidateSheetSha": "58ecd8f03efb1d15780421fa7b4bb0b489ac1aff3cecc949ab37ec0c2cabcb27",
   "candidateProbe": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/candidate-probe.json",
-  "candidateCreatedAt": "2026-10-19T14:48:15.145Z"
+  "candidateCreatedAt": "2026-10-19T18:29:23.114Z"
 }

@@ -1,14 +1,14 @@
 {
   "version": 3,
   "status": "RESEARCH_READY",
-  "createdAt": "2026-10-19T14:48:15.236Z",
-  "cacheKey": "73b2274c925b300f2cd07972a8a0e1fc40ea7038b2662844d709e91fbbc8a3c1",
+  "createdAt": "2026-10-19T18:29:23.193Z",
+  "cacheKey": "167c55090cee6d3f50148b52d0fbc03dcc1258b3caf0b85f16a92400e6d1969d",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26 players",
   "referenceId": "openmontage-claude-pipeline",
   "brief": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/research-brief.md",
-  "briefSha": "34d463d04651bf31bdb20e2f641e04fc3eee614af27351908315badd0650c109",
+  "briefSha": "b252d092ed02be3026302435196ee134415ee2a5f7ea431ac1661673c841ad9b",
   "sources": [
     "https://shuttlestorm.adawar.org/",
     "https://shuttlestorm.adawar.org/register"

@@ -20,9 +20,9 @@ import {
 
 // Players (9:16): open on the site's own shuttle art, then the organisers' two
 // promises (feather shuttles, great prizes) with the site's "16 feathers" fact.
-// One volt thread then carries the viewer down into the register page's real
-// "Your day, start to finish" — the camera stops on each step as it lights —
-// and on to the categories, the deadline and the end card.
+// One volt thread then runs down into the register page's real "Your day,
+// start to finish", becoming each step's marker as that step lights, and on
+// past step 5 as the margin rule of the end card.
 // openmontage-claude-pipeline mechanism: one connected path, camera on its head.
 
 export const PLAYERS = { width: 1080, height: 1920, duration: 300 };
@@ -31,8 +31,14 @@ const S = 2.4;
 const X = (1080 - CSS_W * S) / 2;
 const ART = { top: 300, height: 300 };
 const FEATHERS = { top: 160, height: 170 };
-const MARGIN = X + 36;
-const THREAD_X = 540;
+
+// The register card sits with ~67 px gutters so its step markers stay in frame.
+const SD = 2.2;
+const XD = (1080 - CSS_W * SD) / 2;
+const steps = m.registerDay.steps;
+const BAR_W = 4 * SD;
+const BAR_X = XD + (steps[0].x - 28) * SD;
+const TEXT_X = BAR_X;
 
 const artY = 0;
 const headlineY = artY + ART.height * S + 60;
@@ -40,169 +46,164 @@ const factY = headlineY + 290;
 const prizesY = factY + FEATHERS.height * S + 60;
 const prizesBottom = prizesY + 270;
 const dayY = prizesBottom + 260;
-const dayH = m.registerDay.h * S;
+const dayH = m.registerDay.h * SD;
 const dayBottom = dayY + dayH;
-const END_H = 1300;
-const endY = dayBottom + (1920 - END_H) / 2 + 60;
-// The end card's content block (~960 px tall) is centred in its band.
-const END_CONTENT_H = 900;
-const endContentY = endY + (END_H - END_CONTENT_H) / 2;
 
-const steps = m.registerDay.steps;
-const stepY = (i: number) => dayY + (steps[i].y + steps[i].h / 2) * S;
+const stepTop = (i: number) => dayY + (steps[i].y + 2) * SD;
+const stepBottom = (i: number) => dayY + (steps[i].y + steps[i].h - 6) * SD;
+// The card nearly fills the frame; the camera drifts a little with the active step.
+const stepCam = (i: number) => dayY + dayH / 2 + (i - 2) * 70;
+
+// End card: a left-ruled fact stack continuing the thread, then the lockup.
+const endTop = dayBottom + 150;
+const deadlineTop = endTop + 210;
+const urlTop = deadlineTop + 86;
+const barEnd = urlTop + 50;
+const lockupTop = barEnd + 190;
+// Framed from the step-5 card's bottom to the lockup's date line.
+const endCenter = (dayBottom - 220 + lockupTop + 270) / 2;
 
 // Timeline (frames).
 const T = {
-  thread1: [56, 82],
-  step0: 86,
-  stepEvery: 17,
-  thread2: [176, 198],
-  end: 196,
+  leave: 66,
+  thread1: [66, 88],
+  step0: 90,
+  stepEvery: 26,
+  travel: 8,
 };
+const stepAt = (i: number) => T.step0 + i * T.stepEvery;
+const END = stepAt(4) + T.travel + 18;
 
 export const ShuttleStormPlayers: React.FC = () => {
   const frame = useCurrentFrame();
 
   const hookCenter = (artY + prizesBottom) / 2;
-  const stepKeys = steps.flatMap((_, i) => {
-    const t = T.step0 + i * T.stepEvery;
-    return [
-      { t, x: 540, y: stepY(i), z: 1.12 },
-      { t: t + 9, x: 540, y: stepY(i), z: 1.12 },
-    ];
-  });
+  const stepKeys = steps.flatMap((_, i) => [
+    { t: i === 0 ? stepAt(0) : stepAt(i) + T.travel, x: 540, y: stepCam(i), z: 1 },
+    { t: stepAt(i + 1), x: 540, y: stepCam(i), z: 1 },
+  ]);
   const cam = cameraAt(frame, [
     { t: 0, x: 540, y: artY + (ART.height * S) / 2, z: 1.4 },
     { t: 4, x: 540, y: artY + (ART.height * S) / 2, z: 1.38 },
     { t: 30, x: 540, y: hookCenter, z: 0.93 },
-    { t: T.thread1[0], x: 540, y: hookCenter, z: 0.93 },
-    ...stepKeys,
-    { t: T.thread2[1], x: 540, y: endY + END_H / 2, z: 1 },
-    { t: PLAYERS.duration, x: 540, y: endY + END_H / 2, z: 1 },
+    { t: T.leave, x: 540, y: hookCenter, z: 0.93 },
+    ...stepKeys.slice(0, -1),
+    { t: END, x: 540, y: stepCam(4), z: 1 },
+    { t: END + 22, x: 540, y: endCenter, z: 1 },
+    { t: PLAYERS.duration, x: 540, y: endCenter, z: 1 },
   ]);
 
-  const feather = [0, 1].map((i) => ramp(frame, 12 + i * 5, 26 + i * 5));
-  const feathersLine = ramp(frame, 28, 40);
-  const prizes = [0, 1].map((i) => ramp(frame, 36 + i * 5, 50 + i * 5));
+  const feather = [0, 1].map((i) => ramp(frame, 10 + i * 5, 24 + i * 5));
+  // The fact card arrives once the pull-back has it whole in frame.
+  const factIn = ramp(frame, 18, 26);
+  const feathersLine = ramp(frame, 26, 38);
+  const prizes = [0, 1].map((i) => ramp(frame, 32 + i * 5, 46 + i * 5));
 
-  // The thread: from "GREAT PRIZES." down to step 1, then from step 5 to the end card.
-  const thread1 = ramp(frame, T.thread1[0], T.thread1[1]);
-  const thread2 = ramp(frame, T.thread2[0], T.thread2[1]);
-  const lit = steps.map((_, i) => ramp(frame, T.step0 + i * T.stepEvery, T.step0 + i * T.stepEvery + 8));
-  const active = Math.max(0, Math.min(4, Math.floor((frame - T.step0) / T.stepEvery)));
-  const inSteps = frame >= T.step0 - 4 && frame < T.thread2[0] + 4;
+  // The thread's head: down to step 1, through each step as it lights, then
+  // on past step 5 alongside the end card's facts.
+  const barKeys: [number, number][] = [
+    [T.thread1[0], prizesBottom + 20],
+    [T.thread1[1], stepTop(0)],
+    [stepAt(0), stepTop(0)],
+    [stepAt(0) + T.travel, stepBottom(0)],
+    ...[1, 2, 3, 4].flatMap((i): [number, number][] => [
+      [stepAt(i), stepBottom(i - 1)],
+      [stepAt(i) + T.travel, stepBottom(i)],
+    ]),
+    [END, stepBottom(4)],
+    [END + 20, barEnd],
+  ];
+  const head = interpolate(
+    frame,
+    barKeys.map((k) => k[0]),
+    barKeys.map((k) => k[1]),
+    { ...clamp, easing: ease },
+  );
+  const showBar = frame >= T.thread1[0];
+  const active = Math.max(0, Math.min(4, Math.floor((frame - stepAt(0)) / T.stepEvery)));
+  const inSteps = frame >= stepAt(0) - 4 && frame < END + 4;
 
-  const endLines = [0, 1].map((i) => ramp(frame, T.end + 6 + i * 5, T.end + 18 + i * 5));
-  const deadline = ramp(frame, T.end + 18, T.end + 28);
-  const url = ramp(frame, T.end + 24, T.end + 32);
-  const lockup = ramp(frame, T.end + 28, T.end + 42);
+  const endLines = [0, 1].map((i) => ramp(frame, END + 6 + i * 5, END + 20 + i * 5));
+  const deadline = ramp(frame, END + 18, END + 28);
+  const url = ramp(frame, END + 22, END + 32);
+  const lockup = ramp(frame, END + 26, END + 40);
 
   return (
     <AbsoluteFill style={{ backgroundColor: WORLD, overflow: "hidden" }}>
       <World cam={cam} width={PLAYERS.width} height={PLAYERS.height}>
         <SiteCrop file="site-home-everypoint" imageHeight={932} top={ART.top} height={ART.height} scale={S} x={X} y={artY} />
 
-        <div style={{ position: "absolute", left: MARGIN, top: headlineY }}>
+        <div style={{ position: "absolute", left: TEXT_X, top: headlineY }}>
           <RevealLines lines={[{ text: "Feather" }, { text: "shuttles.", color: VOLT }]} progress={feather} size={118} />
         </div>
 
-        <SiteCrop file="site-home-facts" imageHeight={560} top={FEATHERS.top} height={FEATHERS.height} scale={S} x={X} y={factY}>
-          <Underline lines={m.homeFacts.feathersLine} progress={feathersLine} offsetY={10} thickness={2.4} />
-        </SiteCrop>
+        <div style={{ opacity: factIn }}>
+          <SiteCrop file="site-home-facts" imageHeight={560} top={FEATHERS.top} height={FEATHERS.height} scale={S} x={X} y={factY}>
+            <Underline lines={m.homeFacts.feathersLine} progress={feathersLine} offsetY={10} thickness={2.4} />
+          </SiteCrop>
+        </div>
 
-        <div style={{ position: "absolute", left: MARGIN, top: prizesY }}>
+        <div style={{ position: "absolute", left: TEXT_X, top: prizesY }}>
           <RevealLines lines={[{ text: "Great" }, { text: "prizes.", color: VOLT }]} progress={prizes} size={118} />
         </div>
 
-        {/* Thread, part 1: from the promises into step 1. */}
-        <div
-          style={{
-            position: "absolute",
-            left: THREAD_X - 4,
-            top: prizesBottom + 20,
-            width: 8,
-            height: (dayY + (steps[0].y + 4) * S - prizesBottom - 20) * thread1,
-            backgroundColor: VOLT,
-          }}
-        />
-
-        <SiteCrop file="site-register-day" imageHeight={624} height={m.registerDay.h} scale={S} x={X} y={dayY}>
+        <SiteCrop file="site-register-day" imageHeight={624} height={m.registerDay.h} scale={SD} x={XD} y={dayY}>
           {steps.map((st, i) => (
-            <React.Fragment key={i}>
-              {/* Steps not in focus recede while the camera is on the list. */}
-              <div
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: st.y - 4,
-                  width: CSS_W,
-                  height: st.h + 6,
-                  backgroundColor: `rgba(6, 8, 13, ${inSteps && i !== active ? 0.55 : 0})`,
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  left: st.x - 28,
-                  top: st.y + 2,
-                  width: 4,
-                  height: (st.h - 8) * lit[i],
-                  backgroundColor: VOLT,
-                }}
-              />
-            </React.Fragment>
+            // Steps not in focus recede while the thread is on the list.
+            <div
+              key={i}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: st.y - 4,
+                width: CSS_W,
+                height: st.h + 6,
+                backgroundColor: `rgba(6, 8, 13, ${inSteps && i !== active ? 0.55 : 0})`,
+              }}
+            />
           ))}
         </SiteCrop>
 
-        {/* Thread, part 2: from step 5 down to the end card. */}
-        <div
-          style={{
-            position: "absolute",
-            left: THREAD_X - 4,
-            top: dayBottom + 20,
-            width: 8,
-            height: (endContentY - 40 - dayBottom - 20) * thread2,
-            backgroundColor: VOLT,
-          }}
-        />
+        {/* The thread: one volt bar, which is also each step's marker. */}
+        {showBar ? (
+          <div
+            style={{
+              position: "absolute",
+              left: BAR_X,
+              top: prizesBottom + 20,
+              width: BAR_W,
+              height: Math.max(0, head - prizesBottom - 20),
+              backgroundColor: VOLT,
+            }}
+          />
+        ) : null}
+
+        <div style={{ position: "absolute", left: TEXT_X + 44, top: endTop }}>
+          <RevealLines lines={[{ text: "11 categories" }, { text: "Ages 8 to 50+", color: VOLT }]} progress={endLines} size={86} />
+        </div>
+        <div style={{ position: "absolute", left: TEXT_X + 44, top: deadlineTop, opacity: deadline }}>
+          <Mono size={54} color={BONE} tracking="0.08em">
+            Entries close <span style={{ color: VOLT }}>Nov 18</span>
+          </Mono>
+        </div>
+        <div style={{ position: "absolute", left: TEXT_X + 44, top: urlTop, opacity: url }}>
+          <Mono size={38} color={BONE} tracking="0.04em">
+            shuttlestorm.adawar.org/register
+          </Mono>
+        </div>
 
         <div
           style={{
             position: "absolute",
             left: 0,
-            top: endContentY,
+            top: lockupTop,
             width: 1080,
-            height: END_CONTENT_H,
             display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "space-between",
+            justifyContent: "center",
+            transform: `translateY(${interpolate(lockup, [0, 1], [900, 0], { ...clamp, easing: ease })}px)`,
           }}
         >
-          <RevealLines
-            lines={[{ text: "11 categories" }, { text: "Ages 8 to 50+", color: VOLT }]}
-            progress={endLines}
-            size={92}
-            align="center"
-          />
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 22 }}>
-            <div style={{ opacity: deadline }}>
-              <Mono size={52} color={BONE} tracking="0.1em">
-                Entries close Nov 18
-              </Mono>
-            </div>
-            <div style={{ position: "relative", width: 640, height: 5 }}>
-              <div style={{ position: "absolute", left: (640 * (1 - deadline)) / 2, width: 640 * deadline, height: 5, backgroundColor: VOLT }} />
-            </div>
-            <div style={{ opacity: url }}>
-              <Mono size={40} color={BONE} tracking="0.04em">
-                shuttlestorm.adawar.org/register
-              </Mono>
-            </div>
-          </div>
-          <div style={{ transform: `translateY(${interpolate(lockup, [0, 1], [1300, 0], { ...clamp, easing: ease })}px)` }}>
-            <Lockup size={116} />
-          </div>
+          <Lockup size={100} />
         </div>
       </World>
     </AbsoluteFill>

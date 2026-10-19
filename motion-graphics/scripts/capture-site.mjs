@@ -110,6 +110,7 @@ await shot("site-home-facts", facts.y - 40, sport.y + sport.h - facts.y + 40);
 await shot("site-home-everypoint", xp.y, xp.h);
 m.homeHero = {
   h: hero.y + hero.h,
+  venue: rel(await phrase("UFV Athletic Centre in Abbotsford"), 0),
   date: rel(await phrase("Saturday, November 21"), 0),
   ages: rel(await phrase("Eleven categories for juniors, youth and adults, from age 8 to 50+."), 0),
 };
@@ -171,6 +172,14 @@ await open("register");
 await page.screenshot({ path: `${out}/site-register.png` });
 m.register = {
   deadline: await phrase("Entries close 11:59 pm, Wednesday, November 18, 2026"),
+  // The amounts in the "Entry fees" list ($40, $30, $30).
+  fees: await page.evaluate(() => {
+    const h = [...document.querySelectorAll("h2")].find((e) => /Entry fees/i.test(e.textContent));
+    return [...h.nextElementSibling.querySelectorAll("strong")].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { x: r.x, y: r.y + scrollY, w: r.width, h: r.height };
+    });
+  }),
   // Bottom of the first content block after "Entry fees" (a clean place to crop).
   feesEnd: await page.evaluate(() => {
     const h = [...document.querySelectorAll("h2")].find((e) => /Entry fees/i.test(e.textContent));

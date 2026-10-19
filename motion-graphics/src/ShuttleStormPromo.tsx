@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import {
   BONE,
   CSS_W,
@@ -11,6 +11,8 @@ import {
   VOLT,
   WORLD,
   cameraAt,
+  clamp,
+  ease,
   m,
   ramp,
   World,
@@ -18,8 +20,10 @@ import {
 
 // Marketing (9:16): the camera travels down the real Shuttle Storm home page
 // (hero → "Eleven categories. Juniors to masters." → the numbers), pushing in
-// so each fact is marked at readable size, and lands on the site film's end
-// card. kickbacks-same-run-editor mechanism: the site is the world.
+// so each fact is marked at readable size. The volt mark then leaves the
+// numbers card as one rule that carries the end card: the deadline, the
+// address and the site film's lockup. kickbacks-same-run-editor mechanism:
+// the site is the world.
 
 export const PROMO = { width: 1080, height: 1920, duration: 240 };
 
@@ -32,47 +36,71 @@ const NUMBERS = { top: 140, height: 380 };
 const heroY = 0;
 const statementY = heroY + HERO.height * S + 96;
 const numbersY = statementY + STATEMENT.height * S + 96;
-const END_H = 1440;
-const endY = numbersY + NUMBERS.height * S + (1920 - END_H) / 2 + 40;
+const numbersBottom = numbersY + NUMBERS.height * S;
 
 const at = (top: number, cropTop: number, cssY: number) => top + (cssY - cropTop) * S;
 const atX = (cssX: number) => X + cssX * S;
 
-// Opening: the whole hero from the nav down to the title (h1 at CSS y 554–658),
-// framed so the meta paragraph below (y 685–865) starts just under the frame.
-const OPEN_Z = 1.15;
-const titleFocus = { x: 540, y: at(heroY, HERO.top, 685) - 960 / OPEN_Z - 6 };
-const paraFocus = { x: atX(215), y: at(heroY, HERO.top, 742) };
+// Opening: the whole hero card, nav to paragraph, with its own side padding.
+const OPEN_Z = 0.95;
+const heroFocus = { x: 540, y: 1010 };
+// Push in on "Saturday, November 21", then ease back to the full ages sentence.
+const date = m.homeHero.date[0];
+const dateFocus = { x: atX(date.x + date.w / 2), y: at(heroY, HERO.top, date.y + date.h / 2) };
+const paraFocus = { x: atX(199), y: at(heroY, HERO.top, 737) };
+
+// The "$30–40" numeral wraps onto two lines; each line gets its own mark at
+// its measured glyph run. The others are single-line.
+const NUM_MARKS = m.homeNumbers.numeralText.map((n, i) =>
+  i === 3
+    ? [
+        { x: n.x + 2, y: 399.5, w: 135 },
+        { x: n.x + 2, y: 449, w: 68 },
+      ]
+    : [{ x: n.x, y: n.y + n.h - 4, w: n.w }],
+);
+
+// End card: the volt rule leaves the numbers card and runs down as the margin
+// rule of the deadline and address, over the site film's lockup.
+const RULE_X = atX(25);
+const endTop = numbersBottom + 150;
+const urlTop = endTop + 236;
+const ruleEnd = urlTop + 56;
+const lockupTop = ruleEnd + 150;
+const endCenter = (numbersBottom - 200 + lockupTop + 330) / 2;
 
 export const ShuttleStormPromo: React.FC = () => {
   const frame = useCurrentFrame();
 
   const cam = cameraAt(frame, [
-    { t: 0, ...titleFocus, z: OPEN_Z },
-    { t: 8, ...titleFocus, z: OPEN_Z - 0.02 },
-    { t: 26, ...paraFocus, z: 1.12 },
-    { t: 48, ...paraFocus, z: 1.12 },
-    { t: 70, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
-    { t: 88, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
-    { t: 108, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
-    { t: 134, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
-    { t: 154, x: 540, y: endY + END_H / 2, z: 1 },
-    { t: PROMO.duration, x: 540, y: endY + END_H / 2, z: 1 },
+    { t: 0, ...heroFocus, z: OPEN_Z },
+    { t: 8, ...heroFocus, z: OPEN_Z + 0.01 },
+    { t: 26, ...dateFocus, z: 1.5 },
+    { t: 40, ...dateFocus, z: 1.5 },
+    { t: 52, ...paraFocus, z: 1.15 },
+    { t: 66, ...paraFocus, z: 1.15 },
+    { t: 86, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
+    { t: 102, x: 540, y: statementY + (STATEMENT.height * S) / 2, z: 1 },
+    { t: 120, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
+    { t: 144, x: 540, y: numbersY + (NUMBERS.height * S) / 2, z: 1.08 },
+    { t: 166, x: 540, y: endCenter, z: 1 },
+    { t: PROMO.duration, x: 540, y: endCenter, z: 1 },
   ]);
 
-  const date = ramp(frame, 22, 34);
-  const ages = ramp(frame, 32, 48);
-  const claim = ramp(frame, 70, 88);
-  const nums = [0, 1, 2, 3].map((i) => ramp(frame, 110 + i * 6, 118 + i * 6));
-  const endLines = [0, 1].map((i) => ramp(frame, 150 + i * 6, 164 + i * 6));
-  const rule = ramp(frame, 160, 172);
+  const dateMark = ramp(frame, 26, 38);
+  const ages = ramp(frame, 50, 64);
+  const claim = ramp(frame, 86, 100);
+  const nums = [0, 1, 2, 3].map((i) => ramp(frame, 120 + i * 5, 130 + i * 5));
+  const rule = ramp(frame, 136, 162);
+  const endLines = [0, 1].map((i) => ramp(frame, 146 + i * 6, 162 + i * 6));
   const url = ramp(frame, 166, 176);
+  const lockup = ramp(frame, 170, 186);
 
   return (
     <AbsoluteFill style={{ backgroundColor: WORLD, overflow: "hidden" }}>
       <World cam={cam} width={PROMO.width} height={PROMO.height}>
         <SiteCrop file="site-home-hero" imageHeight={940} top={HERO.top} height={HERO.height} scale={S} x={X} y={heroY}>
-          <Underline lines={m.homeHero.date} progress={date} />
+          <Underline lines={m.homeHero.date} progress={dateMark} />
           <Underline lines={m.homeHero.ages} progress={ages} />
         </SiteCrop>
 
@@ -89,53 +117,41 @@ export const ShuttleStormPromo: React.FC = () => {
         </SiteCrop>
 
         <SiteCrop file="site-home-numbers" imageHeight={659} top={NUMBERS.top} height={NUMBERS.height} scale={S} x={X} y={numbersY}>
-          {m.homeNumbers.numeralText.map((n, i) => (
-            <div
-              key={i}
-              style={{
-                position: "absolute",
-                left: n.x,
-                top: n.y + n.h - 4,
-                width: n.w * nums[i],
-                height: 2.6,
-                backgroundColor: VOLT,
-              }}
-            />
+          {NUM_MARKS.map((marks, i) => (
+            <Underline key={i} lines={marks.map((r) => ({ ...r, y: r.y - 1 - 2.6, h: 2.6 }))} progress={nums[i]} thickness={2.6} />
           ))}
         </SiteCrop>
 
-        {/* End card, centred on one axis: the site film's lockup, the deadline, the address. */}
+        <div
+          style={{
+            position: "absolute",
+            left: RULE_X,
+            top: numbersBottom,
+            width: 9,
+            height: (ruleEnd - numbersBottom) * rule,
+            backgroundColor: VOLT,
+          }}
+        />
+        <div style={{ position: "absolute", left: RULE_X + 44, top: endTop }}>
+          <RevealLines lines={[{ text: "Entries close" }, { text: "Nov 18", color: VOLT }]} progress={endLines} size={86} />
+        </div>
+        <div style={{ position: "absolute", left: RULE_X + 44, top: urlTop, opacity: url }}>
+          <Mono size={42} color={BONE} tracking="0.05em">
+            shuttlestorm.adawar.org
+          </Mono>
+        </div>
         <div
           style={{
             position: "absolute",
             left: 0,
-            top: endY,
+            top: lockupTop,
             width: 1080,
-            height: END_H,
             display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
             justifyContent: "center",
-            gap: 120,
+            transform: `translateY(${interpolate(lockup, [0, 1], [700, 0], { ...clamp, easing: ease })}px)`,
           }}
         >
-          <Lockup size={128} />
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 34 }}>
-            <RevealLines
-              lines={[{ text: "Entries close" }, { text: "Nov 18", color: VOLT }]}
-              progress={endLines}
-              size={92}
-              align="center"
-            />
-            <div style={{ position: "relative", width: 700, height: 5 }}>
-              <div style={{ position: "absolute", left: (700 * (1 - rule)) / 2, top: 0, width: 700 * rule, height: 5, backgroundColor: VOLT }} />
-            </div>
-            <div style={{ opacity: url }}>
-              <Mono size={40} color={BONE} tracking="0.06em">
-                shuttlestorm.adawar.org
-              </Mono>
-            </div>
-          </div>
+          <Lockup size={104} />
         </div>
       </World>
     </AbsoluteFill>
