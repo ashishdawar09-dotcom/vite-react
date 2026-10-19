@@ -8,8 +8,8 @@ Short promo clips for Shuttle Storm, built with [Remotion](https://remotion.dev)
 
 | Composition | Format | Length | What it shows |
 | --- | --- | --- | --- |
-| `ShuttleStormPromo` | 9:16, 1080×1920 | 9 s | Marketing: the camera travels down the real home page (date, "Eleven categories. Juniors to masters.", 11 / 8 / 50+ / $30–40), ending on the site film's lockup and "Entries close Nov 18". |
-| `ShuttleStormSponsors` | 9:16, 1080×1920 | 9 s | Sponsors: the page's thank-you, ADW and the six supporters' real logo tiles converging into one wall, then the page's own "Back the storm." ask with the club phone number. |
+| `ShuttleStormPromo` | 9:16, 1080×1920 | 8 s | Marketing: the camera travels down the real home page (date, "Eleven categories. Juniors to masters.", 11 / 8 / 50+ / $30–40), ending on the site film's lockup and "Entries close Nov 18". |
+| `ShuttleStormSponsors` | 9:16, 1080×1920 | 8 s | Sponsors: the page's thank-you with the seven real logo tiles scattered below; they converge into one wall under ADW, which then lifts to dock the page's own "Back the storm." ask with the club phone number. |
 | `ShuttleStormPlayers` | 9:16, 1080×1920 | 10 s | Players: feather shuttles and great prizes (organisers' claims) with the site's "16 feathers" fact, the register page's real five-step day, then 11 categories, ages 8 to 50+, entries close Nov 18. |
 | `ShuttleStormWebsite` | 16:9, 1920×1080 | 15 s | Website film for the home page's "Watch the storm" slot: four real pages, each beside its fact, ending on the site film's end card. |
 | `ShuttleStormRegister` | 9:16, 1080×1920 | 7 s | A tap on **Categories** in the site's real phone menu reveals the eleven categories as a wall, with "Entries close … November 18, 2026". Warm-light background. |

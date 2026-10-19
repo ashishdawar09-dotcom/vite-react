@@ -22,7 +22,7 @@ kickbacks-same-run-editor: the real site pages are the working surfaces; the cam
 
 ## Motion plan
 
-Four stops in one horizontal world, each a real site page beside its fact in the site's display type: home hero (date, ages underlined) with 'SAT · NOV 21 / UFV NORTH GYM'; the categories table (volt marks down all eleven rows) with '11 CATEGORIES / JUNIORS TO MASTERS.'; the home facts ('16 feathers' underlined) with 'FEATHER SHUTTLES. GREAT PRIZES.'; the register page (the 'Entries close…' line underlined) with '$30–40 / ENTRIES CLOSE NOV 18'. Each stop holds ~2.4 s; travel is a 24-frame pan with a shallow pull-back. Ends on the site film's own end card and address, ~2.8 s hold.
+Four stops in one horizontal world, each a real site page beside its fact. At every stop the camera arrives pushed in (~1.75×) on the exact line being marked; the flat volt mark draws on the page; the camera eases back and the marked fact lands as the display headline beside the page (mark first, headline second). Stops: home hero ('Saturday, November 21' and the ages line → 'SAT · NOV 21 / UFV NORTH GYM'); categories table (the camera tracks down as all eleven rows are marked → '11 CATEGORIES / JUNIORS TO MASTERS.'); home facts ('16 feathers' → 'FEATHER SHUTTLES. GREAT PRIZES.'); register page cropped cleanly after its entry-fees list ('Entries close…' → 'ENTRIES CLOSE / NOV 18 / $30–40'). 22-frame pans with a shallow pull-back. Ends on the site film's own end card and address, ~2.6 s hold.
 
 ## Avoid
 

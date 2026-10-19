@@ -21,7 +21,7 @@ kickbacks-same-run-editor: the authentic working surface (the real home page) is
 
 ## Motion plan
 
-Open tight on the real hero title, ease out to the full hero while volt underlines draw under 'Saturday, November 21' and the ages line. Travel down to the statement and underline 'Eleven categories. Juniors to masters.' Travel to the numbers block and underline 11, 8, 50+ and $30–40 in turn. Travel on to the end card: the site film's lockup and date line, then 'Entries close Nov 18' with a volt rule and the site address. ~1.9 s stable end hold.
+Open on the whole real hero (nav, court art, eyebrow, title), framed so no line of copy is cut. Push in on the hero paragraph (body copy at readable size) while volt underlines draw under 'Saturday, November 21' and the ages line. Travel to the centred statement and underline 'Eleven categories. Juniors to masters.' Travel to the numbers block, pushed in slightly, and underline each numeral at its own glyph width (11, 8, 50+, $30–40). Travel to the end card, centred on one axis: the site film's lockup and date line, then 'ENTRIES CLOSE / NOV 18' with a centred volt rule and the site address, settled by frame 176 for a ~2.1 s hold (8 s total).
 
 ## Avoid
 

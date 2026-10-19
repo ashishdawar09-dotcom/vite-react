@@ -1,7 +1,7 @@
 {
   "version": 3,
   "status": "AWAITING_CRITIC",
-  "createdAt": "2026-10-19T14:32:20.226Z",
+  "createdAt": "2026-10-19T14:48:13.023Z",
   "format": "9:16",
   "dimensions": {
     "width": 1080,
@@ -14,20 +14,20 @@
   "referenceVideoSha": "046ead08cd510826973e8a020e092239095ab4a414982ffbec7117a4bc515172",
   "referenceSheetSha": "4d65cc76e13c0032f30207ece0a1660ef65f1ff74fc729d05070dd0de62710b8",
   "researchManifest": "/home/user/vite-react/motion-graphics/briefs/promo/.promptible/research-manifest.json",
-  "researchManifestSha": "7b748db14eea354933de22208122feb744d817c9196a21dc0b868ae73fa7e7cd",
+  "researchManifestSha": "89a6a9b0dc2b6f5b7d7ba0e1ef3e319eca9079f5b7e7014d4075468866688c6d",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26 promo",
   "claimSource": "user",
   "beat": "Marketing: Shuttle Storm ’26 on Saturday, November 21 — eleven categories, juniors to masters, 0–40 per player per category; entries close Nov 18",
-  "requestedDuration": 9,
+  "requestedDuration": 8,
   "referenceObservations": "/home/user/vite-react/motion-graphics/briefs/promo/.promptible/reference-observations.md",
   "referenceObservationsSha": "5b187a92aa6f2bcb3934513adabca73bb54b9d457f43326a26782b250a5a3fa9",
-  "referenceInspectedAt": "2026-10-19T14:32:20.337Z",
+  "referenceInspectedAt": "2026-10-19T14:48:13.128Z",
   "candidateRender": "/home/user/vite-react/motion-graphics/out/promo.mp4",
-  "candidateRenderSha": "05fdcae812f1e4d6aab198085b01fc110a677e38d878b2f39bcd36e4ed894b06",
+  "candidateRenderSha": "fd3e3d6a2cea2ddc1d73835c72d13ba7159c193af8636316c8dbb2ff42d0b73f",
   "candidateSheet": "/home/user/vite-react/motion-graphics/briefs/promo/.promptible/candidate-contact-sheet.jpg",
-  "candidateSheetSha": "2fba3738b696025e6469962c46ba50a6a1033ca4e33854a1bc0cbac27a23e078",
+  "candidateSheetSha": "e52b79139d25d97aa97694bb81a870c2614b88eaf650f533498b633be557ee86",
   "candidateProbe": "/home/user/vite-react/motion-graphics/briefs/promo/.promptible/candidate-probe.json",
-  "candidateCreatedAt": "2026-10-19T14:32:21.452Z"
+  "candidateCreatedAt": "2026-10-19T14:48:13.967Z"
 }

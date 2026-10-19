@@ -20,7 +20,7 @@ openmontage-hook: fragmented pieces physically collapse into one coherent system
 
 ## Motion plan
 
-Open on the sponsors page intro with a volt underline under 'local businesses back local badminton'. Travel down; the ADW presenting block and the six real logo tiles slide in from left and right, staggered, fully opaque, and lock into a two-column wall. Hold on the wall. Travel to the page's real 'Back the storm' block (underlined), the club phone number and the sponsors URL with a small lockup. ~2.8 s stable end hold.
+Open on the sponsors page's own thank-you (underlined 'local businesses back local badminton') with the seven real sponsor tiles scattered below it as fragments, some cut by the frame edge. The tiles and the ADW presenting block (cropped at the card's own edges, one border) converge into one centred wall under the thank-you: ADW above a 3×2 grid of supporters. After a short hold (~1.1 s) the wall is the cause of the ask: the thank-you lifts away, the wall rises and tightens to the top, and the page's real 'Back the storm' block (cropped at its own edges) docks under it, underlined, with the club phone number, the sponsors URL and a small lockup. ~2.7 s stable end hold (8 s total).
 
 ## Avoid
 

@@ -1,14 +1,14 @@
 {
   "version": 3,
   "status": "RESEARCH_READY",
-  "createdAt": "2026-10-19T14:32:21.536Z",
-  "cacheKey": "7b11dc9ef57cd881fb144f18ed23f1e0aa14817de59597aba34eb7ccb6191a37",
+  "createdAt": "2026-10-19T14:48:14.070Z",
+  "cacheKey": "c4939a937eeb23a22f176b7a2a4996fa1c4eebff4e70b4ca58e6ac729c905f15",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26 sponsors",
   "referenceId": "openmontage-hook",
   "brief": "/home/user/vite-react/motion-graphics/briefs/sponsors/.promptible/research-brief.md",
-  "briefSha": "c3a7ce66119c1ef30e619631c38711afc0e3c130da1e7a52327e4a49da4f690d",
+  "briefSha": "346bcf2e215e9908b3dec59ff4e9d720a96da8693f4447a5a9bac8f0d7b7db14",
   "sources": [
     "https://shuttlestorm.adawar.org/sponsors"
   ],

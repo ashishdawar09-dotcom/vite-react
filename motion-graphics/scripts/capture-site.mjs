@@ -123,9 +123,20 @@ m.homeNumbers = {
     await Promise.all([0, 1, 2, 3].map((i) => box(".num", i))),
     nums.y,
   ),
-  // The big numerals themselves (first child of each .num).
+  // The big numerals themselves (first child of each .num), and their glyph widths.
   numerals: rel(
     await Promise.all([0, 1, 2, 3].map((i) => box(".num > :first-child", i))),
+    nums.y,
+  ),
+  numeralText: rel(
+    await page.$$eval(".num > :first-child", (els) =>
+      els.map((e) => {
+        const range = document.createRange();
+        range.selectNodeContents(e);
+        const r = [...range.getClientRects()][0];
+        return { x: r.x, y: r.y + scrollY, w: r.width, h: r.height };
+      }),
+    ),
     nums.y,
   ),
 };
@@ -158,7 +169,16 @@ m.categories = {
 // Register page.
 await open("register");
 await page.screenshot({ path: `${out}/site-register.png` });
-m.register = { deadline: await phrase("Entries close 11:59 pm, Wednesday, November 18, 2026") };
+m.register = {
+  deadline: await phrase("Entries close 11:59 pm, Wednesday, November 18, 2026"),
+  // Bottom of the first content block after "Entry fees" (a clean place to crop).
+  feesEnd: await page.evaluate(() => {
+    const h = [...document.querySelectorAll("h2")].find((e) => /Entry fees/i.test(e.textContent));
+    const list = h.nextElementSibling;
+    const r = list.getBoundingClientRect();
+    return r.y + scrollY + r.height;
+  }),
+};
 const dayTitle = await phrase("Your day, start to finish");
 const steps = await page.$$eval("ol li", (els) =>
   els.slice(0, 5).map((e) => {
@@ -198,10 +218,13 @@ for (const t of tiles) {
 }
 m.sponsors = {
   intro: { h: intro.h, lede: rel(await phrase("local businesses back local badminton"), intro.y) },
-  presenting: { w: presenting.w, h: presenting.h },
+  presenting: { x: presenting.x, w: presenting.w, h: presenting.h },
+  presentingTag: rel(await phrase("Presenting sponsor"), presenting.y),
   tile: { w: tiles[0].w, h: tiles[0].h },
   tiles: tiles.map((t) => t.id.replace(/^s-/, "")),
   join: {
+    x: join.x,
+    w: join.w,
     h: join.h,
     title: rel(await phrase("Back the"), join.y),
   },

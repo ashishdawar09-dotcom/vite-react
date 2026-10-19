@@ -1,14 +1,14 @@
 {
   "version": 3,
   "status": "RESEARCH_READY",
-  "createdAt": "2026-10-19T14:32:22.888Z",
-  "cacheKey": "92157fb1c28853a5bb9e36ed33212c14859e44e54ac55f076919f26507d21d44",
+  "createdAt": "2026-10-19T14:48:15.236Z",
+  "cacheKey": "73b2274c925b300f2cd07972a8a0e1fc40ea7038b2662844d709e91fbbc8a3c1",
   "researchMode": "authentic",
   "visualMode": "product-ui",
   "product": "Shuttle Storm ’26 players",
   "referenceId": "openmontage-claude-pipeline",
   "brief": "/home/user/vite-react/motion-graphics/briefs/players/.promptible/research-brief.md",
-  "briefSha": "63e81e3bd830bb40403209d79e399742d4a5399a26bb99a901d951c0eb31e5f4",
+  "briefSha": "34d463d04651bf31bdb20e2f641e04fc3eee614af27351908315badd0650c109",
   "sources": [
     "https://shuttlestorm.adawar.org/",
     "https://shuttlestorm.adawar.org/register"
@@ -25,8 +25,8 @@
     {
       "kind": "surface",
       "path": "/home/user/vite-react/motion-graphics/public/research/site-home-everypoint.png",
-      "sha256": "221adfd1b6fd6d74caae195bc04b6f9b567f2f48b8780431178ab1cfe3a873c3",
-      "bytes": 621856
+      "sha256": "995532d684ef61a772de5c1b735c41a5d0e14134f702f8b289bc89d335126c4b",
+      "bytes": 631250
     },
     {
       "kind": "surface",

@@ -78,25 +78,30 @@ export const World: React.FC<{
 );
 
 // A band of a real site screenshot, shown at `scale` world px per CSS px.
-// `top`/`height` pick the band in CSS px; overlays are positioned in the same
-// CSS px (relative to the band) inside a scaled layer.
+// `top`/`height` (and optionally `left`/`width`) pick the band in CSS px;
+// overlays use the same page CSS px (relative to the band's top) inside a
+// scaled layer. Cropping to a site card's own edges with its own hairline
+// keeps a single border.
 export const SiteCrop: React.FC<{
   file: string;
   imageHeight: number;
   top?: number;
   height: number;
+  left?: number;
+  width?: number;
   scale: number;
   x: number;
   y: number;
   radius?: number;
+  dim?: number;
   children?: React.ReactNode;
-}> = ({ file, imageHeight, top = 0, height, scale, x, y, radius = 28, children }) => (
+}> = ({ file, imageHeight, top = 0, height, left = 0, width = CSS_W, scale, x, y, radius = 28, dim = 0, children }) => (
   <div
     style={{
       position: "absolute",
       left: x,
       top: y,
-      width: CSS_W * scale,
+      width: width * scale,
       height: height * scale,
       overflow: "hidden",
       borderRadius: radius,
@@ -107,7 +112,7 @@ export const SiteCrop: React.FC<{
     <div
       style={{
         position: "absolute",
-        left: 0,
+        left: -left * scale,
         top: -top * scale,
         width: CSS_W,
         height: imageHeight,
@@ -121,6 +126,7 @@ export const SiteCrop: React.FC<{
       />
       {children}
     </div>
+    {dim > 0 ? <div style={{ position: "absolute", inset: 0, backgroundColor: `rgba(6, 8, 13, ${dim})` }} /> : null}
   </div>
 );
 
@@ -168,6 +174,7 @@ export const RevealLines: React.FC<{
   font?: string;
   tracking?: string;
   lineHeight?: number;
+  align?: "left" | "center";
 }> = ({
   lines,
   progress,
@@ -177,8 +184,9 @@ export const RevealLines: React.FC<{
   font = ARCHIVO,
   tracking = "-0.01em",
   lineHeight = 0.98,
+  align = "left",
 }) => (
-  <div>
+  <div style={{ textAlign: align }}>
     {lines.map((l, i) => (
       <div key={i} style={{ overflow: "hidden", paddingBottom: size * 0.06 }}>
         <div
@@ -256,7 +264,7 @@ export const Lockup: React.FC<{ size: number; dateLine?: boolean }> = ({
             {i > 0 ? (
               <div style={{ width: size * 0.06, height: size * 0.06, borderRadius: size, backgroundColor: VOLT }} />
             ) : null}
-            <Mono size={size * 0.22} color={BONE}>
+            <Mono size={Math.max(28, size * 0.27)} color={BONE} tracking="0.06em">
               {t}
             </Mono>
           </React.Fragment>
