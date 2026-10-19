@@ -1,0 +1,28 @@
+{
+  "critic": "independent",
+  "referenceId": "kickbacks-same-run-editor",
+  "verdict": "pass",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 8,
+    "concept_specificity": 9,
+    "product_authenticity": 9,
+    "mobile_readability": 8,
+    "composition": 8,
+    "motion_causality": 8,
+    "material_restraint": 9
+  },
+  "hardFailures": [],
+  "notes": [
+    "Checked render: out/website.mp4, sha256 02c99f48…baf61 (matches render-brief), 1920x1080, 30 fps, 450 frames, 15.0 s. I extracted every frame at 480 px, every 5th frame at full size and at 640 px, plus single transition frames.",
+    "Authenticity holds. The four surfaces are the real captures (home hero, categories table, home facts, register). The end-card mark is identical to favicon.svg / shuttle-storm-mark.svg: the #06080D rounded tile and the .6-opacity arcs are kept, with no recolour or glow. Every headline is on the site source: 'Saturday, November 21' and 'Sat 21' (index), 'UFV North Gym', 'Abbotsford BC', 'Eleven categories. Juniors to masters.' (index #manifesto, categories.html), 'Entries close … November 18' (index, register), '$30–40 / Per player, per category' (index .num), and the end line 'Nov 21 2026 · UFV North Gym · Abbotsford BC' (index #rl-date). The domain shuttlestorm.adawar.org is the canonical URL. 'FEATHER SHUTTLES. GREAT PRIZES.' is set as the organisers' claim with nothing added: no prize amounts, types or counts. No hard failure.",
+    "Both causality breaks from the last review are fixed. Stop 1 (f3–f25) now underlines 'UFV Athletic Centre in Abbotsford' and 'Saturday, November 21', and the headline it produces is SAT · NOV 21 / UFV NORTH GYM / ABBOTSFORD, BC. Stop 4 underlines the 'Entries close 11:59 pm, Wednesday, November 18, 2026' eyebrow (f280–f286) and the $40 / $30 / $30 fees (f290–f300) before ENTRIES CLOSE / NOV 18 / $30–40 / PER PLAYER, PER CATEGORY builds (f306–f325). At stop 2 the eleven row bars (f100–f128) come before 11 CATEGORIES / JUNIORS TO MASTERS. (f128–f145). Every overlay sits on the measured text.",
+    "The remaining causality gaps are small. At stop 3, the '16 feathers' underline (f190–f200) explains FEATHER SHUTTLES., but GREAT PRIZES. (f230–f240) has nothing on the page that causes it. That is acceptable for an organiser claim, though it is the one uncaused line. At stop 4 the 'Entries close' eyebrow is marked while the camera is still travelling at about 1.3x, so the mono text is only about 5 px tall at 640 px wide (f280–f286) and the mark is hard to read on a phone. Fix: hold the push-in on the eyebrow at about 1.7–2x for the 6 frames of the draw, then glide down to the fees.",
+    "Dead space from the last review is fixed. Each headline now starts during the pull-back (f30, f128, f216, f306), and a page stays in frame through every pan: coverage never drops below about 33% from f0 to f350. The settled pages are a consistent 770 px wide (about 40% of the frame) with the same right edge at x 1832 for stops 1, 3 and 4. The facts-card margin mismatch is gone.",
+    "New composition issue: the register page scrolls fully off the top (f348–f358), and f359–f363 are blank charcoal frames (0% coverage). The end card then fades up in a void (f364–f376) rather than arriving as part of the one-column world. This is about 0.3 s of dead frame, which breaks the reference's rule that surfaces live in one world. Fix: overlap the end-card fade with the register exit, starting the fade at about f352, or let the camera continue down the column onto the end card. Minor: the settled categories card at f134–f164 sits 24 px from the top and bottom edges, against 36–72 px at the other stops. Scale it to about 95% to match.",
+    "Reference fidelity: the mechanism matches. Real pages are the working surfaces, the camera eases between marks, there are no whips, and the marks happen on the page. The settled states still put the page at about 40% of the frame beside a headline, not edge to edge as in the reference, and pushed-in frames reach only about 50–55% width (f0–f25, f88–f122). This is acceptable inheritance under the brief, so it scores 8, not 9.",
+    "Readability at 640 px: every headline is crisp (f60, f155, f250, f335), and so are the end-card lockup, the date line and the URL (f380–f449). The marked body lines at push-in scale, such as 'UFV Athletic Centre…' at f15 and the fee lines at f295, are legible at about 8 px cap height. The fully built headlines hold for only 0.5–0.7 s before the camera leaves (stop 3 about f240→f256, stop 4 about f325→f346), which is tight for a four-line headline. Adding about 8 frames of settle at stop 4, taken from the blank gap at f356–f363, would help.",
+    "Material restraint: card edges are hard, with no drop shadow (pixel profile at f60 steps directly from #101017 to #06060D). The volt headlines have no halo (maximum background deviation around the type is 3). Accents are flat volt only. The only soft darkening is the site's own .sport-copy text-shadow behind the facts copy (f184–f210), which is authentic, and the shallower push keeps it from reading as dirt. There is no added gradient, glass, neon or coloured light.",
+    "End hold: the end card is fully settled from about f376 to f449 (2.5 s), centred, with no clipping or pops."
+  ]
+}
