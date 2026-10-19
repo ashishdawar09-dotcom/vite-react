@@ -116,17 +116,17 @@ const tap = {
   x: SCREEN.x + (MENU_TEXT.x + MENU_TEXT.w * 0.55) * K,
   y: SCREEN.y + (MENU_TEXT.y + MENU_TEXT.h / 2) * K,
 };
-const linkFocus = {
-  x: SCREEN.x + (MENU_TEXT.x + MENU_TEXT.w / 2) * K,
-  y: tap.y,
-};
-const scanFocusY = (PHONE.y - 96 + SCREEN.y + (ROWS[10][0] + ROWS[10][1] - CATS_SCROLL) * K) / 2 + 20;
+// Opening frame: the menu from its header (mark + name) down past "05 Categories".
+const menuFocus = { x: SCREEN.x + 205 * K, y: SCREEN.y + 200 * K };
+// Scan frame: the whole phone with the counter above it, so the rows read small
+// here and visibly grow when they break out into the wall.
+const scanFocusY = (PHONE.y - 96 + PHONE.y + PHONE_H) / 2;
 
 // Camera: hold → travel → hold. Repeated keys are holds.
-const KEY_T = [0, 18, 36, 76, 104, DURATION];
-const KEY_X = [linkFocus.x, linkFocus.x, WIDTH / 2, WIDTH / 2, WIDTH / 2, WIDTH / 2];
-const KEY_Y = [linkFocus.y, linkFocus.y, scanFocusY, scanFocusY, HEIGHT / 2, HEIGHT / 2];
-const KEY_Z = [2.9, 2.9, 1.5, 1.5, 1, 1];
+const KEY_T = [0, 18, 34, 58, 84, DURATION];
+const KEY_X = [menuFocus.x, menuFocus.x, WIDTH / 2, WIDTH / 2, WIDTH / 2, WIDTH / 2];
+const KEY_Y = [menuFocus.y, menuFocus.y, scanFocusY, scanFocusY, HEIGHT / 2, HEIGHT / 2];
+const KEY_Z = [1.95, 1.95, 1.12, 1.12, 1, 1];
 
 export const ShuttleStormRegister: React.FC = () => {
   const frame = useCurrentFrame();
@@ -139,34 +139,35 @@ export const ShuttleStormRegister: React.FC = () => {
   // (menu.js: a:active{color:#D4FF3A}) turns its text volt.
   const touchIn = interpolate(frame, [3, 9], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
   const pressed = interpolate(frame, [9, 12, 16, 19], [0, 1, 1, 0], clamp);
-  const touchOut = interpolate(frame, [17, 21], [1, 0], clamp);
+  const touchOut = interpolate(frame, [15, 18], [1, 0], clamp);
   const active = frame >= 11 && frame < 20 ? 1 : 0;
 
   // The link navigates: a clean cut to /categories, which scrolls to its table.
   const onCategories = frame >= 20;
-  const scroll = interpolate(frame, [22, 38], [0, CATS_SCROLL], { ...clamp, easing: ease });
+  const scroll = interpolate(frame, [22, 34], [0, CATS_SCROLL], { ...clamp, easing: ease });
 
   // A flat volt bar marks each of the eleven real rows; the counter follows it.
-  const ROW_START = 40;
-  const ROW_STEP = 2.6;
+  const ROW_START = 36;
+  const ROW_STEP = 1.9;
   const markedAt = (i: number) =>
     interpolate(frame, [ROW_START + i * ROW_STEP, ROW_START + i * ROW_STEP + 3], [0, 1], clamp);
   const rowsDone = Math.max(1, Math.min(11, Math.floor((frame - ROW_START) / ROW_STEP) + 1));
 
-  // The rows lift out of the page together (no overlap) and scale up into the
-  // wall; the emptied phone drops away beneath them. Marker bars retract.
-  const lift = interpolate(frame, [78, 104], [0, 1], { ...clamp, easing: ease });
-  const markerKeep = interpolate(frame, [104, 116], [1, 0], { ...clamp, easing: ease });
-  const phoneDrop = interpolate(frame, [80, 100], [0, 2300], {
+  // As the count completes, the rows break out of the page together (no overlap)
+  // and grow ~1.4× into the full-width wall while the camera settles back; the
+  // emptied phone shrinks and drops out fast. Marker bars retract.
+  const lift = interpolate(frame, [58, 84], [0, 1], { ...clamp, easing: ease });
+  const markerKeep = interpolate(frame, [84, 94], [1, 0], { ...clamp, easing: ease });
+  const phoneOut = interpolate(frame, [58, 72], [0, 1], {
     ...clamp,
-    easing: Easing.in(Easing.quad),
+    easing: Easing.in(Easing.cubic),
   });
 
   // Lockup slides down into frame, the deadline card slides up, both opaque.
-  const lockupIn = interpolate(frame, [96, 112], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
-  const deadlineIn = interpolate(frame, [104, 120], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
-  const line1 = interpolate(frame, [122, 134], [0, 1], { ...clamp, easing: ease });
-  const line2 = interpolate(frame, [132, 140], [0, 1], { ...clamp, easing: ease });
+  const lockupIn = interpolate(frame, [78, 94], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
+  const deadlineIn = interpolate(frame, [86, 102], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
+  const line1 = interpolate(frame, [104, 116], [0, 1], { ...clamp, easing: ease });
+  const line2 = interpolate(frame, [114, 122], [0, 1], { ...clamp, easing: ease });
 
   const s = interpolate(lift, [0, 1], [K, WALL_S]);
 
@@ -198,7 +199,7 @@ export const ShuttleStormRegister: React.FC = () => {
               fontFamily: ARCHIVO,
               fontWeight: 600,
               fontStretch: "125%",
-              fontSize: 38,
+              fontSize: 34,
               letterSpacing: "0.14em",
               color: INK,
               textTransform: "uppercase",
@@ -214,7 +215,7 @@ export const ShuttleStormRegister: React.FC = () => {
           style={{
             position: "absolute",
             left: interpolate(lift, [0, 1], [SCREEN.x + CROP_X * K, WIDTH - MARGIN]),
-            top: interpolate(lift, [0, 1], [PHONE.y - 96, LOCKUP_Y + 14]),
+            top: interpolate(lift, [0, 1], [PHONE.y - 96, LOCKUP_Y + 16]),
             transform: `translateX(${-100 * lift}%)`,
             fontFamily: MONO,
             fontWeight: 500,
@@ -227,9 +228,9 @@ export const ShuttleStormRegister: React.FC = () => {
             opacity: interpolate(frame, [ROW_START - 4, ROW_START + 2], [0, 1], clamp),
           }}
         >
-          <span style={{ fontSize: 56, lineHeight: 1 }}>{String(rowsDone).padStart(2, "0")}</span>
-          <span style={{ fontSize: 28, letterSpacing: "0.16em", color: MUTED }}>
-            {lift < 0.5 ? "/ 11 CATEGORIES" : "/ 11"}
+          <span style={{ fontSize: interpolate(lift, [0, 1], [56, 46]), lineHeight: 1 }}>{String(rowsDone).padStart(2, "0")}</span>
+          <span style={{ fontSize: interpolate(lift, [0, 1], [28, 22]), letterSpacing: "0.16em", color: MUTED }}>
+            {lift < 0.5 ? "/ 11 CATEGORIES" : "CATEGORIES"}
           </span>
         </div>
 
@@ -243,7 +244,7 @@ export const ShuttleStormRegister: React.FC = () => {
             height: PHONE_H,
             borderRadius: 72,
             backgroundColor: DEVICE,
-            transform: `translateY(${phoneDrop}px)`,
+            transform: `translateY(${phoneOut * 2300}px) scale(${1 - 0.35 * phoneOut})`,
             boxShadow: "0 40px 80px rgba(40, 32, 20, 0.16), 0 8px 18px rgba(40, 32, 20, 0.12)",
           }}
         >
@@ -327,7 +328,7 @@ export const ShuttleStormRegister: React.FC = () => {
           ? ROWS.map(([top, h, g], i) => {
               const first = i === 0 || ROWS[i - 1][2] !== g;
               const last = i === 10 || ROWS[i + 1][2] !== g;
-              const r = 18 * lift;
+              const r = 18;
               return (
                 <div
                   key={i}
