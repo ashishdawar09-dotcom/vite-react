@@ -1,0 +1,26 @@
+{
+  "critic": "independent",
+  "referenceId": "tsenta-one-click-wall",
+  "verdict": "reject",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 7,
+    "concept_specificity": 8,
+    "product_authenticity": 8,
+    "mobile_readability": 7,
+    "composition": 7,
+    "motion_causality": 7,
+    "material_restraint": 9
+  },
+  "hardFailures": [],
+  "notes": [
+    "Research/authenticity verified against source. Frames 0-18 are the real menu.js phone menu (01 HOME volt = aria-current, 05 CATEGORIES -> /categories). The volt press at f12 matches .ss-menu-list a:active{color:#D4FF3A}. All 11 end-wall rows (f86-209) match categories.html exactly (names, groups, ages, fees, '$30/$40 per player' wrap as in site-categories.png). The deadline line 'ENTRIES CLOSE 11:59 PM, WEDNESDAY, NOVEMBER 18, 2026' matches register.html line 55. The lockup mark is byte-identical to favicon.svg. The faint radial tint on the menu (f0-18) is the site's own CSS, not an added effect. No invented prices, counters or states. '11 CATEGORIES' and the regrouping into Juniors/Youth/Adults/Masters cards are layout treatments derived from the page's own claim and Group column, not site UI. That is acceptable but keeps product_authenticity at 8.",
+    "Opening and cause work. f0-18 is tight and readable at 360 px, the tap turns CATEGORIES volt at f12, there is a clean cut to /categories at f20, then a push-in and a volt underline drawing under the page's own claim 'Eleven categories, juniors to masters.' (f36-48). The fingertip dot pops in at f6 with no approach (minor).",
+    "The breakout transition (f61-67) has overlaps and pops. At f62-63 the lifted rows sit on top of the page and cover the CATEGORY/GROUP/AGES header. A sliver of the underlying table text shows as a seam between 'Girls' singles' and 'Youth boys' singles' (f63 y~1140, f65 y~1030). Between f63 and f64 the H1 'EVENT categories.' and the underlined claim vanish in one frame under the rows. At f65 the phone bezel and site header 'SHUTTLE STORM' sit directly above the rows, and by f66 the phone is gone in one frame. At f67 the half-clipped 'SHUTTLE STORM' header of the dropping phone shows through the gap between the Youth and Adults cards (y~1780). This reads as a muddy double exposure, not a clean lift-out.",
+    "Clipping and dead space while travelling: row names are cut at the left frame edge for about a second ('3oys' singles', 'irls' singles', 'outh boys'...' f45-72), and the claim's 'E' touches the edge at f48-60. At f66-70 the upper 25-45% of the frame is empty beige while the rows sit low, so the move reads as rows sliding up, not a camera pulling back around the tapped context. The pullback from about 2.75x to 1x runs in about 17 frames (f61-78), with the phone exit inside 1-2 frames, which is too fast to follow at phone size.",
+    "Payoff and reference fidelity: the end state (f86-209) is a frame-filling stack of the real 11 rows (content y 44-1842), so 5 rows grow to 11, which is honest. But it is a single-column list with no continuous camera pullback in one coordinate system like the reference, so the spatial scale reveal is modest. Material is restrained: flat volt only, neutral warm-light world, no glow or glass.",
+    "Phone readability at 360 px wide (s_210): the row text renders about 7-8 px tall, and the deadline line in mute-grey JetBrains Mono on black is about 6 px with wide tracking. It is legible but marginal for the beat's second claim, and the 'CATEGORIES' label is tinier still. Each card leaves about 90-100 px unused on the right while the fee column wraps.",
+    "End hold is fine. The whole frame still differs from the last frame by up to 224 luma levels through f121 (settle and underline). From f125 the difference is 6 or less, so there is a stable hold of about 2.8-2.9 s (f123-209) with no late pops.",
+    "Fixes: (1) Rebuild f60-70 so the page header and claim stay attached to the phone and leave with it over 8 or more frames. Never drop the H1/claim or the phone in a single frame. Keep the phone fully clear of, or fully behind and invisible through, the card gaps. Crop each row screenshot tightly so no neighbouring header or row pixels make seams. (2) During the push-in and breakout, keep a left margin of at least 40 px so 'Boys' singles', 'Girls' singles' and 'Eleven' are never clipped. (3) Anchor the pullback on the tapped claim and rows so the 11 rows expand outward symmetrically, with no empty beige band (f66-70). Slow the scale change to about 25-30 frames with ease-out. (4) Enlarge the end wall: use about 984 px of usable width, give rows a cap height of at least 30 px at 1080 so they read at least 10 px at 360, scale the deadline crop up so its mono text is at least 9 px at 360, and enlarge the 'CATEGORIES' label. (5) Let the fingertip arrive along a short path before the f12 press instead of popping in at f6."
+  ]
+}
