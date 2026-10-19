@@ -9,8 +9,8 @@ import { PendingRegistrationsPanel } from "./PendingRegistrationsPanel";
 /**
  * Player roster + management. Admins can add players with category
  * assignments, inline-edit names, toggle active state, choose
- * partners, and delete players. Auto-Pair button at the bottom for
- * batch team formation in the current category.
+ * partners (doubles only), and delete players. Singles players are
+ * never paired: they're entered when the group stage starts.
  *
  * Heavy prop surface (~22 props) reflecting the breadth of in-place
  * actions on a player card. Could shrink with a TournamentContext
@@ -43,7 +43,8 @@ export function RegisterTab({
   handleDeletePlayer,
   handlePhoto,
   openPartnerPicker,
-  autoGen,
+  partnerNeedsByPlayer,
+  unpairedCountByCategory,
   fileRefs,
   paired,
   unpaired,
@@ -74,14 +75,16 @@ export function RegisterTab({
   toggleActive: (id: string) => Promise<void>;
   handleDeletePlayer: (id: string) => Promise<void>;
   handlePhoto: (id: string, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
-  openPartnerPicker: (pid: string) => void;
-  autoGen: () => Promise<void>;
+  openPartnerPicker: (pid: string, categoryId?: string) => void;
+  partnerNeedsByPlayer: Map<string, string[]>;
+  unpairedCountByCategory: Map<string, number>;
   fileRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
   paired: Set<string>;
   unpaired: Player[];
   btn: (bg?: string, clr?: string) => React.CSSProperties;
 }) {
   const reduceMotion = useReducedMotion();
+  const currentCategory = currentCategoryId ? catById[currentCategoryId] : undefined;
   const filteredPlayers = currentCategoryId
     ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId))
     : players;
@@ -205,14 +208,20 @@ export function RegisterTab({
                     {isAdmin && <button onClick={() => setEditingPlayerCats(p.id)} style={{ fontSize: 10, padding: "2px 6px", border: "none", background: "transparent", color: "#3A86FF", cursor: "pointer", fontWeight: 700 }}>Edit</button>}
                   </div>
                 )}
-                {paired.has(p.id) && <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3, fontWeight: 600 }}>✓ Team assigned</div>}
+                {paired.has(p.id) && (currentCategoryId || !partnerNeedsByPlayer.has(p.id)) && <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3, fontWeight: 600 }}>✓ Team assigned</div>}
               </div>
               {isAdmin && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
                   <button onClick={() => toggleActive(p.id)} style={{ ...btn(p.active ? "#e2e8f0" : "#2A9D8F", p.active ? "#475569" : "#fff"), padding: "6px 12px", fontSize: 12, borderRadius: 8, boxShadow: "none" }}>{p.active ? "Sit Out" : "Activate"}</button>
-                  {p.active && !paired.has(p.id) && unpaired.length >= 2 && (
+                  {currentCategory?.team_size === 2 && p.active && !paired.has(p.id) && unpaired.length >= 2 && (
                     <button onClick={() => openPartnerPicker(p.id)} style={{ ...btn("#3A86FF"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Choose Partner</button>
                   )}
+                  {/* All view: one button per doubles category still missing a partner. */}
+                  {!currentCategoryId && (partnerNeedsByPlayer.get(p.id) ?? [])
+                    .filter(cid => (unpairedCountByCategory.get(cid) ?? 0) >= 2)
+                    .map(cid => (
+                      <button key={cid} onClick={() => openPartnerPicker(p.id, cid)} style={{ ...btn("#3A86FF"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Partner · {catById[cid]?.name ?? "Doubles"}</button>
+                    ))}
                   <button onClick={() => handleDeletePlayer(p.id)} style={{ ...btn("#dc2626"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Delete</button>
                 </div>
               )}
@@ -220,11 +229,6 @@ export function RegisterTab({
           );
         })}
       </motion.div>
-      {isAdmin && unpaired.length >= 2 && currentCategoryId && (
-        <div style={{ textAlign: "center", marginTop: 28 }}>
-          <button onClick={autoGen} style={{ ...btn("#2A9D8F"), padding: "14px 36px", fontSize: 16, borderRadius: 14 }}>🎲 Auto-Pair All Players</button>
-        </div>
-      )}
       {unpaired.length === 1 && currentCategoryId && (
         <div style={{ textAlign: "center", marginTop: 16, padding: 14, background: "#fef3c7", borderRadius: 12, border: "1px solid #fde68a", color: "#92400e", fontSize: 14 }}>
           ⚠️ Odd player out: <strong>{unpaired[0].name}</strong>
