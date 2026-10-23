@@ -31,7 +31,7 @@ serveWithCors(async (req: Request) => {
 
   const { data: reg } = await supabase
     .from("pending_registrations")
-    .select("id, status, player_name, partner_name, partner_email, tournament_id, category_id")
+    .select("id, status, player_name, partner_name, partner_email, tournament_id, category_id, approved_partner_id")
     .eq("partner_consent_token", body.token)
     .maybeSingle();
   if (!reg || reg.status === "rejected") return json({ success: false, error: "This link isn't valid." }, 404);
@@ -84,6 +84,10 @@ serveWithCors(async (req: Request) => {
       return json({ success: false, error: "Couldn't save your consent. Please try again." }, 500);
     }
     await supabase.from("pending_registrations").update({ partner_age: v.value.age }).eq("id", reg.id);
+    // Already-approved entries: keep the partner's profile age in step.
+    if (reg.approved_partner_id) {
+      await supabase.from("players").update({ age: v.value.age }).eq("id", reg.approved_partner_id);
+    }
     return json({ success: true }, 200);
   }
 

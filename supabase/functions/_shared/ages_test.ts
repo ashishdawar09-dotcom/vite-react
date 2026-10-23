@@ -30,3 +30,12 @@ Deno.test("unknown age or category passes", () => {
   assertEquals(ageProblem(boys, null), null);
   assertEquals(ageProblem(null, 15), null);
 });
+
+Deno.test("min_age: 35+ doubles need both partners 35 or over, no upper limit", () => {
+  const md35 = { name: "Men's Doubles 35+", age_band: "adult", min_age: 35 };
+  assertEquals(ageProblem(md35, 35), null);
+  assertEquals(ageProblem(md35, 54), null);
+  assertMatch(ageProblem(md35, 34)!, /35 and over/);
+  assertMatch(ageProblem(md35, 28, "partner")!, /both partners must be 35\+/);
+  assertEquals(ageProblem({ name: "Men's Doubles 18–34", age_band: "adult" }, 46), null);
+});

@@ -64,6 +64,35 @@ export function PlayerProfileView({
       setSavingEmail(false);
     }
   };
+  // Age on tournament day, from the registration form. Admin-only (the public
+  // /p/:id profile passes isAdmin=false and never loads players.age).
+  const [editingAge, setEditingAge] = useState(false);
+  const [ageDraft, setAgeDraft] = useState("");
+  const [ageError, setAgeError] = useState<string | null>(null);
+  const [savingAge, setSavingAge] = useState(false);
+  const startEditAge = () => {
+    setAgeDraft(player.age != null ? String(player.age) : "");
+    setAgeError(null);
+    setEditingAge(true);
+  };
+  const saveAge = async () => {
+    const v = ageDraft.trim();
+    const n = v === "" ? null : Number(v);
+    if (n !== null && (!Number.isInteger(n) || n < 4 || n > 110)) {
+      setAgeError("Enter an age from 4 to 110, or leave blank.");
+      return;
+    }
+    setSavingAge(true);
+    setAgeError(null);
+    try {
+      await updatePlayer(player.id, { age: n });
+      setEditingAge(false);
+    } catch (e: unknown) {
+      setAgeError(e instanceof Error ? e.message : "Failed to save age.");
+    } finally {
+      setSavingAge(false);
+    }
+  };
   const playerTeams = useMemo(
     () => allTeams.filter(t => t.p1_id === player.id || t.p2_id === player.id),
     [allTeams, player.id]
@@ -159,6 +188,43 @@ export function PlayerProfileView({
             <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: 1.8, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>Player Profile</div>
             <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, color: "#1a1a2e", letterSpacing: -0.5, lineHeight: 1.1 }}>{player.name}</h1>
             {player.note && <div style={{ marginTop: 8, fontSize: 13, color: "#E63946", padding: "4px 12px", background: "#fef2f2", borderRadius: 12, display: "inline-block" }}>⚠️ {player.note}</div>}
+
+            {/* Age — admin-only */}
+            {isAdmin && (
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {editingAge ? (
+                  <>
+                    <input
+                      type="text" inputMode="numeric" autoFocus aria-label="Age on tournament day"
+                      value={ageDraft}
+                      onChange={e => setAgeDraft(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                      onKeyDown={e => { if (e.key === "Enter") saveAge(); if (e.key === "Escape") setEditingAge(false); }}
+                      style={{ width: 64, padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 14 }}
+                    />
+                    <button onClick={saveAge} disabled={savingAge}
+                      style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#3A86FF", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                      {savingAge ? "Saving…" : "Save"}
+                    </button>
+                    <button onClick={() => setEditingAge(false)}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#475569", fontSize: 12, cursor: "pointer" }}>
+                      Cancel
+                    </button>
+                    {ageError && <span style={{ fontSize: 12, color: "#E63946" }}>{ageError}</span>}
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#334155", padding: "4px 12px", background: "#f1f5f9", borderRadius: 12 }}>
+                      {player.age != null ? `Age ${player.age}` : "Age —"}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>on tournament day, from registration</span>
+                    <button onClick={startEditAge}
+                      style={{ padding: 0, border: "none", background: "transparent", color: "#3A86FF", fontWeight: 700, cursor: "pointer", fontSize: 12, textDecoration: "underline" }}>
+                      {player.age != null ? "Edit" : "Add age"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Categories */}
             {playerCats.length > 0 && (

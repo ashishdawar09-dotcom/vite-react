@@ -19,7 +19,7 @@ import { Countdown } from "./Countdown";
 import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type Concessions, type PaymentSplit } from "./computeFee";
 import { CYAN, CYAN_DARK, Card, CheckRow, Field, PageShell, inputStyle, safeHttpUrl } from "./formParts";
 import { usePublicTournament } from "./usePublicTournament";
-import { AGE_OF_MAJORITY, emptyFormState, type FormErrors, type FormState, isValid, parseAge, validate } from "./validate";
+import { AGE_OF_MAJORITY, emptyFormState, type FormErrors, type FormState, isValid, parseAge, partnerAgeRequired, validate } from "./validate";
 
 // ---------- small helpers (file-local) ---------------------------------------
 
@@ -115,6 +115,9 @@ export function PublicRegistrationPage() {
   const partnerAgeNeeded =
     ageRequired && selectedCategory?.team_size === 2 && priceBasis(selectedCategory) === "per_player" &&
     !!form.partner_name.trim() && form.payment_split === "full";
+  // Age-banded doubles (35+): both partners must qualify, so ask the named
+  // partner's age whatever the payment split.
+  const bandedPartnerAge = partnerAgeRequired(form, selectedCategory);
   const errors = useMemo(
     () => validate({ ...form, payment_method: payMethod }, selectedCategory, {
       requireMembership: false,
@@ -219,6 +222,8 @@ export function PublicRegistrationPage() {
     if (partnerAgeNeeded && paymentSplit === "full") {
       payload.partner_age = partnerAge ?? undefined;
       payload.partner_student = partner.student;
+    } else if (bandedPartnerAge) {
+      payload.partner_age = partnerAge ?? undefined;
     }
     if (waiverRequired) {
       payload.consent = {
@@ -717,9 +722,14 @@ export function PublicRegistrationPage() {
                 </div>
               </Field>
             )}
-            {partnerAgeNeeded && paymentSplit === "full" && (
+            {((partnerAgeNeeded && paymentSplit === "full") || bandedPartnerAge) && (
               <>
-                <Field label="Partner's age on the tournament date" required hint="Prices your partner's share." error={visibleErrors.partner_age}>
+                <Field
+                  label="Partner's age on the tournament date" required
+                  hint={bandedPartnerAge
+                    ? `Both partners must be ${selectedCategory!.min_age}+ on the tournament date.`
+                    : "Prices your partner's share."}
+                  error={visibleErrors.partner_age}>
                   <input
                     type="text" inputMode="numeric" style={{ ...inputStyle, maxWidth: 120 }}
                     value={form.partner_age}
@@ -727,7 +737,7 @@ export function PublicRegistrationPage() {
                     onBlur={() => markTouched("partner_age")}
                   />
                 </Field>
-                {offerStudent(partnerAge) && (
+                {partnerAgeNeeded && paymentSplit === "full" && offerStudent(partnerAge) && (
                   <CheckRow
                     checked={form.partner_student}
                     onChange={(v) => set("partner_student", v)}

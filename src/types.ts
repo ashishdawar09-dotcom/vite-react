@@ -66,6 +66,9 @@ export type Category = {
   // Registration price in CAD (null = not set). Singles are always per player.
   price: number | null;
   price_basis: PriceBasis;
+  // Minimum age on tournament day for every player in an entry (e.g. 35 for
+  // "Men's Doubles 35+"). Null = no minimum beyond the age band.
+  min_age?: number | null;
 };
 
 export type Player = {
@@ -79,6 +82,9 @@ export type Player = {
   sort_order: number;
   checked_in_at: string | null; // tournament-day check-in timestamp; null = not checked in
   email: string | null;         // optional contact email for court-allocation notifications
+  // Age on tournament day, from the registration form. Admin-only: only
+  // present on rows loaded through admin_players.
+  age?: number | null;
 };
 
 export type Team = {

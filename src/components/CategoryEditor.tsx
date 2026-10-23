@@ -25,6 +25,7 @@ export function CategoryEditor({
   const [matchMin, setMatchMin] = useState(category?.match_minutes ?? 12);
   const [startsAt, setStartsAt] = useState<string>(category?.starts_at ? toLocalInput(category.starts_at) : "");
   const [ageBand, setAgeBand] = useState<AgeBand | null>(category?.age_band ?? null);
+  const [minAge, setMinAge] = useState<string>(category?.min_age != null ? String(category.min_age) : "");
   const [allowSolo, setAllowSolo] = useState<boolean>(category?.allow_solo_signup ?? false);
   const [hasBronze, setHasBronze] = useState<boolean>(category?.has_bronze_match ?? false);
   const [price, setPrice] = useState<string>(category?.price != null ? String(category.price) : "");
@@ -82,6 +83,11 @@ export function CategoryEditor({
     if (priceNum !== null && (!Number.isFinite(priceNum) || priceNum < 0)) { toast("Price must be a positive amount", "warn"); return; }
     // Singles are always per player (also enforced by a DB constraint).
     const basis: PriceBasis = teamSize === 2 ? priceBasis : "per_player";
+    const minAgeNum = minAge.trim() === "" ? null : Number(minAge);
+    if (minAgeNum !== null && (!Number.isInteger(minAgeNum) || minAgeNum < 4 || minAgeNum > 110)) {
+      toast("Minimum age must be a whole number from 4 to 110, or blank", "error");
+      return;
+    }
     setBusy(true);
     try {
       const startsIso = startsAt ? new Date(startsAt).toISOString() : null;
@@ -93,6 +99,7 @@ export function CategoryEditor({
           match_minutes: matchMin,
           starts_at: startsIso,
           age_band: ageBand,
+          min_age: minAgeNum,
           allow_solo_signup: allowSolo,
           has_bronze_match: hasBronze,
           price: priceNum,
@@ -106,9 +113,9 @@ export function CategoryEditor({
         await db.updateCategory(category.id, patch);
       } else {
         const created = await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
-        if (ageBand !== null || allowSolo || hasBronze || priceNum !== null || basis !== "per_player") {
+        if (ageBand !== null || minAgeNum !== null || allowSolo || hasBronze || priceNum !== null || basis !== "per_player") {
           await db.updateCategory(created.id, {
-            age_band: ageBand, allow_solo_signup: allowSolo, has_bronze_match: hasBronze,
+            age_band: ageBand, min_age: minAgeNum, allow_solo_signup: allowSolo, has_bronze_match: hasBronze,
             price: priceNum, price_basis: basis,
           });
         }
@@ -178,6 +185,18 @@ export function CategoryEditor({
             <option value="teen">Teen (13-17)</option>
             <option value="adult">Adult (18+)</option>
           </select>
+        </Field>
+
+        <Field label="Minimum age (optional)">
+          <input
+            type="text" inputMode="numeric" placeholder="e.g. 35"
+            value={minAge}
+            onChange={e => setMinAge(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            style={{ ...inputStyle, maxWidth: 120 }}
+          />
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+            Every player in an entry must be at least this age on tournament day (both partners in doubles). Blank = no minimum.
+          </div>
         </Field>
 
         {teamSize === 2 && (
