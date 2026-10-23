@@ -54,6 +54,7 @@ export type Database = {
           has_bronze_match: boolean
           id: string
           match_minutes: number
+          min_age: number | null
           name: string
           phase: string
           price: number | null
@@ -73,6 +74,7 @@ export type Database = {
           has_bronze_match?: boolean
           id?: string
           match_minutes?: number
+          min_age?: number | null
           name: string
           phase?: string
           price?: number | null
@@ -92,6 +94,7 @@ export type Database = {
           has_bronze_match?: boolean
           id?: string
           match_minutes?: number
+          min_age?: number | null
           name?: string
           phase?: string
           price?: number | null
@@ -527,6 +530,7 @@ export type Database = {
       players: {
         Row: {
           active: boolean
+          age: number | null
           checked_in_at: string | null
           color: string
           created_at: string
@@ -540,6 +544,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          age?: number | null
           checked_in_at?: string | null
           color?: string
           created_at?: string
@@ -553,6 +558,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          age?: number | null
           checked_in_at?: string | null
           color?: string
           created_at?: string
@@ -922,6 +928,7 @@ export type Database = {
         Args: { p_tournament_id: string }
         Returns: {
           active: boolean
+          age: number | null
           checked_in_at: string | null
           color: string
           created_at: string

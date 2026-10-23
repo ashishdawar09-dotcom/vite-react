@@ -146,7 +146,15 @@ export function validate(
   if (requireAge && age === null) errs.player_age = "Enter the player's age (4–110)";
   const tooOld = ageProblem(selectedCategory, age);
   if (tooOld) errs.category_id = tooOld;
-  if (requirePartnerAge && parseAge(form.partner_age) === null) errs.partner_age = "Enter your partner's age (4–110)";
+  const partnerAge = parseAge(form.partner_age);
+  const ageBandedPartner = partnerAgeRequired(form, selectedCategory);
+  if ((requirePartnerAge || ageBandedPartner) && partnerAge === null) {
+    errs.partner_age = "Enter your partner's age (4–110)";
+  }
+  if (ageBandedPartner) {
+    const partnerTooYoung = ageProblem(selectedCategory, partnerAge, "partner");
+    if (partnerTooYoung) errs.partner_age = partnerTooYoung;
+  }
 
   if (requireWaiver) {
     if (!form.accepted_rules) errs.accepted_rules = "Required";
@@ -162,6 +170,14 @@ export function validate(
   }
 
   return errs;
+}
+
+// A doubles category with a minimum age (e.g. 35+) needs the partner's age
+// whenever a partner is named, because both partners must meet it. Solo
+// entries are checked on the submitter's age only; the directors pair them.
+export function partnerAgeRequired(form: FormState, category: Category | null): boolean {
+  if (!category || category.team_size !== 2 || category.min_age == null) return false;
+  return !!form.partner_name.trim() || !!form.partner_email.trim();
 }
 
 // True when validate() returns no errors. Useful for disabling submit.

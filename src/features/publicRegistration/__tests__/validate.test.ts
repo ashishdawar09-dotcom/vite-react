@@ -177,3 +177,36 @@ describe("category age bands", () => {
     expect(validate({ ...happyPath(), category_id: "s", player_age: "15" }, singles).category_id).toBeUndefined();
   });
 });
+
+describe("minimum-age doubles (35+)", () => {
+  const md35: Category = { ...doublesSolo, id: "m35", name: "Men's Doubles 35+", min_age: 35 };
+  const md1834: Category = { ...doublesSolo, id: "m18", name: "Men's Doubles 18–34" };
+  const pair = (playerAge: string, partnerAge: string) => ({
+    ...happyPath(), category_id: "m35", player_age: playerAge, partner_age: partnerAge,
+    partner_name: "Raj Singh", partner_email: "raj@example.com", partner_phone: "6049876543",
+    partner_is_member: true,
+  });
+
+  it("accepts 35 and over, with no upper limit", () => {
+    expect(validate(pair("35", "35"), md35).category_id).toBeUndefined();
+    expect(validate(pair("54", "61"), md35)).toEqual({});
+  });
+
+  it("rejects a player under 35", () => {
+    expect(validate(pair("34", "40"), md35).category_id).toMatch(/35 and over/);
+  });
+
+  it("needs and checks the named partner's age: the younger partner decides", () => {
+    expect(validate(pair("40", ""), md35).partner_age).toMatch(/partner's age/);
+    expect(validate(pair("46", "28"), md35).partner_age).toMatch(/both partners must be 35\+/);
+  });
+
+  it("a solo entry is checked on the player's own age only", () => {
+    const solo = { ...happyPath(), category_id: "m35", player_age: "46" };
+    expect(validate(solo, md35)).toEqual({});
+  });
+
+  it("anyone can enter 18–34, including older players", () => {
+    expect(validate({ ...pair("46", "28"), category_id: "m18" }, md1834)).toEqual({});
+  });
+});

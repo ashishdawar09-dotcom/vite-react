@@ -119,6 +119,11 @@ export function ProfilesTab({
                   <span style={{ color: "#94a3b8", fontSize: 13, fontWeight: 500, marginRight: 6 }}>#{i + 1}</span>{p.name}
                 </div>
               )}
+              {isAdmin && (
+                <div style={{ fontSize: 12, color: "#475569", marginTop: 4, fontWeight: 600 }}>
+                  {p.age != null ? `Age ${p.age}` : "Age —"}
+                </div>
+              )}
               {p.note && <div style={{ fontSize: 12, color: "#E63946", marginTop: 6, padding: "3px 10px", background: "#fef2f2", borderRadius: 12, display: "inline-block" }}>⚠️ {p.note}</div>}
               {(() => {
                 const pCats = playerCategoryMap.get(p.id);

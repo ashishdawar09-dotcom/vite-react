@@ -38,7 +38,7 @@ type Payload = {
   website?: string; // honeypot: hidden from people, filled in by form bots
   player_age?: number;
   player_student?: boolean;
-  partner_age?: number;      // needed to price the partner's share when paying for both
+  partner_age?: number;      // prices the partner's share when paying for both; required for min-age doubles
   partner_student?: boolean;
   consent?: ConsentInput;    // required when the tournament has a waiver
 };
@@ -152,7 +152,7 @@ async function handle(req: Request): Promise<Response> {
     // ---- Validation: category belongs to tournament ----
     const { data: c, error: cErr } = await supabase
       .from("categories")
-      .select("id, name, tournament_id, team_size, allow_solo_signup, price, price_basis, age_band")
+      .select("id, name, tournament_id, team_size, allow_solo_signup, price, price_basis, age_band, min_age")
       .eq("id", body.category_id)
       .maybeSingle();
     if (cErr || !c || c.tournament_id !== body.tournament_id) {
@@ -193,6 +193,16 @@ async function handle(req: Request): Promise<Response> {
     }
     const ageErr = ageProblem(c, playerAge);
     if (ageErr) return json({ success: false, error: ageErr }, 400);
+    // Age-banded doubles (e.g. 35+): both partners must meet the minimum, so a
+    // named partner's age is required and checked too.
+    if (isDoubles && c.min_age != null && partnerProvided) {
+      const namedPartnerAge = parseAge(body.partner_age);
+      if (namedPartnerAge === null) {
+        return json({ success: false, error: "Please enter your partner's age on tournament day." }, 400);
+      }
+      const partnerAgeErr = ageProblem(c, namedPartnerAge, "partner");
+      if (partnerAgeErr) return json({ success: false, error: partnerAgeErr }, 400);
+    }
     let consent = null;
     if (waiverRequired) {
       const v = validateConsent({ ...body.consent, age: playerAge }, t, body.player_name!.trim());

@@ -244,6 +244,11 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
         <div style={{ marginTop: spacing.md, display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: colors.text.mutedLight }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
             {reg.player_age !== null && <span>Age {reg.player_age}</span>}
+            {reg.partner_age !== null && reg.partner_name && <span>Partner age {reg.partner_age}</span>}
+            {category?.min_age != null && reg.player_age !== null && reg.player_age < category.min_age &&
+              <Badge tone="warn">Player under {category.min_age}</Badge>}
+            {category?.min_age != null && reg.partner_age !== null && reg.partner_age < category.min_age &&
+              <Badge tone="warn">Partner under {category.min_age}</Badge>}
             {reg.player_fee_type && FEE_LABEL[reg.player_fee_type] && <Badge tone="info">{FEE_LABEL[reg.player_fee_type]}</Badge>}
             {reg.partner_fee_type && FEE_LABEL[reg.partner_fee_type] && <Badge tone="info">Partner: {FEE_LABEL[reg.partner_fee_type]}</Badge>}
           </div>
@@ -359,8 +364,9 @@ const secondaryBtn: React.CSSProperties = {
   color: colors.text.primaryLight, fontSize: 13, fontWeight: 700, cursor: "pointer", minHeight: 36,
 };
 
-function Badge({ tone, children }: { tone: "good" | "neutral" | "info"; children: React.ReactNode }) {
+function Badge({ tone, children }: { tone: "good" | "neutral" | "info" | "warn"; children: React.ReactNode }) {
   const map = {
+    warn: { bg: "#fef2f2", fg: "#b91c1c" },
     good: { bg: colors.state.completedSubtle, fg: colors.state.completed },
     neutral: { bg: colors.bg.muted, fg: colors.text.mutedLight },
     info: { bg: colors.brand.primarySubtle, fg: colors.brand.primary },
