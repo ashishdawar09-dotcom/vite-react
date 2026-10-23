@@ -1,3 +1,4 @@
+import { matchCategories } from "./format";
 import type { Category, Snapshot } from "./types";
 
 export function groupLetter(idx: number): string {
@@ -52,12 +53,10 @@ function buildRules(snap: Snapshot): string {
 
 export function buildRulesForTopic(snap: Snapshot, topic?: string): string {
   if (topic) {
-    const t = topic.toLowerCase();
-    const match = snap.categories.find(
-      (c) => c.name.toLowerCase().includes(t) || t.includes(c.name.toLowerCase()),
-    );
-    if (match) {
-      return `${describeCategory(snap, match)} ${STATIC_RULES}`;
+    // "men's doubles" can mean both age bands; describe each one.
+    const matches = matchCategories(snap.categories, topic).sort((a, b) => a.sort_order - b.sort_order);
+    if (matches.length) {
+      return `${matches.map((c) => describeCategory(snap, c)).join(" ")} ${STATIC_RULES}`;
     }
   }
   return buildRules(snap);
