@@ -11,9 +11,11 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
-import { esc } from "../_shared/emails.ts";
 import { allow, isUuid, json, serveWithCors } from "../_shared/http.ts";
 import { sendEmail } from "../_shared/mailer.ts";
+
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
 
 const OWNER_EMAIL = Deno.env.get("PLAYER_DELETE_EMAIL") ?? "ashishdawar09@gmail.com";
 const CODE_TTL_MINUTES = 10;
