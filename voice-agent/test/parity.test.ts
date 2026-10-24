@@ -12,7 +12,7 @@ import * as ref from "./reference/deployed-2026-07-23.js";
 import { computeStandings } from "../src/standings";
 import { projectSchedule } from "../src/scheduling";
 import { buildRulesForTopic } from "../src/rules";
-import { teamName } from "../src/format";
+import { matchCategories, teamName } from "../src/format";
 import * as tools from "../src/tools";
 import type { Category, Match, Player, Snapshot, Team } from "../src/types";
 
@@ -30,7 +30,19 @@ function rng(seed: number) {
 const NOW = Date.parse("2026-11-21T18:30:00Z");
 const FIRST = ["Asha", "Ben", "Chen", "Dev", "Ella", "Farah", "Gus", "Hana", "Ivan", "Jas", "Kiran", "Lena", "Mo", "Nina", "Omar", "Priya", "Raj", "Sara", "Tom", "Uma"];
 const LAST = ["Singh", "Lee", "Patel", "Wong", "Brown", "Khan", "Garcia", "Sahni", "Dawar", "Smith"];
-const CATS = ["Men's Doubles", "Mixed Doubles", "Women's Singles", "Boys' Singles", "Men's Super Double 45+"];
+const CATS = [
+  "Men's Doubles 18–34",
+  "Men's Doubles 35+",
+  "Women's Doubles 18–34",
+  "Women's Doubles 35+",
+  "Mixed Doubles 18–34",
+  "Mixed Doubles 35+",
+  "Men's Singles",
+  "Youth Girls' Singles",
+  "Super Doubles 50+",
+];
+// Spoken category names, including ones that match several categories.
+const CAT_QUERIES = ["doubles", "mixed", "nothing", "men's doubles", "women's doubles", "35+", "mens doubles 18 to 34", "rules for women's doubles 35 plus"];
 
 function iso(ms: number) {
   return new Date(ms).toISOString();
@@ -205,14 +217,26 @@ function compareAll(snap: Snapshot, label: string) {
     }
     expect(tools.answerUpcoming(snap, now), `${label} upcoming`).toBe(ref.answerUpcoming(snap, now));
   }
+  // Category matching deliberately differs from the deployed substring match,
+  // so these compare against the deployed logic run on just the categories
+  // the new matcher picked.
+  const only = (cats: Category[]): Snapshot => ({ ...snap, categories: cats });
   for (const g of ["A", "b", "C", "D", " e ", "Z", "1", ""]) {
-    for (const cat of [undefined, "doubles", "mixed", "nothing", ...snap.categories.map((c) => c.name)]) {
-      expect(tools.answerStandings(snap, g, cat), `${label} standings ${g} ${cat}`).toBe(ref.answerStandings(snap, g, cat));
+    for (const cat of [undefined, ...CAT_QUERIES, ...snap.categories.map((c) => c.name)]) {
+      const picked = cat ? matchCategories(snap.categories, cat) : [];
+      const expected = picked.length ? ref.answerStandings(only(picked), g) : ref.answerStandings(snap, g);
+      expect(tools.answerStandings(snap, g, cat), `${label} standings ${g} ${cat}`).toBe(expected);
     }
   }
-  for (const topic of [undefined, "", "doubles", "mixed", "scoring", ...snap.categories.map((c) => c.name)]) {
-    expect(tools.answerRules(snap, topic), `${label} rules ${topic}`).toBe(ref.answerRules(snap, topic));
-    expect(buildRulesForTopic(snap, topic)).toBe(ref.buildRulesForTopic(snap, topic));
+  for (const topic of [undefined, "", "scoring", ...CAT_QUERIES, ...snap.categories.map((c) => c.name)]) {
+    const picked = topic ? matchCategories(snap.categories, topic).sort((a, b) => a.sort_order - b.sort_order) : [];
+    const single = (c: Category) => ref.buildRulesForTopic(only([c]), c.name);
+    const staticRules = (text: string) => text.slice(text.indexOf(" Scoring in the group stage"));
+    const expected = !picked.length
+      ? ref.buildRulesForTopic(snap, undefined)
+      : picked.map((c) => single(c).slice(0, -staticRules(single(c)).length)).join(" ") + staticRules(single(picked[0]));
+    expect(tools.answerRules(snap, topic), `${label} rules ${topic}`).toBe(expected);
+    expect(buildRulesForTopic(snap, topic)).toBe(expected);
   }
   for (const limit of [undefined, 1, 10]) {
     expect(tools.answerResults(snap, limit), `${label} results`).toBe(ref.answerResults(snap, limit));

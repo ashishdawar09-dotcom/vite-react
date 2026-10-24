@@ -1,4 +1,4 @@
-import { norm, teamName } from "./format";
+import { matchCategories, norm, teamName } from "./format";
 import { buildRulesForTopic, groupLetter } from "./rules";
 import { projectSchedule } from "./scheduling";
 import { computeStandings } from "./standings";
@@ -151,8 +151,7 @@ export function answerStandings(snap: Snapshot, letter: string, categoryName?: s
   if (idx < 0 || idx > 25) return `I didn't catch which group you meant.`;
   let cats = snap.categories;
   if (categoryName) {
-    const q = norm(categoryName);
-    cats = snap.categories.filter((c) => norm(c.name).includes(q) || q.includes(norm(c.name)));
+    cats = matchCategories(snap.categories, categoryName);
     if (!cats.length) cats = snap.categories;
   }
   const lines: string[] = [];
