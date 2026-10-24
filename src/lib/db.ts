@@ -223,9 +223,26 @@ export async function addPlayer(tournament_id: string, name: string, sort_order:
   return data as unknown as Player;
 }
 
-export async function deletePlayer(id: string) {
-  const { error } = await supabase.from("players").delete().eq("id", id);
-  if (error) throw error;
+// Deleting a player goes through the `delete-player` Edge Function: it emails
+// a one-time code to the owner and deletes only once that code is entered.
+// Admins have no direct DELETE on players.
+async function invokeDeletePlayer<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("delete-player", { body });
+  if (error) {
+    // Non-2xx: the function's JSON body says what went wrong.
+    const res = (error as { context?: Response }).context;
+    const msg = await res?.json?.().then((b: { error?: string }) => b?.error).catch(() => undefined);
+    throw new Error(msg ?? error.message);
+  }
+  return data as T;
+}
+
+export function requestPlayerDeleteCode(player_id: string) {
+  return invokeDeletePlayer<{ sent: true; to: string; expires_minutes: number }>({ action: "request", player_id });
+}
+
+export function confirmPlayerDelete(player_id: string, code: string) {
+  return invokeDeletePlayer<{ deleted: true }>({ action: "confirm", player_id, code });
 }
 
 export async function updatePlayer(id: string, patch: Partial<Player>) {

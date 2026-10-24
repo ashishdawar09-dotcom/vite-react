@@ -9,8 +9,9 @@ import { PendingRegistrationsPanel } from "./PendingRegistrationsPanel";
 /**
  * Player roster + management. Admins can add players with category
  * assignments, inline-edit names, toggle active state, choose
- * partners (doubles only), and delete players. Singles players are
- * never paired: they're entered when the group stage starts.
+ * partners (doubles only). Deleting a player lives on their profile and
+ * needs an emailed code. Singles players are never paired: they're
+ * entered when the group stage starts.
  *
  * Heavy prop surface (~22 props) reflecting the breadth of in-place
  * actions on a player card. Could shrink with a TournamentContext
@@ -40,7 +41,6 @@ export function RegisterTab({
   pendingPlayerCats,
   setPendingPlayerCats,
   toggleActive,
-  handleDeletePlayer,
   handlePhoto,
   openPartnerPicker,
   partnerNeedsByPlayer,
@@ -73,7 +73,6 @@ export function RegisterTab({
   pendingPlayerCats: Set<string> | null;
   setPendingPlayerCats: React.Dispatch<React.SetStateAction<Set<string> | null>>;
   toggleActive: (id: string) => Promise<void>;
-  handleDeletePlayer: (id: string) => Promise<void>;
   handlePhoto: (id: string, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   openPartnerPicker: (pid: string, categoryId?: string) => void;
   partnerNeedsByPlayer: Map<string, string[]>;
@@ -222,7 +221,6 @@ export function RegisterTab({
                     .map(cid => (
                       <button key={cid} onClick={() => openPartnerPicker(p.id, cid)} style={{ ...btn("#3A86FF"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Partner · {catById[cid]?.name ?? "Doubles"}</button>
                     ))}
-                  <button onClick={() => handleDeletePlayer(p.id)} style={{ ...btn("#dc2626"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Delete</button>
                 </div>
               )}
             </motion.div>

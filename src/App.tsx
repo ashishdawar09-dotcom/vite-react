@@ -209,17 +209,6 @@ export default function App() {
     await db.updatePlayer(id, { active: !p.active });
     if (p.active) await db.deleteTeamsContainingPlayer(id);
   };
-  const handleDeletePlayer = async (id: string) => {
-    if (!guard()) return;
-    const p = playerById[id]; if (!p) return;
-    if (isPlayerInLiveMatch(id)) { toast(`"${p.name}" is in a live match and cannot be deleted right now.`, "warn"); return; }
-    const teamCount = teams.filter(t => t.p1_id === id || t.p2_id === id).length;
-    const msg = teamCount > 0
-      ? `Delete "${p.name}"? This will remove them from ${teamCount} team(s) and affect related matches. Cannot be undone.`
-      : `Delete "${p.name}"? This cannot be undone.`;
-    if (!confirm(msg)) return;
-    await db.deletePlayer(id);
-  };
   const handlePhoto = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!guard()) return;
     const f = e.target.files?.[0]; if (!f) return;
@@ -900,7 +889,6 @@ export default function App() {
             pendingPlayerCats={pendingPlayerCats}
             setPendingPlayerCats={setPendingPlayerCats}
             toggleActive={toggleActive}
-            handleDeletePlayer={handleDeletePlayer}
             handlePhoto={handlePhoto}
             openPartnerPicker={openPartnerPicker}
             partnerNeedsByPlayer={partnerNeedsByPlayer}
