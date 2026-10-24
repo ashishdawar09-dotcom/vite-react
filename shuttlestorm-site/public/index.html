@@ -373,7 +373,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
   *{animation:none!important;transition:none!important}
   .cursor,.cursor-ring{display:none}
 }
-.h2-kick{display:block;font-family:var(--f-mono);font-size:12px;font-weight:400;font-stretch:100%;letter-spacing:.18em;line-height:1.6;color:var(--mute);margin-bottom:18px}.statement .kick{line-height:1.8;max-width:70ch}.statement-meta{margin-top:40px!important;font-family:var(--f-mono)!important;font-size:12px!important;font-weight:400!important;letter-spacing:.12em!important;line-height:1.8!important;text-transform:uppercase;color:var(--mute);max-width:70ch!important}.statement-meta a{color:inherit;text-decoration:underline;text-underline-offset:3px}</style>
+.h2-kick{display:block;font-family:var(--f-mono);font-size:12px;font-weight:400;font-stretch:100%;letter-spacing:.18em;line-height:1.6;color:var(--mute);margin-bottom:18px}.statement .kick{line-height:1.8;max-width:70ch}.statement-meta{margin-top:40px!important;font-family:var(--f-mono)!important;font-size:12px!important;font-weight:400!important;letter-spacing:.12em!important;line-height:1.8!important;text-transform:uppercase;color:var(--mute);max-width:70ch!important}.statement-meta a{color:inherit;text-decoration:underline;text-underline-offset:3px}.proof{padding-block:clamp(48px,8vh,88px) 0}.proof-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.proof-grid li{display:flex;gap:18px;align-items:flex-start;padding:30px 28px 30px 0}.proof-grid li+li{padding-left:28px;border-left:1px solid var(--line)}.proof-ico{flex:0 0 auto;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;color:var(--ink);background:var(--volt)}.proof-grid b{display:block;font-family:var(--f-display);font-weight:600;font-stretch:110%;text-transform:uppercase;font-size:clamp(17px,1.5vw,21px);line-height:1.15;letter-spacing:.01em}.proof-grid span.s{display:block;margin-top:8px;color:var(--mute);font-size:15px;line-height:1.5}.proof-grid a{color:inherit;text-decoration:none}.proof-grid a:hover b{color:var(--volt)}.hero-partner{flex-basis:100%;margin:0;font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--volt)}@media (max-width:860px){.proof-grid{grid-template-columns:1fr}.proof-grid li,.proof-grid li+li{padding:22px 0;border-left:0}.proof-grid li+li{border-top:1px solid var(--line)}}</style>
 <script type="application/ld+json">
 {
  "@context": "https://schema.org",
@@ -410,6 +410,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
     {"@type": "Person", "name": "Rakesh Arya", "honorificPrefix": "Dr.", "url": "https://shuttlestorm.adawar.org/founders"}
    ],
    "@id": "https://shuttlestorm.adawar.org/#organization",
+   "memberOf": {"@type": "SportsOrganization", "name": "Badminton BC", "url": "https://www.badmintonbc.com"},
    "name": "Shuttle Storm Badminton Club",
    "alternateName": [
     "Shuttle Storm",
@@ -571,8 +572,17 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
       <div class="hero-meta">
         <p id="heroSub">Provincial-level badminton comes to the UFV Athletic Centre in Abbotsford on Saturday, November 21. Ten categories for youth, adults and masters, from age 13 to 50+.</p>
         <a class="btn btn-primary" data-cursor="Go" data-track="begin_registration" href="https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb" target="_blank" rel="noopener"><span>Register now</span><span class="arr" aria-hidden="true">→</span></a>
+        <p class="hero-partner">No partner? No problem. We’ll find you a partner.</p>
       </div>
     </div>
+  </section>
+
+  <section class="proof wrap" aria-label="Why play Shuttle Storm">
+    <ul class="proof-grid">
+      <li class="rv"><span class="proof-ico"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/></svg></span><div><a href="https://www.badmintonbc.com" target="_blank" rel="noopener"><b>Badminton BC registered club</b></a><span class="s">Shuttle Storm is a registered Badminton BC club, and the tournament runs to Badminton BC standards.</span></div></li>
+      <li class="rv"><span class="proof-ico"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4c-6 0-11 4-12.5 10.5L6 20"/><path d="M20 4c0 6-4 11-10.5 12.5"/><path d="M9 15l5-5"/></svg></span><div><b>Feather shuttles</b><span class="s">Tournament-grade feather shuttles on every court, in every match.</span></div></li>
+      <li class="rv"><span class="proof-ico"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 6H5a3 3 0 003 4M16 6h3a3 3 0 01-3 4"/><path d="M12 13v4M8.5 20h7M10 17h4"/></svg></span><div><b>Prizes for winners and runners-up</b><span class="s">In every category, from youth singles to super doubles 50+.</span></div></li>
+    </ul>
   </section>
 
   <section class="statement wrap" aria-label="About the tournament">
@@ -658,7 +668,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
       <h2 id="day-title" class="display">Your <em>day,</em><br>start to finish.</h2>
       <ol class="steps">
         <li class="rv"><span class="n mono">01</span><div><h3>Register online</h3><p>Pick your category, accept the waiver and pay online: $40 for adults, $30 for youth and UFV students. Entries close at 11:59 pm on November 18.</p></div></li>
-        <li class="rv"><span class="n mono">02</span><div><h3>Pair up for doubles</h3><p>One partner registers the team. We email the other partner a link to accept the waiver. Enter both players by the deadline, or we’ll pair you with another player if one is available.</p></div></li>
+        <li class="rv"><span class="n mono">02</span><div><h3>Pair up for doubles</h3><p>One partner registers the team. We email the other partner a link to accept the waiver. No partner? No problem. Enter solo and we’ll find you a partner.</p></div></li>
         <li class="rv"><span class="n mono">03</span><div><h3>Check the draw</h3><p>Partner pairings are posted by November 19, and draws and start times by November 20. Arrive at least 30 minutes before your match.</p></div></li>
         <li class="rv"><span class="n mono">04</span><div><h3>Play your draw</h3><p>Events with 3 or 4 entries play round robin. Events with 5 or more play an elimination draw. Early rounds are a single game to 21.</p></div></li>
         <li class="rv"><span class="n mono">05</span><div><h3>Semi-finals and finals</h3><p>Best of three games to 15 points, for the title in each category.</p></div></li>
@@ -831,7 +841,10 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
       <div>
         <details><summary>Do I need to be there all day?<span class="pm" aria-hidden="true"></span></summary><div class="ans">No. Draws and start times are posted by November 20. Arrive at least 30 minutes before your first match: if you’re not on court within 10 minutes of your match being called, it’s a default.</div></details>
         <details><summary>How many games will I play?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Events with 3 or 4 entries play round robin, and events with 5 or more play an elimination draw. Everyone in an event with three or more entries is guaranteed at least two matches. Matches through the quarter-finals are one game to 21; semi-finals and finals are best of three games to 15.</div></details>
-        <details><summary>How does doubles registration work?<span class="pm" aria-hidden="true"></span></summary><div class="ans">One partner registers the team and enters their partner’s details. The fee is per player, so pay for both or each pay your own. Both players must be entered by November 18, or we’ll pair you with another player if one is available. Pairings are posted by November 19.</div></details>
+        <details><summary>How does doubles registration work?<span class="pm" aria-hidden="true"></span></summary><div class="ans">One partner registers the team and enters their partner’s details. The fee is per player, so pay for both or each pay your own. Both players must be entered by November 18. No partner? No problem. Enter solo and we’ll find you a partner. Pairings are posted by November 19.</div></details>
+        <details><summary>What shuttles are used?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Tournament-grade feather shuttles, on every court and in every match.</div></details>
+        <details><summary>Are there prizes?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Yes. There are prizes for the winner and runner-up in every category.</div></details>
+        <details><summary>Is Shuttle Storm registered with Badminton BC?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Yes. Shuttle Storm Badminton Club is a registered <a href="https://www.badmintonbc.com" target="_blank" rel="noopener">Badminton BC</a> club.</div></details>
         <details><summary>Can I enter more than one category?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Yes. The entry fee applies to each category you enter. We schedule to avoid clashes between your events wherever we can.</div></details>
         <details><summary>What if I can’t make it?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Withdraw before entries close on November 18 for a full refund. After that and before the draws, you’re refunded less a $15 service charge. Medical withdrawals with a signed physician’s note are refunded in full. Refunds are processed after the event and take about two weeks. <a href="/rules#refunds">Full refund policy</a></div></details>
         <details><summary>Where do I park?<span class="pm" aria-hidden="true"></span></summary><div class="ans">A $5 all-day parking rate is being arranged; we’ll share the link or QR code before the event. Free street parking is also available along McKenzie Road.</div></details>
