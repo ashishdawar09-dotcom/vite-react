@@ -25,10 +25,16 @@ const SAFE_PLAYER_COLUMNS: string =
 
 // TOURNAMENTS ------------------------------------------------------------
 
+// Every tournaments column the app reads. Not "*": admin_notify_emails (the
+// directors' alert addresses) is server-only, and anon/authenticated have no
+// SELECT on it, so "*" would be refused.
+export const TOURNAMENT_COLUMNS: string =
+  "id,name,event_date,phase,created_at,created_by,rounds_per_pair,num_courts,venue_name,venue_address,venue_map_url,event_time,registration_deadline,contact_info,e_transfer_email,fees,registration_open,terms_text,slug,rules_url,waiver_url,waiver_text,waiver_version,youth_price,student_price,student_label,reply_to_email";
+
 export async function listTournaments(): Promise<Tournament[]> {
-  const { data, error } = await supabase.from("tournaments").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("tournaments").select(TOURNAMENT_COLUMNS).order("created_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as Tournament[];
+  return (data ?? []) as unknown as Tournament[];
 }
 
 /**
@@ -40,7 +46,7 @@ export async function listTournaments(): Promise<Tournament[]> {
 export async function getTournamentBySlug(slug: string): Promise<Tournament | null> {
   const { data, error } = await supabase
     .from("tournaments")
-    .select("*")
+    .select(TOURNAMENT_COLUMNS)
     .eq("slug", slug)
     .maybeSingle();
   if (error) {
@@ -49,7 +55,7 @@ export async function getTournamentBySlug(slug: string): Promise<Tournament | nu
     if (/column .* does not exist/i.test(error.message ?? "")) return null;
     throw error;
   }
-  return (data as Tournament | null) ?? null;
+  return (data as unknown as Tournament | null) ?? null;
 }
 
 /**
@@ -74,20 +80,21 @@ export async function getPlayerById(id: string): Promise<Player | null> {
 export async function getTournamentById(id: string): Promise<Tournament | null> {
   const { data, error } = await supabase
     .from("tournaments")
-    .select("*")
+    .select(TOURNAMENT_COLUMNS)
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return (data as Tournament | null) ?? null;
+  return (data as unknown as Tournament | null) ?? null;
 }
 
 export async function createTournament(name: string, eventDate: string | null, seedPlayers: boolean): Promise<Tournament> {
-  const { data: t, error } = await supabase
+  const { data, error } = await supabase
     .from("tournaments")
     .insert({ name, event_date: eventDate, phase: "none" })
-    .select()
+    .select(TOURNAMENT_COLUMNS)
     .single();
   if (error) throw error;
+  const t = data as unknown as Tournament;
   if (seedPlayers) {
     const rows = SEED.map((s, i) => {
       // SEED entries are either plain names or `{ name, note }`. Narrow via
@@ -109,7 +116,7 @@ export async function createTournament(name: string, eventDate: string | null, s
   }
   // Auto-create a default "Doubles" category so the new tournament is immediately usable
   await createCategory(t.id, "Doubles", 2, null, 12);
-  return t as Tournament;
+  return t;
 }
 
 export async function deleteTournament(id: string) {
