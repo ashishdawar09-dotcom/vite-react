@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { TOURNAMENT_COLUMNS } from "../../lib/db";
 import type { Category, Tournament } from "../../types";
 
 type State = {
@@ -29,7 +30,7 @@ export function usePublicTournament(tournamentId: string | undefined): State {
     (async () => {
       setState((s) => ({ ...s, loading: true, error: null }));
       const [tRes, cRes] = await Promise.all([
-        supabase.from("tournaments").select("*").eq("id", tournamentId).maybeSingle(),
+        supabase.from("tournaments").select(TOURNAMENT_COLUMNS).eq("id", tournamentId).maybeSingle(),
         supabase
           .from("categories")
           .select("*")
@@ -46,7 +47,7 @@ export function usePublicTournament(tournamentId: string | undefined): State {
         return;
       }
       setState({
-        tournament: tRes.data as Tournament,
+        tournament: tRes.data as unknown as Tournament,
         categories: (cRes.data ?? []) as Category[],
         loading: false,
         error: cRes.error?.message ?? null,
