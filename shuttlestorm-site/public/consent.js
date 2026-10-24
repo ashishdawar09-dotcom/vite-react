@@ -21,6 +21,8 @@
  * - Everyone else starts granted. Anyone can change their choice through
  *   any element with data-consent-open (e.g. a "Cookie settings" link).
  * - Links marked data-track="event_name" send that GA event when clicked.
+ * - Campaign tags from the landing URL are carried onto Register links
+ *   (badminton.adawar.org/register/…), even with data-ga empty.
  */
 (function () {
   var script = document.currentScript;
@@ -28,7 +30,40 @@
   var PRIVACY = (script && script.getAttribute("data-privacy")) || "/privacy";
   var ADS = !!script && script.getAttribute("data-ads") === "on";
   var META = ADS && script.getAttribute("data-meta");
+  handOffCampaignTags();
   if (!GA_ID) return;
+
+  // Keeps the campaign tags of the visit that landed on this site (utm_* and
+  // which ad network the click came from, never the click ID itself) and
+  // copies them onto Register links, so the registration app can record
+  // where an entry came from even when the ad pointed at this site.
+  function handOffCampaignTags() {
+    var KEY = "ss-campaign-tags";
+    var TAGS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+    var tags = {};
+    try {
+      var q = new URLSearchParams(location.search);
+      TAGS.forEach(function (k) { var v = q.get(k); if (v) tags[k] = v.slice(0, 100); });
+      if (q.has("gclid") || q.has("gbraid") || q.has("wbraid")) tags.click = "google";
+      else if (q.has("fbclid")) tags.click = "meta";
+      if (Object.keys(tags).length) sessionStorage.setItem(KEY, JSON.stringify(tags));
+      else tags = JSON.parse(sessionStorage.getItem(KEY) || "{}");
+    } catch { return; }
+    if (!Object.keys(tags).length) return;
+    function decorate(a) {
+      try {
+        var u = new URL(a.href);
+        if (u.hostname !== "badminton.adawar.org" || u.pathname.indexOf("/register/") !== 0) return;
+        if (u.searchParams.has("utm_source") || u.searchParams.has("click")) return;
+        Object.keys(tags).forEach(function (k) { u.searchParams.set(k, tags[k]); });
+        a.href = u.toString();
+      } catch { /* not a URL */ }
+    }
+    document.addEventListener("click", function (e) {
+      var a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (a) decorate(a);
+    }, true);
+  }
 
   var KEY = "analytics-consent"; // "granted" | "denied"
   var REGIONS = [

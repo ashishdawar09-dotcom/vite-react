@@ -27,6 +27,8 @@ export type FormState = {
   accepted_rules: boolean;
   accepted_waiver: boolean;
   accepted_codes: boolean;
+  // Optional "How did you hear about Shuttle Storm?" answer.
+  heard_from: string;
 };
 
 export const AGE_OF_MAJORITY = 19;
@@ -68,6 +70,7 @@ export function emptyFormState(): FormState {
     accepted_rules: false,
     accepted_waiver: false,
     accepted_codes: false,
+    heard_from: "",
   };
 }
 

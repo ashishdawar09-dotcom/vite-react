@@ -12,14 +12,25 @@ import {
   takePendingCardRegistration,
   trackRegistrationComplete,
 } from "../../lib/analytics";
+import { HEARD_FROM_OPTIONS, captureAttribution, getAttribution } from "../../lib/attribution";
 import { captureError } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { AgeBand, Category, PublicRegistrationPayload, Tournament } from "../../types";
 import { Countdown } from "./Countdown";
 import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type Concessions, type PaymentSplit } from "./computeFee";
-import { CYAN, CYAN_DARK, Card, CheckRow, Field, PageShell, inputStyle, safeHttpUrl } from "./formParts";
+import { CYAN, CYAN_DARK, Card, CheckRow, Field, type Highlight, Highlights, PageShell, PartnerPromise, SectionHeader, inputStyle, safeHttpUrl } from "./formParts";
 import { usePublicTournament } from "./usePublicTournament";
 import { AGE_OF_MAJORITY, emptyFormState, type FormErrors, type FormState, isValid, parseAge, partnerAgeRequired, validate } from "./validate";
+
+// Event highlights shown under the hero, per tournament.
+const TOURNAMENT_HIGHLIGHTS: Record<string, Highlight[]> = {
+  // Shuttle Storm '26
+  "e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb": [
+    { icon: "shield", title: "Badminton BC registered club", sub: "Run to Badminton BC standards", href: "https://www.badmintonbc.com" },
+    { icon: "feather", title: "Feather shuttles", sub: "Tournament-grade, on every court" },
+    { icon: "trophy", title: "Prizes for winners and runners-up", sub: "In every category" },
+  ],
+};
 
 // ---------- small helpers (file-local) ---------------------------------------
 
@@ -79,7 +90,7 @@ export function PublicRegistrationPage() {
   // Honeypot: hidden from people; bots that fill it are dropped server-side.
   const [website, setWebsite] = useState("");
 
-  useEffect(() => { void initAnalytics(); }, []);
+  useEffect(() => { captureAttribution(); void initAnalytics(); }, []);
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === form.category_id) ?? null,
@@ -218,6 +229,8 @@ export function PublicRegistrationPage() {
       website: website || undefined,
       player_age: playerAge ?? undefined,
       player_student: player.student,
+      heard_from: form.heard_from || undefined,
+      attribution: getAttribution(),
     };
     if (partnerAgeNeeded && paymentSplit === "full") {
       payload.partner_age = partnerAge ?? undefined;
@@ -306,6 +319,16 @@ export function PublicRegistrationPage() {
     !!tournament.registration_deadline &&
     new Date(tournament.registration_deadline).getTime() < Date.now();
   const formClosed = !tournament.registration_open || deadlinePassed;
+  const highlights = TOURNAMENT_HIGHLIGHTS[tournament.id];
+  const soloDoublesOffered = categories.some((c) => c.team_size === 2 && c.allow_solo_signup);
+  // Section numbers follow the cards actually shown.
+  const sections = [
+    "details", "category",
+    ...(selectedCategory?.team_size === 2 ? ["partner"] : []),
+    ...(waiverRequired ? ["waiver"] : []),
+    "payment",
+  ];
+  const stepOf = (key: string) => sections.indexOf(key) + 1;
 
   // ---------- SUCCESS SCREEN ----------
   if (submitStatus === "success") {
@@ -401,7 +424,7 @@ export function PublicRegistrationPage() {
         }}>
           {tournament.name}
         </h1>
-        <div style={{ marginTop: spacing.md, color: colors.text.mutedLight, fontSize: 15 }}>
+        <div style={{ marginTop: spacing.md, color: colors.text.primaryLight, fontSize: 15, fontWeight: 600 }}>
           {fmtDate(tournament.event_date, tournament.event_time)}
         </div>
         {tournament.registration_deadline && (
@@ -410,6 +433,9 @@ export function PublicRegistrationPage() {
           </div>
         )}
       </div>
+
+      {highlights && <Highlights items={highlights} isMobile={isMobile} />}
+      {soloDoublesOffered && !formClosed && <PartnerPromise />}
 
       {/* Preamble card */}
       <Card>
@@ -509,6 +535,7 @@ export function PublicRegistrationPage() {
             </label>
           </div>
           <Card>
+            <SectionHeader step={stepOf("details")} title="Your details" />
             <Field label="Email" required hint="We'll contact you here about your entry" error={visibleErrors.player_email}>
               <input
                 type="email" inputMode="email" autoComplete="email" style={inputStyle}
@@ -552,6 +579,7 @@ export function PublicRegistrationPage() {
 
           {/* Category section */}
           <Card>
+            <SectionHeader step={stepOf("category")} title="Category" sub={soloDoublesOffered ? "Doubles players can enter solo. We'll pair you up." : undefined} />
             <Field label="Choose your category" required error={visibleErrors.category_id}>
               <CategoryPicker
                 categories={categories}
@@ -595,16 +623,12 @@ export function PublicRegistrationPage() {
                 style={{ overflow: "hidden" }}
               >
                 <Card>
-                  <div style={{ marginBottom: spacing.md }}>
-                    <div style={{ fontFamily: typography.display, fontSize: 18, fontWeight: 700, color: colors.text.primaryLight }}>
-                      Partner Information
-                    </div>
-                    <div style={{ fontSize: 13, color: colors.text.mutedLight, marginTop: 4 }}>
-                      {selectedCategory.allow_solo_signup
-                        ? "Optional — leave blank if you don't have a partner at this point."
-                        : "Only one member of each team needs to submit this form."}
-                    </div>
-                  </div>
+                  <SectionHeader
+                    step={stepOf("partner")}
+                    title="Your partner"
+                    sub={selectedCategory.allow_solo_signup ? undefined : "Only one member of each team needs to submit this form."}
+                  />
+                  {selectedCategory.allow_solo_signup && <PartnerPromise compact />}
                   <Field label="Partner Name" required={!selectedCategory.allow_solo_signup} error={visibleErrors.partner_name}>
                     <input type="text" style={inputStyle}
                       value={form.partner_name}
@@ -631,13 +655,12 @@ export function PublicRegistrationPage() {
           {/* Rules and waiver */}
           {waiverRequired && (
             <Card>
-              <div style={{ fontFamily: typography.display, fontSize: 18, fontWeight: 700, color: colors.text.primaryLight }}>
-                Rules and waiver
-              </div>
-              <p style={{ fontSize: 13, color: colors.text.mutedLight, margin: "4px 0 12px", lineHeight: 1.5 }}>
-                Every player must read the competition regulations and agree to the waiver before taking part.
-                {playerIsMinor && " The player is under 19, so a parent or guardian must accept on their behalf."}
-              </p>
+              <SectionHeader
+                step={stepOf("waiver")}
+                title="Rules and waiver"
+                sub={<>Every player must read the competition regulations and agree to the waiver before taking part.
+                  {playerIsMinor && " The player is under 19, so a parent or guardian must accept on their behalf."}</>}
+              />
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.md, marginBottom: spacing.md }}>
                 {safeHttpUrl(tournament.rules_url) && (
                   <a href={safeHttpUrl(tournament.rules_url)} target="_blank" rel="noopener" style={{ color: CYAN_DARK, fontWeight: 700, fontSize: 14 }}>
@@ -699,6 +722,7 @@ export function PublicRegistrationPage() {
 
           {/* Payment section */}
           <Card>
+            <SectionHeader step={stepOf("payment")} title="Payment" />
             {showPaymentSplit && baseFee !== null && (
               <Field label="Payment split for this team">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: spacing.sm }}>
@@ -792,6 +816,20 @@ export function PublicRegistrationPage() {
                 onChange={(e) => set("comments", e.target.value.slice(0, 500))}
                 onBlur={() => markTouched("comments")}
               />
+            </Field>
+          </Card>
+
+          {/* Where they heard about us (optional) — checked against ad results */}
+          <Card>
+            <Field label="How did you hear about us?" hint="Optional. Helps us know which posts and ads reach players.">
+              <select
+                style={{ ...inputStyle, appearance: "auto" }}
+                value={form.heard_from}
+                onChange={(e) => set("heard_from", e.target.value)}
+              >
+                <option value="">Choose one</option>
+                {HEARD_FROM_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </Field>
           </Card>
 
