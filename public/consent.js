@@ -1,8 +1,13 @@
 /*
- * Google Analytics 4 with Consent Mode v2.
+ * Google Analytics 4 with Consent Mode v2, plus an optional Meta Pixel.
  *
- * Usage: <script src="/consent.js" data-ga="G-XXXXXXXXXX" data-privacy="/privacy" [data-ads="on"] defer></script>
+ * Usage: <script src="/consent.js" data-ga="G-XXXXXXXXXX" data-privacy="/privacy" [data-ads="on"] [data-meta="PIXEL_ID"] defer></script>
  * With data-ga empty, nothing loads and no banner shows.
+ *
+ * - data-meta (only with data-ads="on") loads the Meta Pixel for Facebook /
+ *   Instagram ad measurement. It follows the same choice as analytics:
+ *   revoked until EEA/UK/Swiss visitors accept. No advanced matching: the
+ *   pixel never gets names, emails or phone numbers.
  *
  * - Without data-ads="on", advertising storage is always denied.
  * - With data-ads="on" (sites we advertise with Google Ads), ad_storage and
@@ -22,6 +27,7 @@
   var GA_ID = script && script.getAttribute("data-ga");
   var PRIVACY = (script && script.getAttribute("data-privacy")) || "/privacy";
   var ADS = !!script && script.getAttribute("data-ads") === "on";
+  var META = ADS && script.getAttribute("data-meta");
   if (!GA_ID) return;
 
   var KEY = "analytics-consent"; // "granted" | "denied"
@@ -58,6 +64,23 @@
   gtag("js", new Date());
   gtag("config", GA_ID);
 
+  // Meta Pixel (standard loader). Consent is set before init, so nothing is
+  // sent while it's revoked.
+  if (META) {
+    (function (f, b, e, v, n, t, x) {
+      if (f.fbq) return;
+      n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+      if (!f._fbq) f._fbq = n;
+      n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+      t = b.createElement(e); t.async = true; t.src = v;
+      x = b.getElementsByTagName(e)[0]; x.parentNode.insertBefore(t, x);
+    })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+    var metaChoice = stored === "granted" || stored === "denied" ? stored : (europe ? "denied" : "granted");
+    window.fbq("consent", metaChoice === "granted" ? "grant" : "revoke");
+    window.fbq("init", META);
+    window.fbq("track", "PageView");
+  }
+
   function inEurope() {
     try {
       var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
@@ -71,6 +94,7 @@
   function choose(v) {
     write(v);
     gtag("consent", "update", consentFor(v));
+    if (META && window.fbq) window.fbq("consent", v === "granted" ? "grant" : "revoke");
     close();
   }
 
@@ -98,8 +122,10 @@
     banner.setAttribute("aria-label", ADS ? "Analytics and advertising cookies" : "Analytics cookies");
     banner.innerHTML =
       (ADS
-        ? '<p>We use Google Analytics and Google Ads cookies to count visits and see whether our ads lead to registrations. ' +
-          'No personalised ads. The site works the same either way. <a href="' + PRIVACY + '">Privacy policy</a></p>'
+        ? '<p>We use Google Analytics' + (META ? ', Google Ads and Meta Pixel' : ' and Google Ads') +
+          ' cookies to count visits and see whether our ads lead to registrations. ' +
+          (META ? 'Facebook and Instagram may show our tournament ads to past visitors. ' : 'No personalised ads. ') +
+          'The site works the same either way. <a href="' + PRIVACY + '">Privacy policy</a></p>'
         : '<p>We use Google Analytics cookies to count visits and see which pages are useful. ' +
           'No advertising. The site works the same either way. <a href="' + PRIVACY + '">Privacy policy</a></p>') +
       '<div class="consent-actions"><button type="button" class="yes">Accept</button>' +
@@ -121,7 +147,10 @@
       if (t) { e.preventDefault(); show(); return; }
       // Links marked data-track="event_name" send that GA event on click.
       var tracked = el && el.closest("[data-track]");
-      if (tracked) gtag("event", tracked.getAttribute("data-track"), { link_url: tracked.href || undefined });
+      if (tracked) {
+        gtag("event", tracked.getAttribute("data-track"), { link_url: tracked.href || undefined });
+        if (META && window.fbq) window.fbq("trackCustom", tracked.getAttribute("data-track"));
+      }
     });
   });
 })();

@@ -1,4 +1,4 @@
-// Google Analytics 4 for the public registration page only.
+// Google Analytics 4 and the Meta Pixel for the public registration page only.
 //
 // Loads /consent.js (the same Consent Mode v2 loader the Shuttle Storm and
 // adawar.org sites use) with ad measurement on: analytics and ad storage are
@@ -9,11 +9,14 @@
 // The admin app, scoreboards and spectator pages are not tracked.
 
 export const GA_MEASUREMENT_ID = "G-FT7CJBVQ4Z";
+// Meta Pixel ("Shuttle Storm Web" dataset, Shuttle Storm business portfolio)
+// for Facebook/Instagram ad measurement. Follows the same consent choice.
+export const META_PIXEL_ID = "1676574714107113";
 export const PRIVACY_URL = "https://shuttlestorm.adawar.org/privacy";
 
 type Gtag = (...args: unknown[]) => void;
 declare global {
-  interface Window { gtag?: Gtag }
+  interface Window { gtag?: Gtag; fbq?: Gtag }
 }
 
 let loading: Promise<void> | null = null;
@@ -26,7 +29,8 @@ export function initAnalytics(): Promise<void> {
     s.src = "/consent.js";
     s.dataset.ga = GA_MEASUREMENT_ID;
     s.dataset.privacy = PRIVACY_URL;
-    s.dataset.ads = "on"; // we advertise registration with Google Ads
+    s.dataset.ads = "on"; // we advertise registration with Google Ads and Meta
+    s.dataset.meta = META_PIXEL_ID;
     s.onload = () => resolve();
     s.onerror = () => resolve(); // blocked by an extension: carry on untracked
     document.head.appendChild(s);
@@ -72,4 +76,7 @@ export function trackRegistrationComplete(
     } catch { /* storage off: may double count on reload */ }
   }
   trackEvent("registration_complete", { ...params, currency: "CAD" });
+  void initAnalytics().then(() =>
+    window.fbq?.("track", "CompleteRegistration", { value: params.value, currency: "CAD", content_name: params.payment_method }),
+  );
 }
