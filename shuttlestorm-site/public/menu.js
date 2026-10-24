@@ -14,7 +14,8 @@
     ["/register", "Register & fees"],
     ["/venue", "Venue"],
     ["/faq", "FAQ"],
-    ["/rules", "Rules"]
+    ["/rules", "Rules"],
+    ["/guides", "Guides"]
   ];
   var REGISTER = "https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb";
 
