@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
-import { updatePlayer } from "../lib/db";
+import { confirmPlayerDelete, requestPlayerDeleteCode, updatePlayer } from "../lib/db";
 import type { Category, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -405,6 +405,81 @@ export function PlayerProfileView({
           {playerCats.length === 0 && <p style={{ margin: "6px 0 0", fontSize: 12 }}>Add categories from the Players tab to assign them to a tournament category.</p>}
         </div>
       )}
+
+      {/* Delete — admin-only, and only with a one-time code emailed to the owner. */}
+      {isAdmin && <DeletePlayerSection key={player.id} player={player} onDeleted={onBack} />}
+    </div>
+  );
+}
+
+function DeletePlayerSection({ player, onDeleted }: { player: Player; onDeleted: () => void }) {
+  const [step, setStep] = useState<"idle" | "code">("idle");
+  const [sentTo, setSentTo] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const sendCode = async () => {
+    if (!confirm(`Delete "${player.name}"? This removes them from every team and can't be undone.\n\nA one-time code will be emailed to the tournament owner.`)) return;
+    setBusy(true); setError(null);
+    try {
+      const r = await requestPlayerDeleteCode(player.id);
+      setSentTo(r.to); setCode(""); setStep("code");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Couldn't send the code.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirmDelete = async () => {
+    setBusy(true); setError(null);
+    try {
+      await confirmPlayerDelete(player.id, code);
+      onDeleted();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Delete failed.");
+      setBusy(false);
+    }
+  };
+
+  const btnStyle = (bg: string, fg = "#fff", border = "none") => ({ padding: "7px 14px", borderRadius: 8, border, background: bg, color: fg, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 });
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1px solid #fecaca", marginTop: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 18 }}>🗑️</span>
+        <div style={{ fontSize: 10, color: "#dc2626", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, minWidth: 60 }}>Delete player</div>
+        {step === "idle" ? (
+          <>
+            <div style={{ flex: 1, fontSize: 13, color: "#64748b" }}>Needs a one-time code sent to the owner's email.</div>
+            <button onClick={() => void sendCode()} disabled={busy} style={btnStyle("#dc2626")}>{busy ? "Sending…" : "Send code"}</button>
+          </>
+        ) : (
+          <>
+            <input
+              value={code}
+              onChange={e => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); if (error) setError(null); }}
+              onKeyDown={e => { if (e.key === "Enter" && code.length === 6) void confirmDelete(); }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6-digit code"
+              aria-label="Delete code"
+              autoFocus
+              disabled={busy}
+              style={{ flex: 1, minWidth: 140, padding: "7px 12px", borderRadius: 8, border: `2px solid ${error ? "#ef4444" : "#dc2626"}`, fontSize: 15, letterSpacing: 4, outline: "none", fontFamily: "inherit", fontVariantNumeric: "tabular-nums" }}
+            />
+            <button onClick={() => void confirmDelete()} disabled={busy || code.length !== 6} style={{ ...btnStyle("#dc2626"), opacity: busy || code.length !== 6 ? 0.6 : 1 }}>{busy ? "Deleting…" : "Delete"}</button>
+            <button onClick={() => { setStep("idle"); setError(null); }} disabled={busy} style={btnStyle("#fff", "#475569", "1px solid #e2e8f0")}>Cancel</button>
+          </>
+        )}
+      </div>
+      {step === "code" && !error && (
+        <div style={{ marginTop: 6, marginLeft: 30, fontSize: 11, color: "#94a3b8" }}>
+          Code sent to {sentTo}. It expires in 10 minutes.{" "}
+          <button onClick={() => void sendCode()} disabled={busy} style={{ border: "none", background: "none", padding: 0, color: "#3A86FF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Send a new code</button>
+        </div>
+      )}
+      {error && <div style={{ marginTop: 8, marginLeft: 30, fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{error}</div>}
     </div>
   );
 }
