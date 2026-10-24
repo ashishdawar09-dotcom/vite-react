@@ -17,6 +17,7 @@ import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
 import { sendRegistrationReceived } from "../_shared/registration_emails.ts";
 import { type ConsentInput, parseAge, recordConsent, validateConsent } from "../_shared/waiver.ts";
 import { ageProblem } from "../_shared/ages.ts";
+import { cleanAttribution, cleanHeardFrom } from "../_shared/attribution.ts";
 
 
 type Payload = {
@@ -35,6 +36,8 @@ type Payload = {
   payment_paid_full_for_partner?: boolean;
   comments?: string;
   group_choice?: "open" | "members";
+  heard_from?: unknown;      // validated by cleanHeardFrom
+  attribution?: unknown;     // validated by cleanAttribution
   website?: string; // honeypot: hidden from people, filled in by form bots
   player_age?: number;
   player_student?: boolean;
@@ -321,6 +324,8 @@ async function handle(req: Request): Promise<Response> {
           payment_reference: payByCard ? null : body.payment_reference!.trim(),
           comments: body.comments?.trim() || null,
           group_choice: body.group_choice ?? null,
+          heard_from: cleanHeardFrom(body.heard_from),
+          attribution: cleanAttribution(body.attribution),
         },
       })
       .select("id")

@@ -1,3 +1,4 @@
+import type { Attribution } from "./lib/attribution";
 export type AgeBand = "kid" | "teen" | "adult";
 
 export type PriceBasis = "per_player" | "per_team";
@@ -248,4 +249,6 @@ export type PublicRegistrationPayload = {
   partner_student?: boolean;
   consent?: ConsentPayload;
   group_choice?: "open" | "members";
+  heard_from?: string;                  // "How did you hear about us?" (optional)
+  attribution?: Attribution;            // campaign tags / ad network, see lib/attribution
 };
