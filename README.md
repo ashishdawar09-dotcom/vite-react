@@ -37,7 +37,6 @@ npm run dev
 Env vars in `.env.local` (gitignored), see `.env.example`:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_VOICE_WORKER_URL` (optional; voice assistant)
 - `VITE_VAPID_PUBLIC_KEY`, `VITE_SENTRY_DSN` (optional)
 
 Checks: `npm test`, `npm run lint`, `npm run build:check`.
@@ -47,4 +46,3 @@ Checks: `npm test`, `npm run lint`, `npm run build:check`.
 - Public visitors see current state (read-only).
 - Admins sign in (email code or Google); `is_admin()` checks the JWT email against the `tournament_admins` table and RLS allows writes only when matched.
 - Realtime subscriptions push changes to admin clients; spectators poll the `live_snapshot` RPC.
-- The voice assistant is a separate Cloudflare Worker (`badminton-voice-agent`).
