@@ -1022,6 +1022,17 @@ export type Database = {
         Returns: undefined
       }
       slugify: { Args: { input: string }; Returns: string }
+      start_category_stage: {
+        Args: {
+          p_category_id: string
+          p_groups_count?: number | null
+          p_matches: Json
+          p_rounds_per_pair?: number | null
+          p_stage: string
+          p_top_n_advance?: number | null
+        }
+        Returns: number
+      }
       start_match_on_court: {
         Args: { p_court: number; p_match_id: string }
         Returns: boolean

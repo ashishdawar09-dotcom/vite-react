@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as Sentry from "@sentry/react";
 import { supabase } from "../lib/supabase";
 import * as db from "../lib/db";
+import { createRefresher, type FetchResult } from "../lib/refreshRetry";
 import type { Category, Match, Player, PlayerCategory, Team } from "../types";
 
 function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T & { cancel(): void } {
@@ -28,6 +29,19 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   const [categories, setCategories] = useState<Category[]>([]);
   const [playerCategories, setPlayerCategories] = useState<PlayerCategory[]>([]);
   const [loading, setLoading] = useState(false);
+  // True while a table failed to load and is being retried. The screen keeps
+  // the last data it had (a failed refetch used to blank it) and shows a pill.
+  const [stale, setStale] = useState(false);
+  const [refresher] = useState(() => createRefresher({ onStaleChange: setStale }));
+
+  // Switching tournament empties every table first. Otherwise a table that
+  // failed to load for the new tournament would keep showing the old one's
+  // rows next to the new one's (matches from one, teams from another).
+  const [dataFor, setDataFor] = useState(tournamentId);
+  if (dataFor !== tournamentId) {
+    setDataFor(tournamentId);
+    setPlayers([]); setTeams([]); setMatches([]); setCategories([]); setPlayerCategories([]);
+  }
 
   const tidRef = useRef(tournamentId);
   tidRef.current = tournamentId;
@@ -40,53 +54,40 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   // If the live_snapshot RPC is not deployed, fall back to per-table fetches.
   const snapshotUnavailableRef = useRef(false);
 
+  // Fetch one table for the current tournament and apply it, unless the
+  // tournament changed meanwhile. On failure the old rows stay and it retries.
+  const load = useCallback(<T,>(key: string, fetch: (tid: string) => PromiseLike<FetchResult<T>>, apply: (data: T) => void) => {
+    const tid = tidRef.current;
+    if (!tid) return Promise.resolve(false);
+    return refresher.run<T>(key, () => fetch(tid), data => { if (tidRef.current === tid) apply(data); });
+  }, [refresher]);
+  const thrown = <T,>(p: Promise<T>): Promise<FetchResult<T>> => p.then(data => ({ data, error: null }));
+
   const loadPlayers = useCallback(async () => {
-    if (!tidRef.current) return;
     // Admins read full rows (incl. email) via the admin_players RPC; spectators
     // get the non-PII subset. players.email is column-locked as of schema_v16.
-    setPlayers(await db.fetchPlayers(tidRef.current, isAdmin));
-  }, [isAdmin]);
+    await load("players", tid => thrown(db.fetchPlayers(tid, isAdmin)), setPlayers);
+  }, [isAdmin, load]);
 
   const loadTeams = useCallback(async () => {
-    if (!tidRef.current) return;
-    const { data } = await supabase.from("teams").select("*").eq("tournament_id", tidRef.current).order("sort_order");
-    setTeams((data ?? []) as Team[]);
-  }, []);
+    await load("teams", tid => supabase.from("teams").select("*").eq("tournament_id", tid).order("sort_order"), d => setTeams(d as Team[]));
+  }, [load]);
 
   const loadMatches = useCallback(async () => {
-    if (!tidRef.current) return;
-    const { data } = await supabase.from("matches").select("*").eq("tournament_id", tidRef.current).order("slot_idx");
-    setMatches((data ?? []) as Match[]);
-  }, []);
+    await load("matches", tid => supabase.from("matches").select("*").eq("tournament_id", tid).order("slot_idx"), d => setMatches(d as Match[]));
+  }, [load]);
 
   const loadCategories = useCallback(async () => {
-    if (!tidRef.current) return;
-    const { data } = await supabase.from("categories").select("*").eq("tournament_id", tidRef.current).order("sort_order");
-    setCategories((data ?? []) as Category[]);
-  }, []);
+    await load("categories", tid => supabase.from("categories").select("*").eq("tournament_id", tid).order("sort_order"), d => setCategories(d as Category[]));
+  }, [load]);
 
   const loadPlayerCategories = useCallback(async () => {
-    if (!tidRef.current) return;
-    const pc = await db.listPlayerCategories(tidRef.current);
-    setPlayerCategories(pc);
-  }, []);
+    await load("player_categories", tid => thrown(db.listPlayerCategories(tid)), setPlayerCategories);
+  }, [load]);
 
   const loadAllLegacy = useCallback(async () => {
-    if (!tidRef.current) return;
-    const tid = tidRef.current;
-    const [p, t, m, c, pc] = await Promise.all([
-      db.fetchPlayers(tid, isAdmin),
-      supabase.from("teams").select("*").eq("tournament_id", tid).order("sort_order"),
-      supabase.from("matches").select("*").eq("tournament_id", tid).order("slot_idx"),
-      supabase.from("categories").select("*").eq("tournament_id", tid).order("sort_order"),
-      db.listPlayerCategories(tid),
-    ]);
-    setPlayers(p);
-    setTeams((t.data ?? []) as Team[]);
-    setMatches((m.data ?? []) as Match[]);
-    setCategories((c.data ?? []) as Category[]);
-    setPlayerCategories(pc);
-  }, [isAdmin]);
+    await Promise.all([loadPlayers(), loadTeams(), loadMatches(), loadCategories(), loadPlayerCategories()]);
+  }, [loadPlayers, loadTeams, loadMatches, loadCategories, loadPlayerCategories]);
 
   // Single-RPC snapshot for spectators. Falls back to legacy multi-fetch
   // if the live_snapshot RPC isn't deployed yet.
@@ -130,12 +131,10 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   }, [loadPlayers, loadTeams, loadMatches, loadCategories, loadPlayerCategories]);
 
   useEffect(() => {
-    if (!tournamentId) {
-      setPlayers([]); setTeams([]); setMatches([]); setCategories([]); setPlayerCategories([]);
-      return;
-    }
+    if (!tournamentId) return; // tables were emptied when the id changed
     let cancelled = false;
     setLoading(true);
+    const retries = refresher;
 
     const initialLoad = isAdmin ? loadAllLegacy : loadAllSnapshot;
     initialLoad().then(() => { if (!cancelled) setLoading(false); });
@@ -186,6 +185,7 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         debouncedLoadMatches.current.cancel();
         debouncedLoadCategories.current.cancel();
         debouncedLoadPlayerCategories.current.cancel();
+        retries.reset();
         supabase.removeChannel(pgChannel);
       };
     } else {
@@ -226,9 +226,10 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         cancelled = true;
         if (timeoutId) clearTimeout(timeoutId);
         document.removeEventListener("visibilitychange", onVisibility);
+        retries.reset();
       };
     }
-  }, [tournamentId, isAdmin, loadAllLegacy, loadAllSnapshot, loadPlayerCategories]);
+  }, [tournamentId, isAdmin, loadAllLegacy, loadAllSnapshot, loadPlayerCategories, refresher]);
 
   // Keep the hasLive ref in sync with the live matches state — the
   // spectator poll closure reads this ref to choose its next interval.
@@ -236,5 +237,5 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
     hasLiveRef.current = matches.some(m => m.status === "live");
   }, [matches]);
 
-  return { players, teams, matches, categories, playerCategories, loading };
+  return { players, teams, matches, categories, playerCategories, loading, stale };
 }

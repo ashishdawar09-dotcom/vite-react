@@ -232,7 +232,7 @@ export function TeamsTab({
               )}
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <button onClick={handleStart} style={{ ...btn("#84cc16"), padding: "16px 44px", fontSize: 17, borderRadius: 14, fontWeight: 800 }}>
-                  📊 Start Group Stage
+                  {selectedPlan?.groupsCount === 0 ? "🏆 Start Final" : "📊 Start Group Stage"}
                 </button>
               </div>
               {selectedPlan && (

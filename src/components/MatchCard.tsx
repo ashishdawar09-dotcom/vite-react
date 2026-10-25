@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { ScoreInput } from "./ScoreInput";
+import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
 import type { Match, Player, Team } from "../types";
 
@@ -19,16 +20,20 @@ export type TeamView = Team & { p1: Player; p2: Player | null };
 // MatchCard's signature already exposes the surface clearly.
 export type MatchCardActions = {
   adjustScore: (match: Match, side: "a" | "b", delta: number) => void | Promise<void>;
+  /** Rejects if the save fails, so the score box stops showing the unsaved number. */
   setScore: (match: Match, side: "a" | "b", next: number) => void | Promise<void>;
   startMatch: (matchId: string) => void;
   beginScoring: (matchId: string) => void | Promise<void>;
   cancelAllocation: (match: Match) => Promise<void>;
-  confirmFinalScore: (match: Match) => Promise<void>;
-  saveEditedMatch: (match: Match) => Promise<void>;
+  /** `shown` = the scores in the boxes, which may be ahead of `match` while a save is in flight. */
+  confirmFinalScore: (match: Match, shown?: ShownScores) => Promise<void>;
+  saveEditedMatch: (match: Match, shown?: ShownScores) => Promise<void>;
   /** After picking a walkover/winner; should also propagate the winner forward. */
   selectWinner: (match: Match, winnerId: string) => Promise<void>;
   markWalkover: (match: Match, winnerId: string) => Promise<void>;
 };
+
+export type ShownScores = { a: number | null; b: number | null };
 
 const tLabel = (t: TeamView | null) =>
   t?.p1 ? (t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name) : "TBD";
@@ -83,8 +88,26 @@ export function MatchCard({
   // Warming up = court allocated, scoring not yet begun. Status still `pending` at the DB.
   const isWarming = !m.confirmed && m.status !== "live" && !!m.court_allocated_at && !m.started_at;
 
+  // What the score boxes show right now. Typing then tapping Confirm used to
+  // confirm the scores from before the typed one had saved, with the wrong
+  // winner; Confirm and Save read these instead.
+  const shown = useRef<{ a?: number; b?: number }>({});
+  const onShownA = useCallback((n: number) => { shown.current.a = n; }, []);
+  const onShownB = useCallback((n: number) => { shown.current.b = n; }, []);
+  const shownScores = (): ShownScores => ({
+    a: inlineMode && shown.current.a !== undefined ? shown.current.a : m.score_a,
+    b: inlineMode && shown.current.b !== undefined ? shown.current.b : m.score_b,
+  });
+
   const [cardNow, setCardNow] = useState(Date.now());
   const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
+  // Close the picker when the match moves on (confirmed, rescheduled,
+  // cancelled, here or by another admin). Cards used to remount on every App
+  // render, which hid this; now they persist.
+  const matchState = `${m.status}|${m.confirmed}`;
+  const [pickFor, setPickFor] = useState(matchState);
+  if (pickFor !== matchState) { setPickFor(matchState); setTimeOverPick(null); }
+  const pickerOpen = timeOverPickerOpen(m, timeOverPick);
   useEffect(() => {
     // Tick both for live (play clock) AND warming (warm-up elapsed timer).
     if (m.status !== "live" && !isWarming) return;
@@ -106,7 +129,11 @@ export function MatchCard({
   const teamRow = (team: TeamView | null, side: "a" | "b", scoreVal: number, isWin: boolean) => {
     const stepBtn = (delta: number, label: string) => (
       <button
-        onClick={() => void actions.adjustScore(m, side, delta)}
+        onClick={() => {
+          // Step from the number on screen, which may be a typed score still saving.
+          const cur = shownScores()[side];
+          void actions.adjustScore(side === "a" ? { ...m, score_a: cur } : { ...m, score_b: cur }, side, delta);
+        }}
         style={{
           width: 56, height: 56, borderRadius: 14, border: "2px solid #e2e8f0",
           background: "#fff", fontSize: 26, fontWeight: 800, color: "#1a1a2e",
@@ -156,7 +183,8 @@ export function MatchCard({
             {stepBtn(-1, "−")}
             <ScoreInput
               value={scoreVal}
-              onCommit={(next) => void actions.setScore(m, side, next)}
+              onCommit={(next) => actions.setScore(m, side, next)}
+              onShownChange={side === "a" ? onShownA : onShownB}
             />
             {stepBtn(1, "+")}
           </div>
@@ -181,6 +209,7 @@ export function MatchCard({
   };
 
   const handleCardWalkover = async (side: "a" | "b") => {
+    if (!pickerOpen) return;
     const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     if (!confirm("Mark this match as a walkover? The other team forfeits.")) return;
@@ -189,6 +218,7 @@ export function MatchCard({
   };
 
   const handleCardSelectWinner = async (side: "a" | "b") => {
+    if (!pickerOpen) return;
     const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     await actions.selectWinner(m, winnerId);
@@ -277,7 +307,7 @@ export function MatchCard({
             )}
             {m.status === "live" && !m.confirmed && !cardTimeOver && (
               <button
-                onClick={() => void actions.confirmFinalScore(m)}
+                onClick={() => void actions.confirmFinalScore(m, shownScores())}
                 style={{ ...btn("#16a34a"), flex: "1 1 100%", padding: "14px", fontSize: 15, borderRadius: 10, fontWeight: 800 }}
               >
                 ✓ Confirm Final Score
@@ -293,7 +323,7 @@ export function MatchCard({
                   +5 Min
                 </button>
                 <button
-                  onClick={() => void actions.confirmFinalScore(m)}
+                  onClick={() => void actions.confirmFinalScore(m, shownScores())}
                   style={{ ...btn("#16a34a"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}
                 >
                   ✓ Confirm
@@ -329,7 +359,7 @@ export function MatchCard({
               </>
             )}
             {/* Team picker for walkover/winner in time-over */}
-            {timeOverPick && (
+            {pickerOpen && (
               <div style={{
                 display: "flex", gap: 8, width: "100%", flexWrap: "wrap",
                 padding: "8px 0 0", borderTop: "1px solid #e2e8f0",
@@ -374,7 +404,7 @@ export function MatchCard({
                   Cancel
                 </button>
                 <button
-                  onClick={() => void actions.saveEditedMatch(m)}
+                  onClick={() => void actions.saveEditedMatch(m, shownScores())}
                   style={{ ...btn("#16a34a"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}
                 >
                   💾 Save Changes
