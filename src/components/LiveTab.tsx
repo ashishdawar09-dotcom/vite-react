@@ -9,6 +9,8 @@ import { LiveMarquee } from "./ui/live-marquee"; /* NEW: broadcast-style LIVE ti
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
+import { groupKeyOf, groupLetter } from "../lib/groups";
+import { isCancelledMatch } from "../lib/matchOutcome";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -124,7 +126,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
     return {
       topTeam: ranked[0],
       bestDiff: [...ranked].sort((a, b) => (b.pf - b.pa) - (a.pf - a.pa))[0],
-      matchesPlayed: matches.filter(m => m.confirmed).length,
+      matchesPlayed: matches.filter(m => m.confirmed && !isCancelledMatch(m)).length,
       totalMatches: matches.filter(m => m.team_a_id && m.team_b_id && !m.is_bye).length,
     };
   }, [teamsView, groupMatches, matches]);
@@ -506,7 +508,9 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                 <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < recent.length - 1 ? "1px solid #1a3050" : "none", gap: 12 }}>
                   <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{stageBadge(m)}</div>
                   <div style={{ flex: 1, fontWeight: m.winner_id === m.team_a_id ? 700 : 500, color: m.winner_id === m.team_a_id ? "#22c55e" : "#94a3b8", fontSize: 13 }}>{tName(m.team_a_id)}</div>
-                  <div className="font-display" style={{ fontWeight: 700, fontSize: 14, padding: "4px 10px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, color: "#22c55e", letterSpacing: 1 }}>{m.score_a}–{m.score_b}</div>
+                  {isCancelledMatch(m)
+                    ? <div className="font-display" style={{ fontWeight: 700, fontSize: 11, padding: "4px 10px", background: "rgba(148,163,184,0.1)", border: "1px solid rgba(148,163,184,0.3)", borderRadius: 4, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase" }}>Cancelled</div>
+                    : <div className="font-display" style={{ fontWeight: 700, fontSize: 14, padding: "4px 10px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, color: "#22c55e", letterSpacing: 1 }}>{m.score_a}–{m.score_b}</div>}
                   <div style={{ flex: 1, fontWeight: m.winner_id === m.team_b_id ? 700 : 500, color: m.winner_id === m.team_b_id ? "#22c55e" : "#94a3b8", textAlign: "right", fontSize: 13 }}>{tName(m.team_b_id)}</div>
                 </div>
               ))}
@@ -552,22 +556,30 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                 const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
                 const accent = groupAccents[gi % groupAccents.length];
                 const fmt = g[0]?.category_id ? formatForCategory(g[0].category_id) : null;
+                // group_idx restarts in every category, so the letter comes
+                // from the group's matches and the card names its category
+                // when more than one is on screen.
+                const key = groupKeyOf(g, groupMatches);
+                const groupName = `Group ${groupLetter(key?.group_idx ?? gi)}`;
                 const topN = fmt?.topN ?? 2;
                 const badgeText = !fmt ? "TOP 2"
                   : fmt.shape === "RR-only" ? "ROUND-ROBIN"
                   : fmt.shape === "none" ? `TOP ${fmt.topN}`
                   : `TOP ${fmt.topN} → ${fmt.shape}`;
                 return (
-                  <div key={gi} style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
+                  <div key={key ? `${key.category_id}-${key.group_idx}` : gi} style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden", position: "relative" }}>
                     <div style={{ position: "relative", padding: "16px 16px 14px", borderBottom: "1px solid #1a3050", overflow: "hidden", minHeight: 76 }}>
                       <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${groupBgs[gi % groupBgs.length]})`, backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.55 }} />
                       <div style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, rgba(15,30,55,0.95) 0%, rgba(15,30,55,0.6) 60%, rgba(15,30,55,0.3) 100%)` }} />
                       <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: accent }} />
                       <div style={{ position: "relative", zIndex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                          <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>Group {String.fromCharCode(65 + gi)}</span>
+                          <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase", textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>{groupName}</span>
                           <span className="font-display" style={{ fontSize: 10, color: accent, fontWeight: 700, letterSpacing: 1.5, padding: "3px 8px", background: "rgba(0,0,0,0.4)", borderRadius: 3, border: `1px solid ${accent}66`, whiteSpace: "nowrap" }}>{badgeText}</span>
                         </div>
+                        {categoryIdsInView.length > 1 && fmt && (
+                          <div className="font-display" style={{ fontSize: 11, color: accent, marginTop: 2, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{fmt.category.name}</div>
+                        )}
                         <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4, fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{g.length} TEAMS · {st.reduce((acc, s) => acc + s.w + s.l, 0)} matches played</div>
                       </div>
                     </div>

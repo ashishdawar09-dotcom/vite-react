@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useScheduling } from "./useScheduling";
 import { partnerNeeds } from "../lib/pairing";
+import { buildGroups } from "../lib/groups";
 import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
 
 export type TeamView = Team & { p1: Player; p2: Player | null };
@@ -127,21 +128,18 @@ export function useTournamentDerived(
   const scheduling = useScheduling(matches, categories, numCourts);
   const { projected: projectedMatches, byId: projectedById, tournamentDeltaMin, tournamentDeltaLabel, liveByCourt } = scheduling;
 
-  // Groups: a 2D array of TeamView, indexed by group_idx then by team. Used
-  // by LiveTab + GroupsTab to render standings + per-group cards.
-  const groups = useMemo<TeamView[][]>(() => {
-    const map = new Map<number, Set<string>>();
-    groupMatches.forEach(m => {
-      if (m.group_idx == null) return;
-      if (!map.has(m.group_idx)) map.set(m.group_idx, new Set());
-      const s = map.get(m.group_idx)!;
-      if (m.team_a_id) s.add(m.team_a_id);
-      if (m.team_b_id) s.add(m.team_b_id);
-    });
-    return [...map.keys()].sort((a, b) => a - b).map(gi =>
-      [...map.get(gi)!].map(id => teamById[id]).filter(Boolean) as TeamView[],
-    );
-  }, [groupMatches, teamById]);
+  // Groups: a 2D array of TeamView, one entry per (category, group), in
+  // category order. Used by LiveTab + GroupsTab to render standings +
+  // per-group cards. With one category selected this is that category's
+  // groups in group_idx order; in "All" each category keeps its own groups.
+  const categoryOrder = useMemo(
+    () => [...categories].sort((a, b) => a.sort_order - b.sort_order).map(c => c.id),
+    [categories],
+  );
+  const groups = useMemo<TeamView[][]>(
+    () => buildGroups(groupMatches, teamById, categoryOrder),
+    [groupMatches, teamById, categoryOrder],
+  );
 
   // Knockout: a 2D Match[][] indexed by round_idx then by slot_idx. Used by
   // KnockoutTab to render the bracket + by App.tsx propagateWinner.

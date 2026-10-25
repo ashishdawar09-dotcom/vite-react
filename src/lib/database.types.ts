@@ -992,6 +992,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      allocate_court: {
+        Args: { p_court: number; p_match_id: string }
+        Returns: undefined
+      }
       approve_registration: { Args: { p_reg_id: string }; Returns: Json }
       delete_team: {
         Args: { p_reason: string; p_team_id: string }

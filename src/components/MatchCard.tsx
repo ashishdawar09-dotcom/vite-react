@@ -4,6 +4,7 @@ import { ScoreInput } from "./ScoreInput";
 import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
 import type { Match, Player, Team } from "../types";
+import { isCancelledMatch } from "../lib/matchOutcome";
 
 // MatchCard's "team view" — a Team enriched with its player objects.
 // Identical to the TeamView type used in App.tsx (kept in sync; if it
@@ -271,7 +272,9 @@ export function MatchCard({
             🟡 WARMING UP · {warmupElapsed}
           </span>
         )}
-        {m.confirmed && !isEditing && <span style={{ color: "#16a34a" }}>✓ Confirmed</span>}
+        {m.confirmed && !isEditing && (isCancelledMatch(m)
+          ? <span style={{ color: "#64748b" }}>Cancelled</span>
+          : <span style={{ color: "#16a34a" }}>✓ Confirmed</span>)}
         {isEditing && <span style={{ color: "#f59e0b" }}>✏️ Editing</span>}
       </div>
       <div style={{ padding: "8px 14px 14px" }}>

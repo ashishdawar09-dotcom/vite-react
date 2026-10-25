@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Category, Match, ProjectedMatch } from "../types";
+import { isCancelledMatch } from "../lib/matchOutcome";
 
 // Per-court projected schedule. Returns matches enriched with `projected_start_at`,
 // `delta_min`, and a `delta_label` suitable for direct display.
@@ -41,12 +42,12 @@ function fmtDelta(min: number): string {
  * completed. Recent matches weight more heavily so a sudden shift in pacing
  * (e.g. tighter scoring in the knockout rounds) influences projections quickly.
  *
- * Window: last 5 confirmed non-walkover, non-bye matches. Weights: 5,4,3,2,1.
+ * Window: last 5 confirmed non-walkover, non-bye, non-cancelled matches. Weights: 5,4,3,2,1.
  */
 function adaptiveMatchMinutes(matches: Match[], categoryId: string, fallback: number): number {
   const completed = matches.filter(m =>
     m.category_id === categoryId &&
-    m.confirmed && !m.is_walkover && !m.is_bye &&
+    m.confirmed && !m.is_walkover && !m.is_bye && !isCancelledMatch(m) &&
     m.started_at && m.confirmed_at,
   );
   if (completed.length < 3) return fallback;
@@ -142,7 +143,7 @@ export function useScheduling(matches: Match[], categories: Category[], numCourt
           const scheduledFinish = scheduledAt + matchMin * MIN;
           const d = (confirmedAt - scheduledFinish) / MIN;
           delta_min = d;
-          delta_label = m.is_walkover ? "WALKOVER" : (d > 1 ? `${Math.round(d)}M LATE` : d < -1 ? `${Math.round(-d)}M EARLY` : "ON TIME");
+          delta_label = isCancelledMatch(m) ? "CANCELLED" : m.is_walkover ? "WALKOVER" : (d > 1 ? `${Math.round(d)}M LATE` : d < -1 ? `${Math.round(-d)}M EARLY` : "ON TIME");
           if (m.court_number != null && m.court_number >= 1 && m.court_number <= queues.length) {
             queues[m.court_number - 1] = Math.max(queues[m.court_number - 1], confirmedAt);
           }

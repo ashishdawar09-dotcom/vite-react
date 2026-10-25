@@ -1,4 +1,5 @@
 import type { Category, Match, Player, Team } from "../../types";
+import { buildGroups, groupStandings } from "../../lib/groups";
 
 export type TeamView = Team & { p1: Player; p2: Player | null };
 
@@ -59,41 +60,19 @@ export function derivePublicTournamentState(
       a.id.localeCompare(b.id),
     );
 
-  // Groups by group_idx — uses the set of team ids that appear in any
-  // group match. Skips groups that have no teams (e.g. while a category
-  // is still pre-stage).
-  const groupSets = new Map<number, Set<string>>();
-  groupMatches.forEach(m => {
-    if (m.group_idx == null) return;
-    if (!groupSets.has(m.group_idx)) groupSets.set(m.group_idx, new Set());
-    if (m.team_a_id) groupSets.get(m.group_idx)!.add(m.team_a_id);
-    if (m.team_b_id) groupSets.get(m.group_idx)!.add(m.team_b_id);
-  });
-  const groups: TeamView[][] = [...groupSets.keys()].sort((a, b) => a - b).map(gi => {
-    const ids = groupSets.get(gi)!;
-    return teamsView.filter(t => ids.has(t.id));
-  });
+  // One group per (category, group_idx), in category order: group_idx
+  // restarts at 0 in every category (lib/groups.ts).
+  const categoryOrder = [...categories].sort((a, b) => a.sort_order - b.sort_order).map(c => c.id);
+  const groups: TeamView[][] = buildGroups(groupMatches, allTeamById, categoryOrder);
 
   // Tournament-level phase — first non-none category drives the headline.
   const phase: "none" | "group" | "knockout" =
     categories.find(c => c.phase !== "none")?.phase ?? "none";
 
-  // Per-group standings — same scoring rule as App.tsx (3 pts per win,
-  // pf/pa tracked for diff tie-break, no points for losses).
-  function getStandings(g: TeamView[], gi: number): Standing[] {
-    const s: Record<string, Standing> = {};
-    g.forEach(t => { s[t.id] = { team: t, w: 0, l: 0, pts: 0, pf: 0, pa: 0 }; });
-    groupMatches.filter(m => m.group_idx === gi && m.confirmed).forEach(m => {
-      const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-      if (m.team_a_id && s[m.team_a_id]) { s[m.team_a_id].pf += sa; s[m.team_a_id].pa += sb; }
-      if (m.team_b_id && s[m.team_b_id]) { s[m.team_b_id].pf += sb; s[m.team_b_id].pa += sa; }
-      if (m.winner_id && s[m.winner_id]) {
-        s[m.winner_id].w++; s[m.winner_id].pts += 3;
-        const loserId = m.winner_id === m.team_a_id ? m.team_b_id : m.team_a_id;
-        if (loserId && s[loserId]) s[loserId].l++;
-      }
-    });
-    return Object.values(s).sort((a, b) => b.pts - a.pts || (b.pf - b.pa) - (a.pf - a.pa));
+  // Per-group standings, same rule as the admin screen. The second
+  // argument is ignored: the group's own matches decide its table.
+  function getStandings(g: TeamView[]): Standing[] {
+    return groupStandings(g, groupMatches);
   }
 
   return {
