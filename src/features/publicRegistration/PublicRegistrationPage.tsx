@@ -13,7 +13,7 @@ import {
   trackRegistrationComplete,
 } from "../../lib/analytics";
 import { HEARD_FROM_OPTIONS, captureAttribution, getAttribution } from "../../lib/attribution";
-import { captureError } from "../../lib/sentry";
+import { captureError, captureWarning } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { AgeBand, Category, PublicRegistrationPayload, Tournament } from "../../types";
 import { Countdown } from "./Countdown";
@@ -181,6 +181,20 @@ export function PublicRegistrationPage() {
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
+  // A blocked submit shows its message by the button at the bottom; on a
+  // phone the bad field can be a long scroll away, so bring it into view.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [blockedSubmits, setBlockedSubmits] = useState(0);
+  useEffect(() => {
+    if (blockedSubmits === 0) return;
+    const field = formRef.current?.querySelector<HTMLElement>("[data-field-error]");
+    if (!field) return;
+    // Instant, not smooth: smooth scrolling is unreliable in some embedded
+    // browsers and an interrupted one leaves the player at the bottom.
+    field.scrollIntoView({ block: "center" });
+    field.querySelector<HTMLElement>("input, select, textarea, button")?.focus({ preventScroll: true });
+  }, [blockedSubmits]);
+
   const set = <K extends keyof FormState>(key: K, val: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: val }));
   };
@@ -205,9 +219,18 @@ export function PublicRegistrationPage() {
     if (!isValid(errors)) {
       setSubmitStatus("error");
       setSubmitError("Please fix the highlighted fields above.");
+      setBlockedSubmits((n) => n + 1);
+      captureWarning("Registration blocked by form validation", {
+        fields: Object.keys(errors).sort().join(","),
+        payment_method: payMethod,
+        category_id: form.category_id || "none",
+      });
       return;
     }
-    if (!tournament || !selectedCategory) return;
+    if (!tournament || !selectedCategory) {
+      captureWarning("Registration submit with no tournament or category", { category_id: form.category_id || "none" });
+      return;
+    }
 
     setSubmitStatus("submitting");
     setSubmitError(null);
@@ -272,6 +295,14 @@ export function PublicRegistrationPage() {
     } else {
       setSubmitStatus("error");
       setSubmitError(result.error ?? "Submission failed. Please try again.");
+      // status is undefined when the request never got a response (offline,
+      // timeout, blocked); server messages name fields, never their values.
+      captureError(new Error(`Registration submit failed: ${result.status ?? "no response"}`), {
+        status: result.status ?? null,
+        server_error: result.error ?? null,
+        payment_method: payMethod,
+        category_id: selectedCategory.id,
+      });
     }
   };
 
@@ -521,6 +552,7 @@ export function PublicRegistrationPage() {
         </Card>
       ) : (
         <form
+          ref={formRef}
           onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}
           noValidate
         >

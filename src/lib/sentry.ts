@@ -11,6 +11,7 @@
 //   4. Redeploy.
 
 import * as Sentry from "@sentry/react";
+import { isInjectedScriptError } from "./sentryFilter";
 
 const DSN = import.meta.env.VITE_SENTRY_DSN as string | undefined;
 
@@ -27,6 +28,8 @@ export function initSentry(): void {
     // Strip PII before sending — we don't want player names showing up in
     // the Sentry dashboard.
     beforeSend(event) {
+      // In-app browser scripts (Instagram, Facebook) aren't ours to fix.
+      if (isInjectedScriptError(event)) return null;
       if (event.user) {
         delete event.user.username;
         delete event.user.email;
@@ -35,6 +38,19 @@ export function initSentry(): void {
     },
   });
   initialized = true;
+}
+
+/**
+ * Record an expected-but-worth-knowing failure (e.g. a registration form
+ * that didn't validate) as a warning. `tags` are searchable in Sentry; keep
+ * them to field names and codes, never what the player typed.
+ */
+export function captureWarning(message: string, tags?: Record<string, string>): void {
+  if (initialized) {
+    Sentry.captureMessage(message, { level: "warning", tags });
+  } else {
+    console.warn("[captureWarning]", message, tags);
+  }
 }
 
 /** Capture an error to Sentry (no-op if Sentry isn't initialized). */
