@@ -184,6 +184,7 @@ export function TournamentPicker({
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
       <select
+        aria-label="Tournament"
         value={current?.id ?? ""}
         onChange={e => onSelect(e.target.value)}
         style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}

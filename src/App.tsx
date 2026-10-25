@@ -664,7 +664,7 @@ export default function App() {
           letterSpacing: 1.5,
           textTransform: "uppercase",
           background: "transparent",
-          color: isActive ? "#00d4ff" : "#64748b",
+          color: isActive ? "#00d4ff" : "#7a8aa0",
           border: "none",
           borderBottom: "3px solid transparent",          /* MAKEOVER: reserves layout space for motion indicator */
           marginBottom: -1,
@@ -779,7 +779,7 @@ export default function App() {
                 letterSpacing: 1.5,
                 textTransform: "uppercase",
                 background: "transparent",
-                color: moreIsActive ? "#00d4ff" : "#64748b",
+                color: moreIsActive ? "#00d4ff" : "#7a8aa0",
                 border: "none",
                 borderBottom: "3px solid transparent",
                 marginBottom: -1,

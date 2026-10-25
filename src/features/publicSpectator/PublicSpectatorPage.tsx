@@ -4,6 +4,7 @@ import { LiveTab } from "../../components/LiveTab";
 import { LottieLoader } from "../../components/ui/lottie-loader";
 import { usePublicTournament } from "./usePublicTournament";
 import { derivePublicTournamentState } from "./publicDerive";
+import { formatLocalDate } from "../../lib/dates";
 
 /**
  * Public spectator URL — /t/:slug
@@ -117,7 +118,7 @@ export function PublicPageShell({
           <h1 className="font-display" style={{ margin: "4px 0 0", fontSize: 24, fontWeight: 700, letterSpacing: 0.5, color: "#fff", textTransform: "uppercase", lineHeight: 1.1 }}>{tournamentName}</h1>
           {(venueName || eventDate) && (
             <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
-              {[venueName, eventDate && new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })].filter(Boolean).join(" · ")}
+              {[venueName, eventDate && formatLocalDate(eventDate, { weekday: "short", month: "short", day: "numeric" })].filter(Boolean).join(" · ")}
             </div>
           )}
         </div>

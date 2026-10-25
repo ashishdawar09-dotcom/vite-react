@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react";
 import { useAuth } from "../../hooks/useAuth";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { listCategories, listPaymentRegistrations, listTournaments } from "../../lib/db";
+import { localToday } from "../../lib/dates";
 import { supabase } from "../../lib/supabase";
 import { colors } from "../../lib/theme";
 import { Login } from "../../components/Login";
@@ -36,7 +37,7 @@ function pickDefault(list: Tournament[]): Tournament | null {
   const wanted = new URLSearchParams(window.location.search).get("t");
   const byParam = wanted ? list.find(t => t.id === wanted || t.slug === wanted) : undefined;
   if (byParam) return byParam;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const upcoming = list
     .filter(t => t.event_date && t.event_date >= today)
     .sort((a, b) => (a.event_date! < b.event_date! ? -1 : 1));
