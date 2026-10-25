@@ -11,9 +11,11 @@ badminton.adawar.org). The k6 script and the writer refuse those targets.
 
 | File | What it does |
 |---|---|
-| `seed.sql` | Creates the synthetic "Load Cup" (slug `loadtest`) on the scratch project: 10 categories, 63 players, 45 teams, 100 matches (80 group, 20 knockout), 4 live, 2 allocated to a court. Re-running replaces it. Synthetic names only. |
+| `seed.sql` | Creates the synthetic "Load Cup" (slug `loadtest`) on the scratch project: 10 categories, 120 players, 70 teams, 102 matches (90 group in two groups per category, 12 knockout), 4 live, 2 allocated to a court. Re-running replaces it. Synthetic names only. |
 | `snapshot.k6.js` | k6 script. `TARGET=direct` POSTs the `live_snapshot` RPC (run A); `TARGET=cached` GETs `/api/snapshot` on a Vercel preview (run B). Each VU polls every `POLL_S` seconds, starting at a random offset. |
 | `writer.mjs` | Bumps a score on one live match every few seconds so caches and the DB see race-day churn. |
+| `phones.mjs` | N simulated phones running the real client policy (`src/lib/snapshotSource.ts`): endpoint first, RPC fallback, degraded mode. Prints endpoint/RPC counts, CDN cache statuses and data age every 10 s; with `SCRATCH_SECRET_KEY` it also probes how long a score change takes to reach every phone. Needs `ENDPOINT_BASE`. |
+| `local-endpoint.mjs` | Serves `api/snapshot.ts` on `localhost:8790`; `kill -USR1 <pid>` toggles a 502 failure mode. For fallback tests without Vercel. |
 
 ## Environment
 
@@ -46,6 +48,7 @@ function reads them at runtime). Redeploy after adding them.
 node scripts/loadtest/writer.mjs 3 1500 &
 TARGET=direct VUS=225 DURATION=4m k6 run scripts/loadtest/snapshot.k6.js
 TARGET=cached VUS=225 DURATION=20m k6 run scripts/loadtest/snapshot.k6.js
+ENDPOINT_BASE=$PREVIEW_URL node scripts/loadtest/phones.mjs 50 300
 ```
 
 4. Afterwards: revoke the bypass token, remove the scratch Preview env vars,
@@ -56,12 +59,13 @@ most one origin request per 2 s.
 
 ## Results
 
-Payload at race-day size (Load Cup, 100 matches): 131 KB raw, 16.8 KB gzip,
-11.6 KB brotli per snapshot.
+Payload at race-day size: 63 players / 100 matches = 131 KB raw, 16.8 KB gzip,
+11.6 KB brotli. 120 players / 102 matches = **165 KB raw, 23.6 KB gzip,
+15.8 KB brotli**.
 
 ### Run A: direct RPC (2026-10-25, scratch project, Free/Nano, us-west-2)
 
-225 VUs polling every 5 s, writer updating a live score every 3 s
+**A1 (63 players):** 225 VUs polling every 5 s, writer updating a live score every 3 s
 (87 writes, 0 errors), k6 v2.3.0 from a laptop in BC.
 
 | Metric | Result | Pass? |
@@ -83,6 +87,41 @@ model (150 phones, ~70 % in foreground, ~680k requests a day) comes to
 ≈ 12 GB at this payload's gzip size, or ≈ 89 GB if metered raw. Direct
 polling cannot stay inside the 5 GB Free quota.
 
+**A2 (120 players, 165 KB):** same load for 2 minutes.
+
+| Metric | Result | Pass? |
+|---|---|---|
+| Requests to Supabase | 5,399 in 2 min (43 req/s) | |
+| Error rate | 0.00 % | ✓ |
+| Latency | median 76 ms, p95 **244 ms**, p99 427 ms, max 653 ms | ✓ |
+| Egress on the wire | 132 MB (24.5 KB per response) | |
+
+p95 more than doubled with a 25 % bigger payload: the Nano instance spends
+real CPU building the JSON. It still passes, but it is the trend to watch if
+the payload keeps growing. At 120 players the plan's 680k-request day is
+≈ 16 GB gzip-metered.
+
+### Fallback and recovery (local, real handler + real client policy)
+
+`local-endpoint.mjs` + `phones.mjs`: 20 phones, endpoint made to fail at
+t≈32 s and restored at t≈132 s, with a score probe every 20 s.
+
+| Phase | What phones did |
+|---|---|
+| Healthy | All polls via the endpoint. Score changes reached every phone in p50 1.3 s, max 4.6 s. |
+| Endpoint fails | The next poll on every phone fell back to the RPC in the same tick, so no data gap. After 3 failures each phone switched to the RPC every 30 s and re-checked the endpoint every 60 s. |
+| While degraded | Scores lag up to 30 s (two probes landed between polls and were never seen inside their 20 s window; others took 11–14 s). |
+| Endpoint back | Phones returned to the endpoint at their next 60 s re-check (≈ 38 s after the restore here). |
+
+Without any cache (same harness, endpoint healthy) score propagation was
+p50 3.1 s, p95 4.9 s, max 5.2 s, bounded by the 5 s poll.
+
 ### Run B: cached endpoint
 
-RUN_B_PLACEHOLDER
+**Not run yet.** The Vercel preview sits behind deployment protection, and
+creating the protection-bypass token needs Ashish's OK given in the same
+Claude session that creates it. Still to measure through the CDN: origin
+request rate and HIT/STALE ratio at 225 VUs, stale-if-error during a brief
+Supabase error, cold-cache stampede when many phones arrive at once, and
+score propagation through the cache (expected ≤ ~8 s: up to 3 s cache age
+plus the 5 s poll).
