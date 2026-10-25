@@ -27,7 +27,7 @@ export type FieldProps = {
 
 export function Field({ label, hint, error, required, children }: FieldProps) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div data-field-error={error ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <label
         style={{
           fontSize: 11,
@@ -86,7 +86,7 @@ export function CheckRow({ checked, onChange, label, hint, error }: {
   checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string; error?: string;
 }) {
   return (
-    <label style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", cursor: "pointer" }}>
+    <label data-field-error={error ? "" : undefined} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", cursor: "pointer" }}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
         style={{ width: 22, height: 22, marginTop: 1, flex: "0 0 auto", accentColor: CYAN_DARK }} />
       <span style={{ fontSize: 14, lineHeight: 1.45, color: colors.text.primaryLight }}>
