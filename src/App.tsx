@@ -22,6 +22,7 @@ import { PartnerPickerModal } from "./components/PartnerPickerModal";
 import { MatchCard as ExtractedMatchCard, type MatchCardActions } from "./components/MatchCard";
 import { AppHeader } from "./components/AppHeader";
 import type { Match, Player, Team, Tournament } from "./types";
+import { applyPlan, confirmKnockoutPlan, type KnockoutPlan } from "./lib/knockout";
 
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
 // LIVE-tab view is split out so the main bundle stays small. Suspense
@@ -78,6 +79,7 @@ export default function App() {
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // Blocks a second Start Group Stage tap while the first is still writing.
   const startingGroupStage = useRef(false);
+  const startingKnockout = useRef(false);
 
   // Navigate to a specific player's profile from anywhere (search, etc.).
   const showProfile = (playerId: string) => {
@@ -198,12 +200,42 @@ export default function App() {
     const playerTeamIds = teams.filter(t => t.p1_id === playerId || t.p2_id === playerId).map(t => t.id);
     return matches.some(m => m.status === "live" && (playerTeamIds.includes(m.team_a_id!) || playerTeamIds.includes(m.team_b_id!)));
   };
+  // "Sit Out" used to delete every team the player was on, in every category,
+  // with no prompt; matches.team_*_id are ON DELETE SET NULL, so played
+  // results lost their teams and winners. Now it asks first, removes only
+  // teams that haven't played (delete_team() refuses the rest and logs each
+  // removal with a reason), and says which categories need a walkover instead.
   const toggleActive = async (id: string) => {
     if (!guard()) return;
     const p = playerById[id]; if (!p) return;
-    if (p.active && isPlayerInLiveMatch(id)) { toast(`"${p.name}" is in a live match and cannot be deactivated right now.`, "warn"); return; }
-    await db.updatePlayer(id, { active: !p.active });
-    if (p.active) await db.deleteTeamsContainingPlayer(id);
+    if (!p.active) { await db.updatePlayer(id, { active: true }); return; }
+    if (isPlayerInLiveMatch(id)) { toast(`"${p.name}" is in a live match and cannot be deactivated right now.`, "warn"); return; }
+
+    const catName = (cid: string) => categories.find(c => c.id === cid)?.name ?? "Unknown category";
+    const inAMatch = (teamId: string) => matches.some(m => m.team_a_id === teamId || m.team_b_id === teamId || m.winner_id === teamId);
+    const theirTeams = teams.filter(t => t.p1_id === id || t.p2_id === id);
+    const removable = theirTeams.filter(t => !inAMatch(t.id));
+    const playing = theirTeams.filter(t => inAMatch(t.id));
+
+    const lines = [`Sit out "${p.name}"?`, ""];
+    if (removable.length) lines.push(`Teams removed (no matches played yet):\n${removable.map(t => `• ${t.name} (${catName(t.category_id)})`).join("\n")}`, "");
+    if (playing.length) lines.push(`Teams kept, already in matches. Record a walkover for their remaining games:\n${playing.map(t => `• ${t.name} (${catName(t.category_id)})`).join("\n")}`, "");
+    if (!theirTeams.length) lines.push("They aren't on any team.", "");
+    lines.push("Their results stay as they are.");
+    if (!confirm(lines.join("\n"))) return;
+
+    await db.updatePlayer(id, { active: false });
+    const failed: string[] = [];
+    for (const t of removable) {
+      try {
+        await db.deleteTeamWithReason(t.id, `${p.name} marked as sitting out`);
+      } catch (e: unknown) {
+        failed.push(`${t.name}: ${e instanceof Error ? e.message : "error"}`);
+      }
+    }
+    if (failed.length) toast(`"${p.name}" is sitting out, but some teams weren't removed. ${failed.join("; ")}`, "warn");
+    else if (playing.length) toast(`"${p.name}" is sitting out. Record walkovers in: ${[...new Set(playing.map(t => catName(t.category_id)))].join(", ")}.`, "info");
+    else toast(`"${p.name}" is sitting out.`, "info");
   };
   const handlePhoto = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!guard()) return;
@@ -352,10 +384,22 @@ export default function App() {
     return ms.length > 0 && ms.every(m => m.confirmed);
   });
 
+  // A second tap while the first insert is in flight (slow gym Wi-Fi) used to
+  // create a duplicate bracket. Ignore re-entry, and refuse if this category
+  // already has knockout matches.
   const startKnockout = async () => {
+    if (startingKnockout.current) return;
+    startingKnockout.current = true;
+    try { await startKnockoutOnce(); } finally { startingKnockout.current = false; }
+  };
+  const startKnockoutOnce = async () => {
     if (!guard() || !current || !currentCategoryId) return;
     const cat = categories.find(c => c.id === currentCategoryId);
     if (!cat) return;
+    if (matches.some(m => m.category_id === currentCategoryId && m.stage === "knockout")) {
+      toast("This category already has a knockout bracket.", "warn");
+      return;
+    }
 
     // Determine top-N-advance per group. Honor category.top_n_advance if set;
     // otherwise fall back to the planner's default for the current team count.
@@ -394,7 +438,7 @@ export default function App() {
         score_a: null, score_b: null,
         winner_id: bye ? (a?.id ?? b?.id ?? null) : null,
         confirmed: bye, is_bye: bye,
-        status: bye ? "completed" : "pending", started_at: null, is_walkover: false,
+        status: bye ? "completed" : "pending", started_at: null, is_walkover: false, is_bronze: false,
       });
     }
     // Byes are decided at creation, so their teams start in round 2.
@@ -407,15 +451,18 @@ export default function App() {
         rows.push({
           tournament_id: current.id, category_id: currentCategoryId, stage: "knockout", group_idx: null, round_idx: r, slot_idx: i,
           team_a_id: pre?.a?.id ?? null, team_b_id: pre?.b?.id ?? null, score_a: null, score_b: null, winner_id: null, confirmed: false, is_bye: false,
-          status: "pending", started_at: null, is_walkover: false,
+          status: "pending", started_at: null, is_walkover: false, is_bronze: false,
         });
       }
       prevCount = cnt;
     }
+    // Every row sets is_bronze: in a bulk insert PostgREST sends NULL (not the
+    // column default) for keys missing from some rows, so one bronze row made
+    // the whole insert fail on matches.is_bronze NOT NULL.
     // Bronze / 3rd-place playoff. Only inserted when the category opts in
     // AND the bracket actually has semi-finals (slots >= 4 → rds >= 2). Lives
     // in the same round_idx as the Final (last round) at slot_idx=1; the two
-    // SF losers are routed here by propagateWinner.
+    // SF losers are routed here by planKnockoutAdvance (src/lib/knockout.ts).
     if (cat.has_bronze_match && slots >= 4) {
       rows.push({
         tournament_id: current.id, category_id: currentCategoryId, stage: "knockout",
@@ -568,53 +615,16 @@ export default function App() {
     const next = Math.max(0, isNaN(val) ? 0 : val);
     await db.updateMatch(m.id, side === "a" ? { score_a: next } : { score_b: next });
   };
-  const propagateWinner = async (m: Match, winner_id: string | null) => {
-    if (m.stage !== "knockout" || m.round_idx == null || !winner_id) return;
-    const nextRound = knockout[m.round_idx + 1];
-    if (!nextRound) return;
-    // The Final / next-round target. Bronze lives in the same final round at
-    // slot_idx=1, but never gets winners pushed to it through this branch —
-    // it's handled by the dedicated isSemiFinal block below. Skip bronze
-    // explicitly so `find` returns the actual bracket-tree target.
-    const ni = Math.floor(m.slot_idx / 2);
-    const nm = nextRound.find(x => !x.is_bronze && x.slot_idx === ni) ?? null;
-    if (nm) {
-      const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
-      const patch: Partial<Match> = { [side]: winner_id };
-      if (nm.winner_id && (nm.team_a_id === m.winner_id || nm.team_b_id === m.winner_id)) {
-        patch.winner_id = null;
-        patch.confirmed = false;
-        patch.score_a = null;
-        patch.score_b = null;
-        patch.status = "pending";
-        patch.confirmed_at = null;
-      }
-      await db.updateMatch(nm.id, patch);
-    }
-
-    // Bronze / 3rd-place playoff. When the SF resolves, the LOSER (not the
-    // winner) goes to the bronze match in the final round. SF slot 0 →
-    // bronze.team_a_id; SF slot 1 → bronze.team_b_id. Only runs when bronze
-    // exists for this bracket (category opt-in + slots ≥ 4 at gen time).
-    const finalRoundIdx = knockout.length - 1;
-    const isSemiFinal = m.round_idx === finalRoundIdx - 1;
-    if (isSemiFinal) {
-      const bronze = nextRound.find(x => x.is_bronze);
-      if (bronze) {
-        const loserId = m.team_a_id === winner_id ? m.team_b_id : m.team_a_id;
-        const bronzeSide = m.slot_idx === 0 ? "team_a_id" : "team_b_id";
-        const bronzePatch: Partial<Match> = { [bronzeSide]: loserId ?? null };
-        const currentBronzeSideTeam = bronzeSide === "team_a_id" ? bronze.team_a_id : bronze.team_b_id;
-        if (bronze.confirmed && currentBronzeSideTeam !== loserId) {
-          bronzePatch.winner_id = null;
-          bronzePatch.confirmed = false;
-          bronzePatch.score_a = null;
-          bronzePatch.score_b = null;
-          bronzePatch.status = "pending";
-          bronzePatch.confirmed_at = null;
-        }
-        await db.updateMatch(bronze.id, bronzePatch);
-      }
+  // Bracket writes for a knockout result, scoped to the match's own category
+  // (see src/lib/knockout.ts). Plan first, ask if it would reset anything
+  // already played, then save the match, then apply. A cancel saves nothing.
+  const planBracket = (m: Match, winner_id: string | null): KnockoutPlan | null =>
+    confirmKnockoutPlan(matches, m, winner_id);
+  const applyBracket = async (plan: KnockoutPlan) => {
+    try {
+      await applyPlan(plan, db.updateMatch);
+    } catch (e: unknown) {
+      toast(`Result saved, but the bracket didn't update: ${e instanceof Error ? e.message : "error"}. Refresh and check the next round.`, "error");
     }
   };
   const confirmInline = async (m: Match) => {
@@ -623,8 +633,9 @@ export default function App() {
     if (sa === 0 && sb === 0) { toast("Enter a score before confirming.", "warn"); return; }
     if (sa === sb) { toast("No ties allowed — set a winner.", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
+    const plan = planBracket(m, winner_id); if (!plan) return;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
-    await propagateWinner(m, winner_id);
+    await applyBracket(plan);
     setEditingMatchId(null);
   };
   const saveEditedMatch = async (m: Match) => {
@@ -632,8 +643,9 @@ export default function App() {
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
     if (sa === sb) { toast("No ties allowed.", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
+    const plan = planBracket(m, winner_id); if (!plan) return;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
-    await propagateWinner(m, winner_id);
+    await applyBracket(plan);
     setEditingMatchId(null);
   };
 
@@ -706,12 +718,14 @@ export default function App() {
     confirmFinalScore: confirmInline,
     saveEditedMatch,
     selectWinner: async (m, winnerId) => {
+      const plan = planBracket(m, winnerId); if (!plan) return;
       await db.selectMatchWinner(m.id, winnerId);
-      await propagateWinner(m, winnerId);
+      await applyBracket(plan);
     },
     markWalkover: async (m, winnerId) => {
+      const plan = planBracket(m, winnerId); if (!plan) return;
       await db.markWalkover(m.id, winnerId);
-      await propagateWinner(m, winnerId);
+      await applyBracket(plan);
     },
   };
 
