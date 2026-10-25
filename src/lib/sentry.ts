@@ -42,14 +42,19 @@ export function initSentry(): void {
 
 /**
  * Record an expected-but-worth-knowing failure (e.g. a registration form
- * that didn't validate) as a warning. `tags` are searchable in Sentry; keep
- * them to field names and codes, never what the player typed.
+ * that didn't validate) as a warning. `tags` are searchable in Sentry (200
+ * characters max each); `extra` holds anything longer. Keep both to field
+ * names and codes, never what the player typed.
  */
-export function captureWarning(message: string, tags?: Record<string, string>): void {
+export function captureWarning(
+  message: string,
+  tags?: Record<string, string>,
+  extra?: Record<string, unknown>,
+): void {
   if (initialized) {
-    Sentry.captureMessage(message, { level: "warning", tags });
+    Sentry.captureMessage(message, { level: "warning", tags, extra });
   } else {
-    console.warn("[captureWarning]", message, tags);
+    console.warn("[captureWarning]", message, tags, extra);
   }
 }
 

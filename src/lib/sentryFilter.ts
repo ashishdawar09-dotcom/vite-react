@@ -29,7 +29,14 @@ export function isInjectedScriptError(event: ErrorEvent): boolean {
 
   if (frames.some((f) => f.function && META_IAB_FRAMES.has(f.function))) return true;
 
-  // Every frame points at the HTML page rather than a bundled script.
+  // Every frame points at the HTML page rather than a bundled script. Sentry
+  // also gives a stackless window.onerror one stand-in frame at the page URL
+  // with function "?"; that says nothing about where the error came from, so
+  // only real, named frames count.
   const page = event.request?.url ? pagePath(event.request.url) : null;
-  return page !== null && frames.every((f) => !!f.filename && pagePath(f.filename) === page);
+  return (
+    page !== null &&
+    frames.some((f) => !!f.function && f.function !== "?") &&
+    frames.every((f) => !!f.filename && pagePath(f.filename) === page)
+  );
 }

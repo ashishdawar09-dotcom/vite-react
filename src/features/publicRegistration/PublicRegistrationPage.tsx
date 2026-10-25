@@ -220,11 +220,12 @@ export function PublicRegistrationPage() {
       setSubmitStatus("error");
       setSubmitError("Please fix the highlighted fields above.");
       setBlockedSubmits((n) => n + 1);
-      captureWarning("Registration blocked by form validation", {
-        fields: Object.keys(errors).sort().join(","),
-        payment_method: payMethod,
-        category_id: form.category_id || "none",
-      });
+      const failed = Object.keys(errors).sort();
+      captureWarning(
+        "Registration blocked by form validation",
+        { first_field: failed[0] ?? "none", payment_method: payMethod, category_id: form.category_id || "none" },
+        { fields: failed },
+      );
       return;
     }
     if (!tournament || !selectedCategory) {
@@ -296,13 +297,22 @@ export function PublicRegistrationPage() {
       setSubmitStatus("error");
       setSubmitError(result.error ?? "Submission failed. Please try again.");
       // status is undefined when the request never got a response (offline,
-      // timeout, blocked); server messages name fields, never their values.
-      captureError(new Error(`Registration submit failed: ${result.status ?? "no response"}`), {
-        status: result.status ?? null,
-        server_error: result.error ?? null,
+      // timeout, blocked). Some server messages quote the player's or
+      // partner's age, so numbers are masked before sending.
+      const status = result.status;
+      const detail = {
+        status: status ?? null,
+        server_error: result.error?.replace(/\d+/g, "#") ?? null,
         payment_method: payMethod,
         category_id: selectedCategory.id,
-      });
+      };
+      if (status !== undefined && status < 500) {
+        // The server turned the entry down (duplicate, closed, too many
+        // tries): worth seeing, not an outage.
+        captureWarning(`Registration rejected by server: ${status}`, { status: String(status) }, detail);
+      } else {
+        captureError(new Error(`Registration submit failed: ${status ?? "no response"}`), detail);
+      }
     }
   };
 

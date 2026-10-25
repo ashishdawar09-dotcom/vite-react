@@ -36,6 +36,12 @@ describe("isInjectedScriptError", () => {
     expect(isInjectedScriptError(e)).toBe(false);
   });
 
+  it("keeps a stackless window error that Sentry pinned to the page URL", () => {
+    // @sentry/browser's global handler adds { function: "?", filename: <page> }
+    // when the browser gives no script URL.
+    expect(isInjectedScriptError(event([{ filename: REG, function: "?" }]))).toBe(false);
+  });
+
   it("keeps errors that have no stack trace", () => {
     expect(isInjectedScriptError(event([]))).toBe(false);
     expect(isInjectedScriptError({ type: undefined, message: "boom" })).toBe(false);
