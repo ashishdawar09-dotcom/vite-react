@@ -13,16 +13,18 @@ import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
 import { toast } from "./components/Toast";
-import { byeAdvances, defaultFormat, recommendFormats, splitIntoGroups, seedBracket, type FormatPlan } from "./lib/formatPlanner";
+import { byeAdvances, defaultFormat, recommendFormats, seedBracket, type FormatPlan } from "./lib/formatPlanner";
 import { planSinglesDraw } from "./lib/pairing";
+import { finalOnlyRows, hasStageRows, isStageAlreadyStarted, planStart } from "./lib/stageStart";
+import { finalScorePatch } from "./lib/scoring";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { AppFooter } from "./components/AppFooter";
 import { MoreDrawer, type TabId } from "./components/MoreDrawer";
 import { PartnerPickerModal } from "./components/PartnerPickerModal";
-import { MatchCard as ExtractedMatchCard, type MatchCardActions } from "./components/MatchCard";
+import { MatchCard as ExtractedMatchCard, type MatchCardActions, type ShownScores } from "./components/MatchCard";
 import { AppHeader } from "./components/AppHeader";
 import type { Match, Player, Team, Tournament } from "./types";
-import { applyPlan, confirmKnockoutPlan, type KnockoutPlan } from "./lib/knockout";
+import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
 
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
 // LIVE-tab view is split out so the main bundle stays small. Suspense
@@ -39,6 +41,10 @@ const TeamsTab = React.lazy(() => import("./features/teamformation/TeamsTab").th
 const AdminManager = React.lazy(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
+// Fields every newly drawn match starts with.
+const newMatchBase = (tournament_id: string, category_id: string, stage: "group" | "knockout"): Partial<Match> => ({
+  tournament_id, category_id, stage, score_a: null, score_b: null, started_at: null, is_walkover: false,
+});
 
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -120,7 +126,7 @@ export default function App() {
   }, []);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
-  const { players, teams, matches, categories, playerCategories, loading: dataLoading } = useTournamentData(currentId, isAdmin); /* NEW: dataLoading for the cat loader during tournament switch / data refetch */
+  const { players, teams, matches, categories, playerCategories, loading: dataLoading, stale: dataStale } = useTournamentData(currentId, isAdmin); /* NEW: dataLoading for the cat loader during tournament switch / data refetch */
 
   // Default to "All" (null). Only auto-select first category if none exists yet and we need one for team operations.
   useEffect(() => {
@@ -266,39 +272,36 @@ export default function App() {
     if (!guard() || !current || !currentCategoryId) return;
     const cat = categories.find(c => c.id === currentCategoryId);
     if (!cat) return;
+    const catId = cat.id;
 
     // Singles: every active player in the category is entered on their own.
     // Doubles: the teams formed on the Players tab.
     const isSingles = cat.team_size === 1;
-
-    // Resolution order for format params:
-    //   1. Explicit override from the Teams tab format-card click (most authoritative)
-    //   2. The category's saved values (groups_count > 0 / top_n_advance > 0)
-    //   3. Planner default for the current team count
     const N = isSingles ? singlesEntrants.length : teamsView.length;
-    let groupsCount = override?.groupsCount ?? cat.groups_count ?? 0;
-    let topNAdvance = override?.topNAdvance ?? cat.top_n_advance ?? 0;
     const roundsPerPair = override?.roundsPerPair ?? pendingRounds;
-    let groupSizes: number[];
-
-    if (groupsCount > 0) {
-      groupSizes = splitIntoGroups(N, groupsCount);
-    } else {
-      const plan = defaultFormat(N);
-      groupsCount = plan.groupsCount;
-      groupSizes = plan.groupSizes;
-      if (topNAdvance <= 0) topNAdvance = plan.topNAdvance;
-    }
+    // Format card the admin picked, else the category's saved values, else
+    // the planner default. Exactly 2 entries is a single Final.
+    const plan = planStart(N, override, cat);
 
     // Checked before anything is written.
-    if (N < 2 || groupsCount === 0 || groupSizes.length === 0) {
+    if (plan.kind === "too-few") {
       toast(isSingles
         ? "Too few players to start. At least 2 active players are needed."
         : "Too few teams to start a tournament. Add more teams first.", "warn");
       return;
     }
+    // Already started on this screen: if the phase write was lost last time,
+    // put it right instead of drawing again.
+    if (hasStageRows(matches, catId, "any")) {
+      const stage = hasStageRows(matches, catId, "knockout") ? "knockout" : "group";
+      if (cat.phase === "none") await db.setCategoryPhase(catId, stage).catch(() => {});
+      toast("This category has already started.", "warn");
+      setTab(stage === "knockout" ? "knockout" : "groups");
+      return;
+    }
     if (startingGroupStage.current) return;
     startingGroupStage.current = true;
+    let created: { id: string }[] = [];
     try {
       // Singles: give each entrant a one-player team, reusing any they
       // already have, so nobody is entered twice.
@@ -306,34 +309,50 @@ export default function App() {
       if (isSingles) {
         const { existing, toCreate } = planSinglesDraw(singlesEntrants.map(p => p.id), teamsView);
         const entrantById = new Map(singlesEntrants.map(p => [p.id, p]));
-        const created = await db.createSoloTeams(
+        const solo = await db.createSoloTeams(
           current.id,
-          currentCategoryId,
+          catId,
           toCreate.map(id => entrantById.get(id)!),
           teamsView.length,
         );
+        created = solo;
         entrants = [
           ...existing,
-          ...created.map(t => ({ ...t, p1: entrantById.get(t.p1_id)!, p2: null })),
+          ...solo.map(t => ({ ...t, p1: entrantById.get(t.p1_id)!, p2: null })),
         ];
       }
 
+      if (plan.kind === "final") {
+        await db.updateCategory(catId, { rounds_per_pair: 1, groups_count: 0, top_n_advance: 0 });
+        const [a, b] = shuffle(entrants);
+        await db.startCategoryStage(catId, "knockout", finalOnlyRows(a.id, b.id).map(r => ({ ...newMatchBase(current.id, catId, "knockout"), ...r })));
+        setTab("knockout");
+        return;
+      }
+
       // Persist the choices so the knockout stage reads the same values.
-      await db.updateCategory(currentCategoryId, {
+      await db.updateCategory(catId, {
         rounds_per_pair: roundsPerPair,
-        groups_count: groupsCount,
-        top_n_advance: topNAdvance,
+        groups_count: plan.groupsCount,
+        top_n_advance: plan.topNAdvance,
       });
 
-      await insertGroupStage(entrants, groupsCount, groupSizes, roundsPerPair);
+      await insertGroupStage(catId, entrants, plan.groupsCount, plan.groupSizes, roundsPerPair);
+    } catch (e: unknown) {
+      // Solo teams made for a draw that didn't happen would show up twice
+      // next time. delete_team() refuses any team that is in a match.
+      for (const t of created) await db.deleteTeamWithReason(t.id, "Unused solo team: Start Group Stage did not go through").catch(() => {});
+      toast(isStageAlreadyStarted(e)
+        ? "This category has already started (another tap or another admin got there first)."
+        : `Couldn't confirm the start: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Tapping Start again is safe; it can't create a second draw.`,
+        isStageAlreadyStarted(e) ? "warn" : "error");
     } finally {
       startingGroupStage.current = false;
     }
   };
 
   // Writes the round-robin matches for the given entrants and opens the Groups tab.
-  const insertGroupStage = async (entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number) => {
-    if (!current || !currentCategoryId) return;
+  const insertGroupStage = async (catId: string, entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number) => {
     // Distribute shuffled teams across groups by explicit sizes.
     const sh = shuffle(entrants);
     const gs: TeamView[][] = [];
@@ -350,16 +369,15 @@ export default function App() {
       for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
         for (let r = 0; r < roundsPerPair; r++) {
           rows.push({
-            tournament_id: current.id, category_id: currentCategoryId, stage: "group", group_idx: gi, round_idx: null, slot_idx: slot++,
+            ...newMatchBase(current!.id, catId, "group"),
+            group_idx: gi, round_idx: null, slot_idx: slot++,
             team_a_id: g[i].id, team_b_id: g[j].id,
-            score_a: null, score_b: null, winner_id: null, confirmed: false, is_bye: false,
-            status: "pending", started_at: null, is_walkover: false,
+            winner_id: null, confirmed: false, is_bye: false, status: "pending", is_bronze: false,
           });
         }
       }
     });
-    await db.insertMatches(rows);
-    await db.setCategoryPhase(currentCategoryId, "group");
+    await db.startCategoryStage(catId, "group", rows);
     setTab("groups");
   };
 
@@ -386,7 +404,8 @@ export default function App() {
 
   // A second tap while the first insert is in flight (slow gym Wi-Fi) used to
   // create a duplicate bracket. Ignore re-entry, and refuse if this category
-  // already has knockout matches.
+  // already has knockout matches; start_category_stage refuses the same for
+  // a second admin.
   const startKnockout = async () => {
     if (startingKnockout.current) return;
     startingKnockout.current = true;
@@ -396,8 +415,12 @@ export default function App() {
     if (!guard() || !current || !currentCategoryId) return;
     const cat = categories.find(c => c.id === currentCategoryId);
     if (!cat) return;
-    if (matches.some(m => m.category_id === currentCategoryId && m.stage === "knockout")) {
+    if (hasStageRows(matches, cat.id, "knockout")) {
+      // If the phase write was lost last time, the Knockout tab never
+      // appeared; put the phase right.
+      if (cat.phase !== "knockout") await db.setCategoryPhase(cat.id, "knockout").catch(() => {});
       toast("This category already has a knockout bracket.", "warn");
+      setTab("knockout");
       return;
     }
 
@@ -472,8 +495,17 @@ export default function App() {
         is_walkover: false, is_bronze: true,
       });
     }
-    await db.insertMatches(rows);
-    await db.setCategoryPhase(currentCategoryId, "knockout");
+    try {
+      await db.startCategoryStage(cat.id, "knockout", rows);
+    } catch (e: unknown) {
+      if (isStageAlreadyStarted(e)) {
+        toast("This category already has a knockout bracket (another admin started it).", "warn");
+        setTab("knockout");
+      } else {
+        toast(`Couldn't confirm the knockout started: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Tapping Start Knockout again is safe; it can't create a second bracket.`, "error");
+      }
+      return;
+    }
     setTab("knockout");
   };
 
@@ -613,7 +645,12 @@ export default function App() {
   const setScore = async (m: Match, side: "a" | "b", val: number) => {
     if (!isAdmin) return;
     const next = Math.max(0, isNaN(val) ? 0 : val);
-    await db.updateMatch(m.id, side === "a" ? { score_a: next } : { score_b: next });
+    try {
+      await db.updateMatch(m.id, side === "a" ? { score_a: next } : { score_b: next });
+    } catch (e) {
+      toast("That score didn't save. Check the connection and enter it again.", "error");
+      throw e;
+    }
   };
   // Bracket writes for a knockout result, scoped to the match's own category
   // (see src/lib/knockout.ts). Plan first, ask if it would reset anything
@@ -627,24 +664,34 @@ export default function App() {
       toast(`Result saved, but the bracket didn't update: ${e instanceof Error ? e.message : "error"}. Refresh and check the next round.`, "error");
     }
   };
-  const confirmInline = async (m: Match) => {
+  // Confirm and Save use the scores on screen (`shown`), which can be ahead
+  // of `m` while a typed score is still saving, and write them in the same
+  // update as the winner.
+  const confirmInline = async (m: Match, shown?: ShownScores) => {
     if (!guard()) return;
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (sa === 0 && sb === 0) { toast("Enter a score before confirming.", "warn"); return; }
-    if (sa === sb) { toast("No ties allowed — set a winner.", "warn"); return; }
-    const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
-    const plan = planBracket(m, winner_id); if (!plan) return;
-    await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
+    const r = finalScorePatch(m, shown ? shown.a : m.score_a, shown ? shown.b : m.score_b, new Date().toISOString());
+    if (!r.ok) { toast(r.reason === "no-score" ? "Enter a score before confirming." : "No ties allowed — set a winner.", "warn"); return; }
+    const plan = planBracket(m, r.winnerId); if (!plan) return;
+    try {
+      await db.updateMatch(m.id, r.patch);
+    } catch (e: unknown) {
+      toast(`Not confirmed: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    }
     await applyBracket(plan);
     setEditingMatchId(null);
   };
-  const saveEditedMatch = async (m: Match) => {
+  const saveEditedMatch = async (m: Match, shown?: ShownScores) => {
     if (!guard()) return;
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (sa === sb) { toast("No ties allowed.", "warn"); return; }
-    const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
-    const plan = planBracket(m, winner_id); if (!plan) return;
-    await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
+    const r = finalScorePatch(m, shown ? shown.a : m.score_a, shown ? shown.b : m.score_b, new Date().toISOString());
+    if (!r.ok) { toast("No ties allowed.", "warn"); return; }
+    const plan = planBracket(m, r.winnerId); if (!plan) return;
+    try {
+      await db.updateMatch(m.id, r.patch);
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    }
     await applyBracket(plan);
     setEditingMatchId(null);
   };
@@ -759,6 +806,17 @@ export default function App() {
       {/* NEW: cat overlay during tournament-data refetch (e.g. switching tournament from the
           dropdown). Renders on top of everything via fullScreen variant (z-index: 9999). */}
       {showDataLoader && <LottieLoader fullScreen label="Loading tournament data…" />}
+      {/* A refetch failed: the screen still shows the last data it loaded, and it's retrying. */}
+      {dataStale && currentId && (
+        <div role="status" style={{
+          position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9000,
+          background: "#fef3c7", color: "#92400e", border: "1px solid #f59e0b", borderRadius: 999,
+          padding: "6px 14px", fontSize: 13, fontWeight: 700, boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+          whiteSpace: "nowrap",
+        }}>
+          ⚠ Couldn't refresh, retrying… Scores shown may be out of date.
+        </div>
+      )}
       <AppHeader
         isAdmin={isAdmin}
         email={email}
@@ -1076,21 +1134,27 @@ export default function App() {
             qualifiedTeamIds={qualifiedTeamIds}
             currentTeamId={currentTeamId}
             onSelect={async (teamId) => {
-              // If the chosen team is already in another bracket slot, clear it from there.
-              for (const m of knockoutMatches) {
-                if (m.id === promotePickerFor.matchId) continue;
-                if (m.team_a_id === teamId) {
-                  await db.updateMatch(m.id, { team_a_id: null, status: "pending", winner_id: null, confirmed: false, score_a: null, score_b: null, confirmed_at: null });
-                }
-                if (m.team_b_id === teamId) {
-                  await db.updateMatch(m.id, { team_b_id: null, status: "pending", winner_id: null, confirmed: false, score_a: null, score_b: null, confirmed_at: null });
-                }
+              // Moving a team takes it out of its other bracket slots. That
+              // used to reset those matches too, even a confirmed semi and
+              // Final. Now a team with a result is never moved, and an
+              // unplayed slot on court is listed and asked about first.
+              if (!targetMatch) return;
+              const label = (m: Match) => knockoutLabel(m, matches);
+              const name = allTeamById[teamId]?.name ?? "That team";
+              const plan = planPlaceTeam(matches, targetMatch, promotePickerFor.side === "a" ? "team_a_id" : "team_b_id", teamId);
+              if (plan.blocked.length) {
+                toast(plan.blocked.some(m => m.id === targetMatch.id)
+                  ? "This match already has a result. Use Edit Score to change it."
+                  : `${name} has already played: ${plan.blocked.map(label).join(", ")}. Nothing was changed. To change a result, use Edit Score on that match.`, "warn");
+                return;
               }
-              const patch = promotePickerFor.side === "a"
-                ? { team_a_id: teamId }
-                : { team_b_id: teamId };
-              await db.updateMatch(promotePickerFor.matchId, patch);
-              toast("Team placed in bracket slot", "success");
+              if (plan.cleared.length && !confirm(`Moving ${name} takes them out of these matches, which will be reset:\n\n${describeCleared(plan.cleared, label)}\n\nContinue?`)) return;
+              try {
+                await applyPlan(plan, db.updateMatch);
+                toast("Team placed in bracket slot", "success");
+              } catch (e: unknown) {
+                toast(`The bracket didn't fully update: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Refresh and check it.`, "error");
+              }
             }}
             onClose={() => setPromotePickerFor(null)}
           />

@@ -411,6 +411,29 @@ export async function insertMatches(rows: Partial<Match>[]) {
   if (error) throw error;
 }
 
+/**
+ * Start a category's group stage or knockout: inserts the matches and sets
+ * the phase in one transaction, and throws "stage_already_started" if that
+ * stage already has matches (double tap, second admin). Before the
+ * start_category_stage migration is applied it falls back to the old
+ * two-step write.
+ */
+export async function startCategoryStage(category_id: string, stage: "group" | "knockout", rows: Partial<Match>[]) {
+  const matches = rows.map(r => ({
+    group_idx: r.group_idx ?? null, round_idx: r.round_idx ?? null, slot_idx: r.slot_idx,
+    team_a_id: r.team_a_id ?? null, team_b_id: r.team_b_id ?? null, winner_id: r.winner_id ?? null,
+    confirmed: r.confirmed ?? false, is_bye: r.is_bye ?? false, status: r.status ?? "pending", is_bronze: r.is_bronze ?? false,
+  }));
+  const { error } = await supabase.rpc("start_category_stage", { p_category_id: category_id, p_stage: stage, p_matches: matches });
+  if (!error) return;
+  if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+    await insertMatches(rows);
+    await setCategoryPhase(category_id, stage);
+    return;
+  }
+  throw error;
+}
+
 export async function updateMatch(id: string, patch: Partial<Match>) {
   const { error } = await supabase.from("matches").update(patch).eq("id", id);
   if (error) throw error;

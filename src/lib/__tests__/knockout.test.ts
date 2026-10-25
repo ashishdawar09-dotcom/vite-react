@@ -175,3 +175,65 @@ describe("confirmKnockoutPlan", () => {
     expect(asked).toContain("Semi-final 1 (result)");
   });
 });
+
+describe("planPlaceTeam (+ Select Team)", () => {
+  // 4-team bracket with bronze: SF round 0, Final + bronze round 1.
+  function bracket4(cat = "c") {
+    const sf0 = km(cat, 0, 0, { team_a_id: "P1", team_b_id: "P4" });
+    const sf1 = km(cat, 0, 1, { team_a_id: "P2", team_b_id: "P3" });
+    const fin = km(cat, 1, 0);
+    const br = km(cat, 1, 1, { is_bronze: true });
+    return { sf0, sf1, fin, br, all: [sf0, sf1, fin, br] };
+  }
+
+  it("refuses to move a team out of matches it has already played, including the Final", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const b = bracket4();
+    Object.assign(b.sf1, { score_a: 15, score_b: 21, winner_id: "P3", confirmed: true, status: "completed" });
+    Object.assign(b.sf0, { score_a: 21, score_b: 5, winner_id: "P1", confirmed: true, status: "completed" });
+    Object.assign(b.fin, { team_a_id: "P1", team_b_id: "P3", score_a: 3, score_b: 1, winner_id: "P1", confirmed: true, status: "completed" });
+    Object.assign(b.br, { team_a_id: "P4", team_b_id: null });
+    const plan = planPlaceTeam(b.all, b.br, "team_b_id", "P3");
+    expect(plan.updates).toEqual([]);
+    expect(plan.blocked.map(m => m.id).sort()).toEqual([b.sf1.id, b.fin.id].sort());
+  });
+
+  it("moves an unplayed team: empties its old slot without touching anything else", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const b = bracket4();
+    const plan = planPlaceTeam(b.all, b.fin, "team_a_id", "P4");
+    expect(plan.blocked).toEqual([]);
+    expect(plan.cleared).toEqual([]);
+    expect(plan.updates).toEqual([
+      { id: b.sf0.id, patch: { team_b_id: null } },
+      { id: b.fin.id, patch: { team_a_id: "P4" } },
+    ]);
+  });
+
+  it("lists a match that is on court, and resets its court and clock", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const b = bracket4();
+    Object.assign(b.sf0, { court_number: 2, court_allocated_at: "2026-11-21T18:00:00Z" });
+    const plan = planPlaceTeam(b.all, b.fin, "team_a_id", "P4");
+    expect(plan.cleared.map(m => m.id)).toEqual([b.sf0.id]);
+    expect(plan.updates[0]).toEqual({ id: b.sf0.id, patch: { team_b_id: null, ...RESET_FIELDS } });
+  });
+
+  it("only looks at the target's own category", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const b = bracket4("c");
+    const other = km("other", 0, 0, { team_a_id: "P4", team_b_id: "X", winner_id: "P4", confirmed: true, status: "completed" });
+    const plan = planPlaceTeam([...b.all, other], b.fin, "team_a_id", "P4");
+    expect(plan.blocked).toEqual([]);
+    expect(plan.updates.some(u => u.id === other.id)).toBe(false);
+  });
+
+  it("refuses when the target slot's match is already confirmed", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const b = bracket4();
+    Object.assign(b.fin, { team_a_id: "P1", winner_id: "P1", confirmed: true, status: "completed" });
+    const plan = planPlaceTeam(b.all, b.fin, "team_b_id", "P2");
+    expect(plan.updates).toEqual([]);
+    expect(plan.blocked.map(m => m.id)).toEqual([b.fin.id]);
+  });
+});

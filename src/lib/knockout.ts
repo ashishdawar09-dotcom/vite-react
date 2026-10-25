@@ -138,3 +138,42 @@ export function confirmKnockoutPlan(
   const list = describeCleared(plan.cleared, m => knockoutLabel(m, all));
   return ask(`This changes who goes through, so these matches will be reset and must be played again:\n\n${list}\n\nContinue?`) ? plan : null;
 }
+
+export type PlacePlan = KnockoutPlan & {
+  /** Matches the team has already played (or the target itself, if confirmed). Non-empty = refuse. */
+  blocked: Match[];
+};
+
+/**
+ * "+ Select Team": put `teamId` into `target[side]`, taking it out of any
+ * other slot it holds in the same category's bracket. A team with a result
+ * anywhere in the bracket is never moved (that used to wipe the semi and the
+ * Final it had played); `blocked` lists those matches and nothing is written.
+ * Unplayed slots it leaves are emptied; one that was on court is reset and
+ * listed in `cleared` so the caller can ask first. Pure: nothing is written.
+ */
+export function planPlaceTeam(all: Match[], target: Match, side: Side, teamId: string): PlacePlan {
+  const plan: PlacePlan = { updates: [], cleared: [], blocked: [] };
+  if (target.confirmed && !target.is_bye) { plan.blocked.push(target); return plan; }
+
+  const others = all.filter(m =>
+    m.id !== target.id && m.category_id === target.category_id && m.stage === "knockout" &&
+    (m.team_a_id === teamId || m.team_b_id === teamId || m.winner_id === teamId));
+  plan.blocked = others.filter(m => !m.is_bye && (m.confirmed || m.winner_id != null));
+  if (plan.blocked.length) return plan;
+
+  for (const m of others) {
+    const patch: Partial<Match> = {};
+    if (m.team_a_id === teamId) patch.team_a_id = null;
+    if (m.team_b_id === teamId) patch.team_b_id = null;
+    if (m.is_bye) {
+      patch.winner_id = null;
+    } else if (hasProgress(m)) {
+      plan.cleared.push(m);
+      Object.assign(patch, RESET_MATCH);
+    }
+    plan.updates.push({ id: m.id, patch });
+  }
+  plan.updates.push({ id: target.id, patch: { [side]: teamId } });
+  return plan;
+}
