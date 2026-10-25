@@ -12,12 +12,25 @@ export type Refresher = {
   reset(): void;
 };
 
+function runWhenVisible(cb: () => void) {
+  if (typeof document === "undefined" || !document.hidden) { cb(); return; }
+  const onVisible = () => {
+    if (document.hidden) return;
+    document.removeEventListener("visibilitychange", onVisible);
+    cb();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+}
+
 export function createRefresher({
   onStaleChange,
   delaysMs = [2_000, 4_000, 8_000, 15_000, 30_000],
+  whenVisible = runWhenVisible,
 }: {
   onStaleChange: (stale: boolean) => void;
   delaysMs?: number[];
+  /** Calls back now, or once the tab is visible again (no retries from a hidden tab). */
+  whenVisible?: (cb: () => void) => void;
 }): Refresher {
   const failing = new Map<string, { attempt: number; timer: ReturnType<typeof setTimeout> | null }>();
   let generation = 0;
@@ -50,7 +63,10 @@ export function createRefresher({
       const attempt = prev ? prev.attempt + 1 : 0;
       const delay = delaysMs[Math.min(attempt, delaysMs.length - 1)];
       const entry = { attempt, timer: null as ReturnType<typeof setTimeout> | null };
-      entry.timer = setTimeout(() => { entry.timer = null; void run(key, fetch, apply); }, delay);
+      entry.timer = setTimeout(() => {
+        entry.timer = null;
+        whenVisible(() => { if (gen === generation && failing.get(key) === entry) void run(key, fetch, apply); });
+      }, delay);
       failing.set(key, entry);
     }
     report(wasStale);

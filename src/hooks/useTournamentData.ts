@@ -32,7 +32,16 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   // True while a table failed to load and is being retried. The screen keeps
   // the last data it had (a failed refetch used to blank it) and shows a pill.
   const [stale, setStale] = useState(false);
-  const refresher = useRef(createRefresher({ onStaleChange: setStale }));
+  const [refresher] = useState(() => createRefresher({ onStaleChange: setStale }));
+
+  // Switching tournament empties every table first. Otherwise a table that
+  // failed to load for the new tournament would keep showing the old one's
+  // rows next to the new one's (matches from one, teams from another).
+  const [dataFor, setDataFor] = useState(tournamentId);
+  if (dataFor !== tournamentId) {
+    setDataFor(tournamentId);
+    setPlayers([]); setTeams([]); setMatches([]); setCategories([]); setPlayerCategories([]);
+  }
 
   const tidRef = useRef(tournamentId);
   tidRef.current = tournamentId;
@@ -50,8 +59,8 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   const load = useCallback(<T,>(key: string, fetch: (tid: string) => PromiseLike<FetchResult<T>>, apply: (data: T) => void) => {
     const tid = tidRef.current;
     if (!tid) return Promise.resolve(false);
-    return refresher.current.run<T>(key, () => fetch(tid), data => { if (tidRef.current === tid) apply(data); });
-  }, []);
+    return refresher.run<T>(key, () => fetch(tid), data => { if (tidRef.current === tid) apply(data); });
+  }, [refresher]);
   const thrown = <T,>(p: Promise<T>): Promise<FetchResult<T>> => p.then(data => ({ data, error: null }));
 
   const loadPlayers = useCallback(async () => {
@@ -122,13 +131,10 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
   }, [loadPlayers, loadTeams, loadMatches, loadCategories, loadPlayerCategories]);
 
   useEffect(() => {
-    if (!tournamentId) {
-      setPlayers([]); setTeams([]); setMatches([]); setCategories([]); setPlayerCategories([]);
-      return;
-    }
+    if (!tournamentId) return; // tables were emptied when the id changed
     let cancelled = false;
     setLoading(true);
-    const retries = refresher.current;
+    const retries = refresher;
 
     const initialLoad = isAdmin ? loadAllLegacy : loadAllSnapshot;
     initialLoad().then(() => { if (!cancelled) setLoading(false); });
@@ -223,7 +229,7 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         retries.reset();
       };
     }
-  }, [tournamentId, isAdmin, loadAllLegacy, loadAllSnapshot, loadPlayerCategories]);
+  }, [tournamentId, isAdmin, loadAllLegacy, loadAllSnapshot, loadPlayerCategories, refresher]);
 
   // Keep the hasLive ref in sync with the live matches state — the
   // spectator poll closure reads this ref to choose its next interval.

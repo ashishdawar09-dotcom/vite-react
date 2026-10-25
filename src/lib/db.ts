@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import { supabase } from "./supabase";
 import { notifyCourtAllocated } from "./notifications";
 import {
@@ -420,24 +421,36 @@ export async function insertMatches(rows: Partial<Match>[]) {
   if (error) throw error;
 }
 
+/** Format choices saved with a group-stage start (or a Final-only start). */
+export type StageFormat = { groups_count: number; top_n_advance: number; rounds_per_pair: number };
+
 /**
- * Start a category's group stage or knockout: inserts the matches and sets
- * the phase in one transaction, and throws "stage_already_started" if that
- * stage already has matches (double tap, second admin). Before the
- * start_category_stage migration is applied it falls back to the old
- * two-step write.
+ * Start a category's group stage or knockout: inserts the matches, sets the
+ * phase and saves `format` in one transaction, and throws
+ * "stage_already_started" if that stage already has matches (double tap,
+ * second admin). Before the start_category_stage migration is applied it
+ * falls back to the old two-step write and tells Sentry.
  */
-export async function startCategoryStage(category_id: string, stage: "group" | "knockout", rows: Partial<Match>[]) {
+export async function startCategoryStage(category_id: string, stage: "group" | "knockout", rows: Partial<Match>[], format?: StageFormat) {
   const matches = rows.map(r => ({
     group_idx: r.group_idx ?? null, round_idx: r.round_idx ?? null, slot_idx: r.slot_idx,
     team_a_id: r.team_a_id ?? null, team_b_id: r.team_b_id ?? null, winner_id: r.winner_id ?? null,
     confirmed: r.confirmed ?? false, is_bye: r.is_bye ?? false, status: r.status ?? "pending", is_bronze: r.is_bronze ?? false,
   }));
-  const { error } = await supabase.rpc("start_category_stage", { p_category_id: category_id, p_stage: stage, p_matches: matches });
+  const { error } = await supabase.rpc("start_category_stage", {
+    p_category_id: category_id, p_stage: stage, p_matches: matches,
+    p_groups_count: format?.groups_count ?? null,
+    p_top_n_advance: format?.top_n_advance ?? null,
+    p_rounds_per_pair: format?.rounds_per_pair ?? null,
+  } as Database["public"]["Functions"]["start_category_stage"]["Args"]);
   if (!error) return;
   if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+    Sentry.captureMessage("start_category_stage missing: used the non-atomic two-step start", {
+      level: "warning", extra: { category_id, stage },
+    });
     await insertMatches(rows);
-    await setCategoryPhase(category_id, stage);
+    const { error: e2 } = await supabase.from("categories").update({ ...format, phase: stage }).eq("id", category_id);
+    if (e2) throw e2;
     return;
   }
   throw error;

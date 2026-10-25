@@ -193,7 +193,7 @@ describe("planPlaceTeam (+ Select Team)", () => {
     Object.assign(b.sf0, { score_a: 21, score_b: 5, winner_id: "P1", confirmed: true, status: "completed" });
     Object.assign(b.fin, { team_a_id: "P1", team_b_id: "P3", score_a: 3, score_b: 1, winner_id: "P1", confirmed: true, status: "completed" });
     Object.assign(b.br, { team_a_id: "P4", team_b_id: null });
-    const plan = planPlaceTeam(b.all, b.br, "team_b_id", "P3");
+    const plan = planPlaceTeam(b.all, b.br, "team_b_id", "P3", "c");
     expect(plan.updates).toEqual([]);
     expect(plan.blocked.map(m => m.id).sort()).toEqual([b.sf1.id, b.fin.id].sort());
   });
@@ -201,7 +201,7 @@ describe("planPlaceTeam (+ Select Team)", () => {
   it("moves an unplayed team: empties its old slot without touching anything else", async () => {
     const { planPlaceTeam } = await import("../knockout");
     const b = bracket4();
-    const plan = planPlaceTeam(b.all, b.fin, "team_a_id", "P4");
+    const plan = planPlaceTeam(b.all, b.fin, "team_a_id", "P4", "c");
     expect(plan.blocked).toEqual([]);
     expect(plan.cleared).toEqual([]);
     expect(plan.updates).toEqual([
@@ -214,7 +214,7 @@ describe("planPlaceTeam (+ Select Team)", () => {
     const { planPlaceTeam } = await import("../knockout");
     const b = bracket4();
     Object.assign(b.sf0, { court_number: 2, court_allocated_at: "2026-11-21T18:00:00Z" });
-    const plan = planPlaceTeam(b.all, b.fin, "team_a_id", "P4");
+    const plan = planPlaceTeam(b.all, b.fin, "team_a_id", "P4", "c");
     expect(plan.cleared.map(m => m.id)).toEqual([b.sf0.id]);
     expect(plan.updates[0]).toEqual({ id: b.sf0.id, patch: { team_b_id: null, ...RESET_FIELDS } });
   });
@@ -223,7 +223,7 @@ describe("planPlaceTeam (+ Select Team)", () => {
     const { planPlaceTeam } = await import("../knockout");
     const b = bracket4("c");
     const other = km("other", 0, 0, { team_a_id: "P4", team_b_id: "X", winner_id: "P4", confirmed: true, status: "completed" });
-    const plan = planPlaceTeam([...b.all, other], b.fin, "team_a_id", "P4");
+    const plan = planPlaceTeam([...b.all, other], b.fin, "team_a_id", "P4", "c");
     expect(plan.blocked).toEqual([]);
     expect(plan.updates.some(u => u.id === other.id)).toBe(false);
   });
@@ -232,8 +232,26 @@ describe("planPlaceTeam (+ Select Team)", () => {
     const { planPlaceTeam } = await import("../knockout");
     const b = bracket4();
     Object.assign(b.fin, { team_a_id: "P1", winner_id: "P1", confirmed: true, status: "completed" });
-    const plan = planPlaceTeam(b.all, b.fin, "team_b_id", "P2");
+    const plan = planPlaceTeam(b.all, b.fin, "team_b_id", "P2", "c");
     expect(plan.updates).toEqual([]);
     expect(plan.blocked.map(m => m.id)).toEqual([b.fin.id]);
+  });
+});
+
+describe("planPlaceTeam: review fixes", () => {
+  it("refuses a team from another category (the All view lists every category's teams)", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const fin = km("c", 1, 0, { team_a_id: "P1" });
+    const plan = planPlaceTeam([fin], fin, "team_b_id", "Z9", "other-cat");
+    expect(plan.updates).toEqual([]);
+    expect(plan.wrongCategory).toBe(true);
+  });
+
+  it("refuses a confirmed bye as the target", async () => {
+    const { planPlaceTeam } = await import("../knockout");
+    const bye = km("c", 0, 0, { team_a_id: "P1", is_bye: true, confirmed: true, winner_id: "P1", status: "completed" });
+    const plan = planPlaceTeam([bye], bye, "team_b_id", "P2", "c");
+    expect(plan.updates).toEqual([]);
+    expect(plan.blocked.map(m => m.id)).toEqual([bye.id]);
   });
 });

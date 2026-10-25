@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useRef, useState } from "react";
+import React, { Suspense, createContext, useContext, useEffect, useRef, useState } from "react";
 import { lazyWithReload } from "./lib/lazyWithReload";
 import { motion } from "framer-motion"; /* NEW: makeover motion */
 import * as Sentry from "@sentry/react";
@@ -42,6 +42,18 @@ const ProfilesTab = lazyWithReload(() => import("./features/profiles/ProfilesTab
 const RegisterTab = lazyWithReload(() => import("./features/registration/RegisterTab").then(m => ({ default: m.RegisterTab })));
 const TeamsTab = lazyWithReload(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
 const AdminManager = lazyWithReload(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
+
+// GroupsTab/KnockoutTab take a card component. It used to be declared inside
+// App's render, so every App render (any realtime update) gave it a new type
+// and React remounted every card: a score being typed vanished. This one is
+// defined once and reads App's state from context.
+type MatchCardEnv = Omit<React.ComponentProps<typeof ExtractedMatchCard>, "match" | "editable" | "matchMinutes">;
+const MatchCardEnvContext = createContext<MatchCardEnv | null>(null);
+function AppMatchCard({ match, editable = true, matchMinutes }: { match: Match; editable?: boolean; matchMinutes?: number }) {
+  const env = useContext(MatchCardEnvContext);
+  if (!env) return null;
+  return <ExtractedMatchCard {...env} match={match} editable={editable} matchMinutes={matchMinutes} />;
+}
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
 // Fields every newly drawn match starts with.
@@ -325,22 +337,18 @@ export default function App() {
         ];
       }
 
+      // The format is saved in the same transaction as the draw, so an admin
+      // whose start is refused can't overwrite the format the draw used.
       if (plan.kind === "final") {
-        await db.updateCategory(catId, { rounds_per_pair: 1, groups_count: 0, top_n_advance: 0 });
         const [a, b] = shuffle(entrants);
-        await db.startCategoryStage(catId, "knockout", finalOnlyRows(a.id, b.id).map(r => ({ ...newMatchBase(current.id, catId, "knockout"), ...r })));
+        await db.startCategoryStage(catId, "knockout", finalOnlyRows(a.id, b.id).map(r => ({ ...newMatchBase(current.id, catId, "knockout"), ...r })),
+          { rounds_per_pair: 1, groups_count: 0, top_n_advance: 0 });
         setTab("knockout");
         return;
       }
 
-      // Persist the choices so the knockout stage reads the same values.
-      await db.updateCategory(catId, {
-        rounds_per_pair: roundsPerPair,
-        groups_count: plan.groupsCount,
-        top_n_advance: plan.topNAdvance,
-      });
-
-      await insertGroupStage(catId, entrants, plan.groupsCount, plan.groupSizes, roundsPerPair);
+      // Saved so the knockout stage reads the same values.
+      await insertGroupStage(catId, entrants, plan.groupsCount, plan.groupSizes, roundsPerPair, plan.topNAdvance);
     } catch (e: unknown) {
       // Solo teams made for a draw that didn't happen would show up twice
       // next time. delete_team() refuses any team that is in a match.
@@ -355,7 +363,7 @@ export default function App() {
   };
 
   // Writes the round-robin matches for the given entrants and opens the Groups tab.
-  const insertGroupStage = async (catId: string, entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number) => {
+  const insertGroupStage = async (catId: string, entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number, topNAdvance: number) => {
     // Distribute shuffled teams across groups by explicit sizes.
     const sh = shuffle(entrants);
     const gs: TeamView[][] = [];
@@ -380,7 +388,7 @@ export default function App() {
         }
       }
     });
-    await db.startCategoryStage(catId, "group", rows);
+    await db.startCategoryStage(catId, "group", rows, { rounds_per_pair: roundsPerPair, groups_count: groupsCount, top_n_advance: topNAdvance });
     setTab("groups");
   };
 
@@ -779,23 +787,18 @@ export default function App() {
     },
   };
 
-  // Thin wrapper so consumers passing MatchCard as a prop (GroupsTab,
-  // KnockoutTab) keep working with the same signature. All the JSX + local
-  // state for the card lives in src/components/MatchCard.tsx.
-  const MatchCard = ({ match, editable = true, matchMinutes }: { match: Match; editable?: boolean; matchMinutes?: number }) => (
-    <ExtractedMatchCard
-      match={match}
-      editable={editable}
-      matchMinutes={matchMinutes}
-      isAdmin={isAdmin}
-      teamById={teamById}
-      editingMatchId={editingMatchId}
-      onStartEdit={(id) => setEditingMatchId(id)}
-      onCancelEdit={() => setEditingMatchId(null)}
-      onOpenPromotePicker={(matchId, side) => setPromotePickerFor({ matchId, side })}
-      actions={matchActions}
-    />
-  );
+  // What every card on the Groups/Knockout tabs needs from App. The cards
+  // read it from context (AppMatchCard below), so the component passed to
+  // those tabs is the same on every render and cards keep their typing.
+  const matchCardEnv: MatchCardEnv = {
+    isAdmin,
+    teamById,
+    editingMatchId,
+    onStartEdit: (id) => setEditingMatchId(id),
+    onCancelEdit: () => setEditingMatchId(null),
+    onOpenPromotePicker: (matchId, side) => setPromotePickerFor({ matchId, side }),
+    actions: matchActions,
+  };
   const signOut = async () => { await supabase.auth.signOut(); };
 
   if (authLoading) return <LottieLoader fullScreen label="Loading tournament…" />; /* NEW: cat Lottie loader during initial auth check */
@@ -809,17 +812,6 @@ export default function App() {
       {/* NEW: cat overlay during tournament-data refetch (e.g. switching tournament from the
           dropdown). Renders on top of everything via fullScreen variant (z-index: 9999). */}
       {showDataLoader && <LottieLoader fullScreen label="Loading tournament data…" />}
-      {/* A refetch failed: the screen still shows the last data it loaded, and it's retrying. */}
-      {dataStale && currentId && (
-        <div role="status" style={{
-          position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9000,
-          background: "#fef3c7", color: "#92400e", border: "1px solid #f59e0b", borderRadius: 999,
-          padding: "6px 14px", fontSize: 13, fontWeight: 700, boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
-          whiteSpace: "nowrap",
-        }}>
-          ⚠ Couldn't refresh, retrying… Scores shown may be out of date.
-        </div>
-      )}
       <AppHeader
         isAdmin={isAdmin}
         email={email}
@@ -898,6 +890,20 @@ export default function App() {
       </nav>
 
       <main style={{ maxWidth: 1280, margin: "24px auto", padding: "0 20px" }}>
+        {/* A refetch failed: the screen still shows the last data it loaded, and
+            it's retrying. Pinned bottom-centre (below toasts) so it never covers
+            the header or the tab bar, and taps pass through it. */}
+        {dataStale && currentId && (
+          <div role="status" style={{
+            position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 9000,
+            width: "max-content", maxWidth: "calc(100vw - 32px)",
+            background: "#fef3c7", color: "#92400e", border: "1px solid #f59e0b", borderRadius: 14,
+            padding: "6px 14px", fontSize: 13, fontWeight: 700, boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+            textAlign: "center", pointerEvents: "none",
+          }}>
+            ⚠ Couldn't refresh, retrying… Scores may be out of date.
+          </div>
+        )}
         {!current && (
           <div style={{ position: "relative", textAlign: "center", padding: 80, color: "#64748b", background: "#0a1628", borderRadius: 14, border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
             <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
@@ -1045,6 +1051,7 @@ export default function App() {
         )}
 
         {current && tab === "groups" && (
+          <MatchCardEnvContext.Provider value={matchCardEnv}>
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <GroupsTab
             categories={categories}
@@ -1059,12 +1066,14 @@ export default function App() {
             phase={phase}
             onStartKnockout={() => startKnockout()}
             btn={btn}
-            MatchCard={MatchCard}
+            MatchCard={AppMatchCard}
           />
           </Suspense>
+          </MatchCardEnvContext.Provider>
         )}
 
         {current && tab === "knockout" && (
+          <MatchCardEnvContext.Provider value={matchCardEnv}>
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
           <KnockoutTab
             categories={categories}
@@ -1075,9 +1084,10 @@ export default function App() {
             knockout={knockout}
             knockoutMatches={knockoutMatches}
             champion={champion}
-            MatchCard={MatchCard}
+            MatchCard={AppMatchCard}
           />
           </Suspense>
+          </MatchCardEnvContext.Provider>
         )}
 
         {current && tab === "scoreboard" && (
@@ -1144,7 +1154,11 @@ export default function App() {
               if (!targetMatch) return;
               const label = (m: Match) => knockoutLabel(m, matches);
               const name = allTeamById[teamId]?.name ?? "That team";
-              const plan = planPlaceTeam(matches, targetMatch, promotePickerFor.side === "a" ? "team_a_id" : "team_b_id", teamId);
+              const plan = planPlaceTeam(matches, targetMatch, promotePickerFor.side === "a" ? "team_a_id" : "team_b_id", teamId, allTeamById[teamId]?.category_id ?? null);
+              if (plan.wrongCategory) {
+                toast(`${name} is in another category. Pick a team from this match's category.`, "warn");
+                return;
+              }
               if (plan.blocked.length) {
                 toast(plan.blocked.some(m => m.id === targetMatch.id)
                   ? "This match already has a result. Use Edit Score to change it."

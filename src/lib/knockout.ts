@@ -142,6 +142,8 @@ export function confirmKnockoutPlan(
 export type PlacePlan = KnockoutPlan & {
   /** Matches the team has already played (or the target itself, if confirmed). Non-empty = refuse. */
   blocked: Match[];
+  /** The team belongs to another category. Refuse. */
+  wrongCategory: boolean;
 };
 
 /**
@@ -152,9 +154,10 @@ export type PlacePlan = KnockoutPlan & {
  * Unplayed slots it leaves are emptied; one that was on court is reset and
  * listed in `cleared` so the caller can ask first. Pure: nothing is written.
  */
-export function planPlaceTeam(all: Match[], target: Match, side: Side, teamId: string): PlacePlan {
-  const plan: PlacePlan = { updates: [], cleared: [], blocked: [] };
-  if (target.confirmed && !target.is_bye) { plan.blocked.push(target); return plan; }
+export function planPlaceTeam(all: Match[], target: Match, side: Side, teamId: string, teamCategoryId: string | null): PlacePlan {
+  const plan: PlacePlan = { updates: [], cleared: [], blocked: [], wrongCategory: false };
+  if (teamCategoryId !== target.category_id) { plan.wrongCategory = true; return plan; }
+  if (target.confirmed) { plan.blocked.push(target); return plan; }
 
   const others = all.filter(m =>
     m.id !== target.id && m.category_id === target.category_id && m.stage === "knockout" &&

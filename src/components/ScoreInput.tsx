@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { commitScore, holdAfterProp, holdAfterWrite, type ScoreHold } from "../lib/scoreHold";
 
 const parseScore = (s: string) => {
   const n = parseInt(s, 10);
@@ -24,24 +25,25 @@ export function ScoreInput({ value, onCommit, onShownChange }: {
   // Text being typed; only used while the box has focus.
   const [local, setLocal] = useState<string>(String(value));
   const [focused, setFocused] = useState(false);
-  // Saved on blur, not back from the server yet: { next, from: value at save time }.
-  const [pending, setPending] = useState<{ next: number; from: number } | null>(null);
-  // The server caught up, or the score changed some other way: stop holding.
-  if (pending && value !== pending.from) setPending(null);
-  const holding = pending && value === pending.from;
+  // A saved number held on screen until the server reports it (src/lib/scoreHold.ts).
+  const [hold, setHold] = useState<ScoreHold | null>(null);
+  const kept = holdAfterProp(hold, value);
+  if (kept !== hold) setHold(kept);
   // While focused, the typed text wins over snapshot polls / realtime pushes.
-  const display = focused ? local : holding ? String(pending.next) : String(value);
+  const display = focused ? local : kept ? String(kept.next) : String(value);
   useEffect(() => { onShownChange?.(parseScore(display)); }, [display, onShownChange]);
   // Escape blurs too; its blur must not save the text it just discarded.
   const discarding = useRef(false);
   const commit = () => {
     if (discarding.current) { discarding.current = false; return; }
-    const next = parseScore(local);
-    if (next === value) { setPending(null); return; }
-    if (holding && next === pending.next) return; // already saving this number
-    setPending({ next, from: value });
-    // A failed save stops holding the number, so the box shows the real score again.
-    void Promise.resolve(onCommit(next)).catch(() => setPending(null));
+    const c = commitScore(kept, value, parseScore(local));
+    if (!c.write) return;
+    setHold(c.hold);
+    // Retyping the old score while a save is in flight writes it too, so the last number typed wins.
+    Promise.resolve(onCommit(c.hold!.next)).then(
+      () => setHold(h => holdAfterWrite(h, c.seq, true)),
+      () => setHold(h => holdAfterWrite(h, c.seq, false)),
+    );
   };
   return (
     <input
@@ -58,7 +60,7 @@ export function ScoreInput({ value, onCommit, onShownChange }: {
       onBlur={() => { setFocused(false); commit(); }}
       onKeyDown={(e) => {
         if (e.key === "Enter") { e.currentTarget.blur(); }
-        else if (e.key === "Escape") { discarding.current = true; onShownChange?.(holding ? pending.next : value); e.currentTarget.blur(); }
+        else if (e.key === "Escape") { discarding.current = true; onShownChange?.(kept ? kept.next : value); e.currentTarget.blur(); }
       }}
       style={{
         width: 72,

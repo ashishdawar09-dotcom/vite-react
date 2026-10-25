@@ -9,13 +9,22 @@
 --
 -- The app builds the rows (shuffle, seeding, byes); this only checks and
 -- writes them. tournament_id, category_id and stage come from the category
--- and the argument, never from the rows.
+-- and the argument, never from the rows. The format the draw used (groups,
+-- top N, rounds per pair) is saved in the same UPDATE as the phase, so an
+-- admin whose start is refused can't overwrite it.
 
-create function public.start_category_stage(p_category_id uuid, p_stage text, p_matches jsonb)
+create function public.start_category_stage(
+  p_category_id uuid,
+  p_stage text,
+  p_matches jsonb,
+  p_groups_count integer default null,
+  p_top_n_advance integer default null,
+  p_rounds_per_pair integer default null
+)
 returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_cat categories%rowtype;
@@ -68,10 +77,15 @@ begin
                                             confirmed boolean, is_bye boolean, status text, is_bronze boolean);
   get diagnostics v_count = row_count;
 
-  update categories set phase = p_stage where id = p_category_id;
+  update categories
+     set phase = p_stage,
+         groups_count = coalesce(p_groups_count, groups_count),
+         top_n_advance = coalesce(p_top_n_advance, top_n_advance),
+         rounds_per_pair = coalesce(p_rounds_per_pair, rounds_per_pair)
+   where id = p_category_id;
   return v_count;
 end;
 $$;
 
-revoke all on function public.start_category_stage(uuid, text, jsonb) from public, anon;
-grant execute on function public.start_category_stage(uuid, text, jsonb) to authenticated;
+revoke all on function public.start_category_stage(uuid, text, jsonb, integer, integer, integer) from public, anon;
+grant execute on function public.start_category_stage(uuid, text, jsonb, integer, integer, integer) to authenticated;

@@ -1023,7 +1023,14 @@ export type Database = {
       }
       slugify: { Args: { input: string }; Returns: string }
       start_category_stage: {
-        Args: { p_category_id: string; p_matches: Json; p_stage: string }
+        Args: {
+          p_category_id: string
+          p_groups_count?: number | null
+          p_matches: Json
+          p_rounds_per_pair?: number | null
+          p_stage: string
+          p_top_n_advance?: number | null
+        }
         Returns: number
       }
       start_match_on_court: {

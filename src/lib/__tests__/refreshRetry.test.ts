@@ -64,4 +64,21 @@ describe("createRefresher (report blocker 6)", () => {
     expect(await r.run("teams", async () => ({ data: null, error: null }), apply)).toBe(true);
     expect(apply).toHaveBeenCalledWith([]);
   });
+
+  it("waits for the tab to be visible before retrying", async () => {
+    let visible = false;
+    const waiting: (() => void)[] = [];
+    const r = createRefresher({
+      onStaleChange: () => {}, delaysMs: [1000],
+      whenVisible: cb => { if (visible) cb(); else waiting.push(cb); },
+    });
+    const fetch = vi.fn().mockResolvedValueOnce({ data: null, error: { message: "x" } }).mockResolvedValue({ data: [], error: null });
+    await r.run("teams", fetch, () => {});
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    visible = true;
+    waiting.forEach(cb => cb());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });

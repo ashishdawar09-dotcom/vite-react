@@ -24,6 +24,10 @@ declare
   c int; k int; n int; sz int;
   ms_ids uuid[] := array[]::uuid[];
 begin
+  -- Refuse to run anywhere the real tournament exists (i.e. production).
+  if exists (select 1 from tournaments where slug = 'shuttle-storm') then
+    raise exception 'Refusing to seed: tournament "shuttle-storm" exists, so this is not the scratch project.';
+  end if;
   delete from tournaments where slug = 'blockers';
   insert into tournaments (name, slug, event_date, phase, num_courts, registration_open, waiver_version)
   values ('Blockers Cup', 'blockers', date '2026-11-21', 'none', 4, false, 'v1')
