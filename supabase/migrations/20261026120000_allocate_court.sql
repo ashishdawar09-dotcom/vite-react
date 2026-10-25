@@ -10,9 +10,9 @@
 -- "Holds the court" = not confirmed, on that court, and either live or
 -- allocated (warming up). That is what the admin screens show as busy.
 --
--- A first allocation stamps court_allocated_at (start of warm-up). Moving a
--- match that already has a court keeps its timestamps, like the old
--- reassignCourt. The player-conflict warning stays in the app: it is a
+-- A first allocation (or a row with a court but no stamp) sets
+-- court_allocated_at (start of warm-up). Moving a match that already has a
+-- court keeps its timestamps, like the old reassignCourt. The player-conflict warning stays in the app: it is a
 -- question for the admin, not a rule.
 --
 -- Replaces the never-used start_match_on_court (left in place; nothing
@@ -70,7 +70,7 @@ begin
 
   update matches
      set court_number = p_court,
-         court_allocated_at = case when v_match.court_number is null then now()
+         court_allocated_at = case when v_match.court_number is null or v_match.court_allocated_at is null then now()
                                    else v_match.court_allocated_at end
    where id = p_match_id;
 end;
