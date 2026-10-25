@@ -520,7 +520,12 @@ export default function App() {
       toast(e?.message ?? "Failed to cancel allocation", "error");
     }
   };
-  const removeTeam = async (id: string) => { if (!guard()) return; if (!confirm("Remove this team?")) return; await db.deleteTeam(id); };
+  // The team pop-up has already asked for a reason; errors go back to it.
+  const deleteTeam = async (id: string, reason: string) => {
+    if (!guard()) return;
+    await db.deleteTeamWithReason(id, reason);
+    toast("Team deleted", "success");
+  };
 
   /**
    * One-shot cleanup for teams whose players don't actually belong to the
@@ -954,7 +959,7 @@ export default function App() {
             invalidTeamsInCategory={invalidTeamsInCategory}
             phase={phase}
             isAdmin={isAdmin}
-            removeTeam={removeTeam}
+            deleteTeam={deleteTeam}
             cleanupInvalidTeams={cleanupInvalidTeams}
             selectedFormatLabel={selectedFormatLabel}
             setSelectedFormatLabel={setSelectedFormatLabel}

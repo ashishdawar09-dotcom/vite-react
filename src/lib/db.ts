@@ -381,6 +381,13 @@ export async function deleteTeam(id: string) {
   if (error) throw error;
 }
 
+// Admin deletes one team from the Teams tab; the reason is kept in
+// team_deletions alongside who was on the team.
+export async function deleteTeamWithReason(id: string, reason: string) {
+  const { error } = await supabase.rpc("delete_team", { p_team_id: id, p_reason: reason });
+  if (error) throw error;
+}
+
 export async function deleteTeamsContainingPlayer(player_id: string, category_id?: string) {
   let q = supabase.from("teams").delete().or(`p1_id.eq.${player_id},p2_id.eq.${player_id}`);
   if (category_id) q = q.eq("category_id", category_id);
