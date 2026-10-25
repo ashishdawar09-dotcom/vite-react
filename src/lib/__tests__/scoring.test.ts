@@ -22,3 +22,15 @@ describe("finalScorePatch (report blocker 4)", () => {
     expect(r.ok && r.winnerId).toBe("B");
   });
 });
+
+describe("timeOverPickerOpen (review N1)", () => {
+  it("only shows the walkover/winner picker on a live, unconfirmed match", async () => {
+    const { timeOverPickerOpen } = await import("../scoring");
+    expect(timeOverPickerOpen({ status: "live", confirmed: false }, "winner")).toBe(true);
+    expect(timeOverPickerOpen({ status: "live", confirmed: false }, null)).toBe(false);
+    // Confirmed by this scorer or another admin while the picker was open.
+    expect(timeOverPickerOpen({ status: "completed", confirmed: true }, "winner")).toBe(false);
+    // Rescheduled or cancelled.
+    expect(timeOverPickerOpen({ status: "pending", confirmed: false }, "walkover")).toBe(false);
+  });
+});

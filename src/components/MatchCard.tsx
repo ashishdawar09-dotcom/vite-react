@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { ScoreInput } from "./ScoreInput";
+import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
 import type { Match, Player, Team } from "../types";
 
@@ -100,6 +101,13 @@ export function MatchCard({
 
   const [cardNow, setCardNow] = useState(Date.now());
   const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
+  // Close the picker when the match moves on (confirmed, rescheduled,
+  // cancelled, here or by another admin). Cards used to remount on every App
+  // render, which hid this; now they persist.
+  const matchState = `${m.status}|${m.confirmed}`;
+  const [pickFor, setPickFor] = useState(matchState);
+  if (pickFor !== matchState) { setPickFor(matchState); setTimeOverPick(null); }
+  const pickerOpen = timeOverPickerOpen(m, timeOverPick);
   useEffect(() => {
     // Tick both for live (play clock) AND warming (warm-up elapsed timer).
     if (m.status !== "live" && !isWarming) return;
@@ -201,6 +209,7 @@ export function MatchCard({
   };
 
   const handleCardWalkover = async (side: "a" | "b") => {
+    if (!pickerOpen) return;
     const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     if (!confirm("Mark this match as a walkover? The other team forfeits.")) return;
@@ -209,6 +218,7 @@ export function MatchCard({
   };
 
   const handleCardSelectWinner = async (side: "a" | "b") => {
+    if (!pickerOpen) return;
     const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     await actions.selectWinner(m, winnerId);
@@ -349,7 +359,7 @@ export function MatchCard({
               </>
             )}
             {/* Team picker for walkover/winner in time-over */}
-            {timeOverPick && (
+            {pickerOpen && (
               <div style={{
                 display: "flex", gap: 8, width: "100%", flexWrap: "wrap",
                 padding: "8px 0 0", borderTop: "1px solid #e2e8f0",

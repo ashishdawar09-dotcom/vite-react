@@ -24,3 +24,12 @@ export function finalScorePatch(
     patch: { score_a: sa, score_b: sb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt },
   };
 }
+
+/**
+ * The time-over walkover/winner picker belongs to a live, unconfirmed match.
+ * Once the match is confirmed, rescheduled or cancelled (here or by another
+ * admin) a leftover picker would record a winner that contradicts the score.
+ */
+export function timeOverPickerOpen(m: Pick<Match, "status" | "confirmed">, pick: "walkover" | "winner" | null): boolean {
+  return pick !== null && m.status === "live" && !m.confirmed;
+}
