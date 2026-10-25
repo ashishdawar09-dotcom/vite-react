@@ -7,8 +7,9 @@
 // The snapshot is public data (anon RPC, publishable key), so a shared cache
 // leaks nothing a direct call wouldn't.
 //
-// Errors are never cached. Successful responses carry stale-if-error so the
-// CDN keeps serving the last good snapshot through brief Supabase errors.
+// Errors are never cached. If Supabase errors, a warm instance serves its
+// last good snapshot (up to 5 min old) instead; Vercel's own stale-if-error
+// didn't hold in the load test (an error response evicted the cached entry).
 // The client (src/lib/db.ts liveSnapshot) falls back to the RPC if this
 // endpoint fails.
 
@@ -20,21 +21,25 @@ const UPSTREAM_TIMEOUT_MS = 8_000;
 const CDN_CACHE = "public, max-age=3, stale-while-revalidate=30, stale-if-error=300";
 // Browsers must not keep their own copy: each poll should reach the CDN.
 const BROWSER_CACHE = "public, max-age=0, must-revalidate";
+// Last-good snapshot served during a Supabase error: cache briefly so the
+// CDN comes back to the function, and the next success replaces it.
+const CDN_CACHE_STALE = "public, max-age=2";
 const NO_STORE = "no-store";
 
-function json(status: number, body: string, cacheable: boolean): Response {
+function json(status: number, body: string, cdnCache: string | null, extra: Record<string, string> = {}): Response {
   return new Response(body, {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": cacheable ? BROWSER_CACHE : NO_STORE,
-      "Vercel-CDN-Cache-Control": cacheable ? CDN_CACHE : NO_STORE,
+      "Cache-Control": cdnCache ? BROWSER_CACHE : NO_STORE,
+      "Vercel-CDN-Cache-Control": cdnCache ?? NO_STORE,
+      ...extra,
     },
   });
 }
 
 function error(status: number, message: string): Response {
-  return json(status, JSON.stringify({ error: message }), false);
+  return json(status, JSON.stringify({ error: message }), null);
 }
 
 // Vercel's CDN doesn't merge concurrent refreshes: in the load test each
@@ -43,8 +48,9 @@ function error(status: number, message: string): Response {
 // in-flight Supabase call per tournament and reuses its result for MEMO_MS.
 // Worst-case data age at the phone: MEMO_MS + CDN max-age + the 5 s poll.
 const MEMO_MS = 2_000;
+const STALE_IF_ERROR_MS = 300_000;
 const MEMO_MAX_ENTRIES = 20;
-type Upstream = { ok: true; body: string } | { ok: false; status: number; message: string };
+type Upstream = { ok: true; body: string; stale?: boolean } | { ok: false; status: number; message: string };
 const memo = new Map<string, { at: number; body: string }>();
 const inflight = new Map<string, Promise<Upstream>>();
 
@@ -73,12 +79,14 @@ async function snapshot(url: string, key: string, tid: string): Promise<Upstream
   if (hit && Date.now() - hit.at < MEMO_MS) return { ok: true, body: hit.body };
   let pending = inflight.get(tid);
   if (!pending) {
-    pending = fetchUpstream(url, key, tid).then((r) => {
+    pending = fetchUpstream(url, key, tid).then((r): Upstream => {
       if (r.ok) {
         if (memo.size >= MEMO_MAX_ENTRIES) memo.clear();
         memo.set(tid, { at: Date.now(), body: r.body });
+        return r;
       }
-      return r;
+      const last = memo.get(tid);
+      return last && Date.now() - last.at < STALE_IF_ERROR_MS ? { ok: true, body: last.body, stale: true } : r;
     }).finally(() => inflight.delete(tid));
     inflight.set(tid, pending);
   }
@@ -96,5 +104,8 @@ export async function GET(request: Request): Promise<Response> {
   if (!url || !key) return error(500, "snapshot endpoint not configured");
 
   const r = await snapshot(url, key, tid);
-  return r.ok ? json(200, r.body, true) : error(r.status, r.message);
+  if (!r.ok) return error(r.status, r.message);
+  return r.stale
+    ? json(200, r.body, CDN_CACHE_STALE, { "X-Snapshot-Stale": "1" })
+    : json(200, r.body, CDN_CACHE);
 }
