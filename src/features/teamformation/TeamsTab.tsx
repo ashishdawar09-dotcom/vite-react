@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { Av } from "../../components/ui";
 import { recommendFormats, describeFormat, type FormatPlan } from "../../lib/formatPlanner";
 import type { Category, Player, TeamWithPlayers, Tournament } from "../../types";
+import { TeamDetailModal } from "./TeamDetailModal";
 
 /**
  * Team formation + tournament format chooser.
@@ -9,8 +11,9 @@ import type { Category, Player, TeamWithPlayers, Tournament } from "../../types"
  * Three logical sections:
  *   1. Invalid-teams cleanup banner (admin, only when invalid teams
  *      exist in the current category).
- *   2. Teams grid — one card per team, X-button to remove (admin),
- *      category badge when "All" filter is active.
+ *   2. Teams grid — one card per team, category badge when "All" filter
+ *      is active. Admins tap a card to open it; deleting from there asks
+ *      for a reason (no one-tap delete on the card itself).
  *   3. Format chooser (admin, phase==="none", >=2 teams) — three
  *      cards (Recommended / More games / Compact / Super / Ultra Compact) leading to a
  *      "Start Group Stage" CTA.
@@ -34,7 +37,7 @@ export function TeamsTab({
   invalidTeamsInCategory,
   phase,
   isAdmin,
-  removeTeam,
+  deleteTeam,
   cleanupInvalidTeams,
   selectedFormatLabel,
   setSelectedFormatLabel,
@@ -52,7 +55,7 @@ export function TeamsTab({
   invalidTeamsInCategory: TeamWithPlayers[];
   phase: "none" | "group" | "knockout";
   isAdmin: boolean;
-  removeTeam: (id: string) => Promise<void>;
+  deleteTeam: (id: string, reason: string) => Promise<void>;
   cleanupInvalidTeams: () => Promise<void>;
   selectedFormatLabel: FormatPlan["label"];
   setSelectedFormatLabel: (l: FormatPlan["label"]) => void;
@@ -63,6 +66,11 @@ export function TeamsTab({
   const cards = singlesDraw
     ? singlesEntrants.map(p => ({ key: p.id, teamId: null, category_id: currentCategory.id, p1: p, p2: null }))
     : teamsView.map(t => ({ key: t.id, teamId: t.id, category_id: t.category_id, p1: t.p1, p2: t.p2 }));
+  const [openTeamKey, setOpenTeamKey] = useState<string | null>(null);
+  const canManage = isAdmin && phase === "none";
+  const teamLabel = (i: number) => (currentCategory?.team_size === 1 ? `Player ${i + 1}` : `Team ${i + 1}`);
+  const openIndex = cards.findIndex(c => c.key === openTeamKey && c.teamId);
+  const openCard = openIndex >= 0 ? cards[openIndex] : null;
   const formatOptions = cards.length >= 2 ? recommendFormats(cards.length) : [];
   const selectedPlan = formatOptions.find(o => o.label === selectedFormatLabel) ?? formatOptions[0];
   const courts = Math.max(1, tournament.num_courts || 1);
@@ -111,15 +119,28 @@ export function TeamsTab({
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
-            {cards.map((t, i) => (
-              <div key={t.key} style={{ background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e8ecf1", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden" }}>
+            {cards.map((t, i) => {
+              const clickable = canManage && !!t.teamId;
+              return (
+              <div
+                key={t.key}
+                {...(clickable && {
+                  role: "button",
+                  tabIndex: 0,
+                  "aria-label": `Open ${teamLabel(i)}`,
+                  onClick: () => setOpenTeamKey(t.key),
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenTeamKey(t.key); }
+                  },
+                  onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.borderColor = "#93c5fd"; },
+                  onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.borderColor = "#e8ecf1"; },
+                })}
+                style={{ background: "#fff", borderRadius: 16, padding: 20, border: "1px solid #e8ecf1", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", position: "relative", overflow: "hidden", cursor: clickable ? "pointer" : undefined, transition: "border-color .15s" }}
+              >
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, background: `linear-gradient(90deg,${t.p1.color},${t.p2?.color ?? t.p1.color})` }} />
-                {isAdmin && phase === "none" && t.teamId && (
-                  <button onClick={() => removeTeam(t.teamId)} title="Remove team" style={{ position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: "50%", border: "none", background: "#fef2f2", color: "#dc2626", cursor: "pointer", fontSize: 16, fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <span style={{ fontWeight: 800, fontSize: 12, color: "#3A86FF", textTransform: "uppercase", letterSpacing: 2 }}>
-                    {currentCategory?.team_size === 1 ? `Player ${i + 1}` : `Team ${i + 1}`}
+                    {teamLabel(i)}
                   </span>
                   {!currentCategoryId && (() => {
                     const c = catById[t.category_id];
@@ -139,9 +160,24 @@ export function TeamsTab({
                     </div>
                   </>
                 )}
+                {clickable && (
+                  <div style={{ marginTop: 12, fontSize: 11, color: "#94a3b8", textAlign: "right" }}>Tap to manage</div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
+
+          {openCard?.teamId && (
+            <TeamDetailModal
+              teamLabel={teamLabel(openIndex)}
+              categoryName={catById[openCard.category_id]?.name ?? null}
+              p1={openCard.p1}
+              p2={openCard.p2}
+              onDelete={(reason) => deleteTeam(openCard.teamId!, reason)}
+              onClose={() => setOpenTeamKey(null)}
+            />
+          )}
 
           {isAdmin && cards.length >= 2 && phase === "none" && formatOptions.length > 0 && (
             <div style={{ marginTop: 32, padding: "26px 28px", background: "linear-gradient(135deg,#1a1a2e,#2d3a5c)", borderRadius: 18, color: "#fff" }}>

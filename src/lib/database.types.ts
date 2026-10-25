@@ -671,6 +671,51 @@ export type Database = {
         }
         Relationships: []
       }
+      team_deletions: {
+        Row: {
+          category_id: string | null
+          deleted_at: string
+          deleted_by: string | null
+          id: number
+          p1_id: string | null
+          p1_name: string | null
+          p2_id: string | null
+          p2_name: string | null
+          reason: string
+          team_id: string
+          team_snapshot: Json
+          tournament_id: string | null
+        }
+        Insert: {
+          category_id?: string | null
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: never
+          p1_id?: string | null
+          p1_name?: string | null
+          p2_id?: string | null
+          p2_name?: string | null
+          reason: string
+          team_id: string
+          team_snapshot: Json
+          tournament_id?: string | null
+        }
+        Update: {
+          category_id?: string | null
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: never
+          p1_id?: string | null
+          p1_name?: string | null
+          p2_id?: string | null
+          p2_name?: string | null
+          reason?: string
+          team_id?: string
+          team_snapshot?: Json
+          tournament_id?: string | null
+        }
+        Relationships: []
+      }
       teams: {
         Row: {
           category_id: string
@@ -948,6 +993,10 @@ export type Database = {
         }
       }
       approve_registration: { Args: { p_reg_id: string }; Returns: Json }
+      delete_team: {
+        Args: { p_reason: string; p_team_id: string }
+        Returns: undefined
+      }
       extend_match: {
         Args: { p_extra_minutes: number; p_match_id: string }
         Returns: undefined
