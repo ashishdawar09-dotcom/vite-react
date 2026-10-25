@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
+import { lazyWithReload } from "./lib/lazyWithReload";
 import { motion } from "framer-motion"; /* NEW: makeover motion */
 import * as Sentry from "@sentry/react";
 import { useAuth } from "./hooks/useAuth";
@@ -27,16 +28,18 @@ import { applyPlan, confirmKnockoutPlan, type KnockoutPlan } from "./lib/knockou
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
 // LIVE-tab view is split out so the main bundle stays small. Suspense
 // boundary at <main> renders LottieLoader while a chunk fetches.
-const MatchesTab = React.lazy(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
-const CategoriesTab = React.lazy(() => import("./components/CategoriesTab").then(m => ({ default: m.CategoriesTab })));
-const CheckInTab = React.lazy(() => import("./features/checkin/CheckInTab").then(m => ({ default: m.CheckInTab })));
-const ScoreboardTab = React.lazy(() => import("./features/scoreboard/ScoreboardTab").then(m => ({ default: m.ScoreboardTab })));
-const KnockoutTab = React.lazy(() => import("./features/knockoutstage/KnockoutTab").then(m => ({ default: m.KnockoutTab })));
-const GroupsTab = React.lazy(() => import("./features/groupstage/GroupsTab").then(m => ({ default: m.GroupsTab })));
-const ProfilesTab = React.lazy(() => import("./features/profiles/ProfilesTab").then(m => ({ default: m.ProfilesTab })));
-const RegisterTab = React.lazy(() => import("./features/registration/RegisterTab").then(m => ({ default: m.RegisterTab })));
-const TeamsTab = React.lazy(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
-const AdminManager = React.lazy(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
+// lazyWithReload, not React.lazy: after a deploy an admin page left open asks
+// for tab chunks that no longer exist; this reloads once instead of erroring.
+const MatchesTab = lazyWithReload(() => import("./components/MatchesTab").then(m => ({ default: m.MatchesTab })));
+const CategoriesTab = lazyWithReload(() => import("./components/CategoriesTab").then(m => ({ default: m.CategoriesTab })));
+const CheckInTab = lazyWithReload(() => import("./features/checkin/CheckInTab").then(m => ({ default: m.CheckInTab })));
+const ScoreboardTab = lazyWithReload(() => import("./features/scoreboard/ScoreboardTab").then(m => ({ default: m.ScoreboardTab })));
+const KnockoutTab = lazyWithReload(() => import("./features/knockoutstage/KnockoutTab").then(m => ({ default: m.KnockoutTab })));
+const GroupsTab = lazyWithReload(() => import("./features/groupstage/GroupsTab").then(m => ({ default: m.GroupsTab })));
+const ProfilesTab = lazyWithReload(() => import("./features/profiles/ProfilesTab").then(m => ({ default: m.ProfilesTab })));
+const RegisterTab = lazyWithReload(() => import("./features/registration/RegisterTab").then(m => ({ default: m.RegisterTab })));
+const TeamsTab = lazyWithReload(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
+const AdminManager = lazyWithReload(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
 
