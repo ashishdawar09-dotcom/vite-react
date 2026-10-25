@@ -9,6 +9,8 @@
 //   PREVIEW_URL, VERCEL_BYPASS_TOKEN                (cached)
 //   LOADTEST_TOURNAMENT_ID                          (both)
 //   VUS (225), POLL_S (5), DURATION (20m)
+//   BURST=1      every VU fires its first request at once (stampede test)
+//   CACHE_KEY=x  appends &k=x so the cached run starts on a cold cache entry
 
 import http from "k6/http";
 import { sleep } from "k6";
@@ -24,7 +26,7 @@ const TID = __ENV.LOADTEST_TOURNAMENT_ID;
 
 const url =
   TARGET === "cached"
-    ? `${__ENV.PREVIEW_URL}/api/snapshot?t=${TID}`
+    ? `${__ENV.PREVIEW_URL}/api/snapshot?t=${TID}${__ENV.CACHE_KEY ? `&k=${__ENV.CACHE_KEY}` : ""}`
     : `${__ENV.SCRATCH_SUPABASE_URL}/rest/v1/rpc/live_snapshot`;
 
 if (!TID || url.includes("undefined")) throw new Error("missing env; see scripts/loadtest/README.md");
@@ -61,7 +63,7 @@ export const options = {
 export default function () {
   // Spread VUs across the poll window, like phones that opened the page at
   // different times, instead of 225 requests landing on the same tick.
-  if (__ITER === 0) sleep(Math.random() * POLL_S);
+  if (__ITER === 0 && !__ENV.BURST) sleep(Math.random() * POLL_S);
 
   const res = TARGET === "cached" ? http.get(url, params) : http.post(url, body, params);
   const ok =
