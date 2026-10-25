@@ -183,9 +183,11 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         supabase.removeChannel(pgChannel);
       };
     } else {
-      // Spectators: single live_snapshot RPC, adaptive interval. 5s when
-      // matches are live (scores need to feel real-time); 15s when nothing's
-      // live (between matches / pre-event / post-event). Skips ticks while
+      // Spectators: one snapshot per tick (CDN-cached /api/snapshot, RPC
+      // fallback; see db.liveSnapshot), adaptive interval. 5s when matches
+      // are live (scores need to feel real-time); 15s when nothing's live
+      // (between matches / pre-event / post-event); 30s while the endpoint
+      // is down and polls hit the RPC directly. Skips ticks while
       // the tab is hidden to save bandwidth. setTimeout chain (not interval)
       // so we can adjust the delay between cycles.
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -197,7 +199,7 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
             await loadAllSnapshot();
           }
           if (cancelled) return;
-          scheduleNext(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS);
+          scheduleNext(db.liveSnapshotPollDelay(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS));
         }, delay);
       };
       scheduleNext(SPECTATOR_POLL_LIVE_MS); // first cycle always 5s in case something is live now
@@ -209,7 +211,7 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         if (timeoutId) clearTimeout(timeoutId);
         void loadAllSnapshot().finally(() => {
           if (!cancelled) {
-            scheduleNext(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS);
+            scheduleNext(db.liveSnapshotPollDelay(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS));
           }
         });
       };
