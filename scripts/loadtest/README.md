@@ -116,12 +116,43 @@ t≈32 s and restored at t≈132 s, with a score probe every 20 s.
 Without any cache (same harness, endpoint healthy) score propagation was
 p50 3.1 s, p95 4.9 s, max 5.2 s, bounded by the 5 s poll.
 
-### Run B: cached endpoint
+### Run B: cached endpoint (Vercel preview → scratch project)
 
-**Not run yet.** The Vercel preview sits behind deployment protection, and
-creating the protection-bypass token needs Ashish's OK given in the same
-Claude session that creates it. Still to measure through the CDN: origin
-request rate and HIT/STALE ratio at 225 VUs, stale-if-error during a brief
-Supabase error, cold-cache stampede when many phones arrive at once, and
-score propagation through the cache (expected ≤ ~8 s: up to 3 s cache age
-plus the 5 s poll).
+**B1: as first written (CDN cache only), 225 VUs, 20 min, writer every 3 s**
+
+| Metric | Result | Pass? |
+|---|---|---|
+| Phone requests | 53,971 (45/s): 48,701 HIT, 5,270 STALE, 0 MISS | |
+| Error rate | 0.00 % | ✓ |
+| Latency at the phone | median 30 ms, p95 54 ms, p99 128 ms | ✓ |
+| Origin calls to Supabase | **1,766 (1.47/s)** | ✗ (target ≤ 1 per 2 s) |
+| Vercel bandwidth | 883 MB | |
+
+Vercel's CDN does not merge concurrent refreshes. About one in three STALE
+responses started its own background call, and the origin rate grew with
+phone count (50 VUs: 0.6/s; 225 VUs: 1.5/s). That was still 30× less than
+direct polling, but not the one per 3 s the plan assumed.
+
+**B2: function shares one in-flight call per tournament and reuses it for 2 s,
+225 VUs, 3 min, cold cache key**
+
+| Metric | Result | Pass? |
+|---|---|---|
+| Phone requests | 8,092 (44/s), 0 errors, p95 54 ms | ✓ |
+| Origin calls | 93 in 3 min: 29 in the first 10 s (cold instances), then **0.38/s (one per 2.7 s)** | ✓ |
+
+Race-day estimate at that rate: ~12k origin calls in 9 h ≈ 0.3 GB of
+Supabase egress gzip-metered (≤ 2 GB even if metered raw). Either way it fits
+the Free 5 GB quota.
+
+### Robustness checks through the CDN
+
+| Check | Result |
+|---|---|
+| Supabase error for 60 s (anon `execute` on `live_snapshot` revoked), CDN only | **Vercel's stale-if-error didn't hold.** About 2 s in, the CDN returned MISS and passed the 502 through. Phones fell back to the RPC, which was also down, and kept their last scores on screen. |
+| Same, with the function serving its last good copy | About half the polls got the last good snapshot (data aged 15 s → 48 s). The rest hit instances that had never fetched it and failed. Phones froze on their last scores either way; no crash. All phones were back within ~10 s of the restore. |
+| Score change → phones (50 phones, probe every 20 s) | p50 5.2 s, p95 8.6 s, max 10.4 s (direct polling: p50 3.1 s, max 5.2 s). |
+| Stampede: 225 phones in the same second on a cold cache key | 0 errors. 190 MISS and 116 origin calls in the first 4 s (many instances start at once), first-request p95 2.2 s, then 3 calls in the next 16 s. Only happens on a cold cache, i.e. right after a deploy. |
+
+Load-test egress on Org B for everything above: ~0.45 GB on the wire, at
+most ~3 GB if Supabase meters raw bytes.
