@@ -1,5 +1,14 @@
 import { supabase } from "./supabase";
 import { notifyCourtAllocated } from "./notifications";
+import {
+  chooseSnapshotSource,
+  initialSnapshotSourceState,
+  isSnapshotBody,
+  isSnapshotResponse,
+  recordEndpointResult,
+  snapshotPollDelay,
+  type SnapshotSourceState,
+} from "./snapshotSource";
 import type { Database } from "./database.types";
 import type { Category, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
 
@@ -622,7 +631,43 @@ export type LiveSnapshot = {
   generated_at: number;
 };
 
+// Spectators read through the CDN-cached /api/snapshot endpoint (api/snapshot.ts)
+// so race-day phone count doesn't drive Supabase egress; snapshotSource.ts
+// decides per poll when to fall back to the RPC. Vite dev has no /api, so dev
+// goes straight to the RPC unless VITE_SNAPSHOT_ENDPOINT=1 (to exercise the
+// fallback locally).
+const SNAPSHOT_ENDPOINT_TIMEOUT_MS = 8_000;
+const useSnapshotEndpoint = !import.meta.env.DEV || import.meta.env.VITE_SNAPSHOT_ENDPOINT === "1";
+let snapshotSourceState: SnapshotSourceState = initialSnapshotSourceState;
+
+/** Next spectator poll delay: `normalMs`, or 30 s while the endpoint is down. */
+export function liveSnapshotPollDelay(normalMs: number): number {
+  return snapshotPollDelay(snapshotSourceState, normalMs);
+}
+
+async function fetchSnapshotEndpoint(tournament_id: string): Promise<LiveSnapshot | null> {
+  try {
+    const res = await fetch(`/api/snapshot?t=${encodeURIComponent(tournament_id)}`, {
+      signal: AbortSignal.timeout(SNAPSHOT_ENDPOINT_TIMEOUT_MS),
+    });
+    if (!isSnapshotResponse(res.status, res.headers.get("content-type"))) return null;
+    const body: unknown = await res.json();
+    return isSnapshotBody(body) ? (body as LiveSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function liveSnapshot(tournament_id: string): Promise<LiveSnapshot | null> {
+  if (useSnapshotEndpoint && chooseSnapshotSource(snapshotSourceState, Date.now()) === "endpoint") {
+    const snap = await fetchSnapshotEndpoint(tournament_id);
+    snapshotSourceState = recordEndpointResult(snapshotSourceState, snap !== null, Date.now());
+    if (snap) return snap;
+  }
+  return liveSnapshotRpc(tournament_id);
+}
+
+async function liveSnapshotRpc(tournament_id: string): Promise<LiveSnapshot | null> {
   const { data, error } = await supabase.rpc("live_snapshot", { p_tournament_id: tournament_id });
   if (error) {
     // Falls back to multi-fetch path if RPC not deployed; caller will use the
