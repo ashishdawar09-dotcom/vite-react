@@ -1,6 +1,7 @@
 // Form building blocks shared by the public registration page and the
 // partner waiver page.
 
+import { cloneElement, isValidElement, useId } from "react";
 import { colors, radii, shadows, spacing, typography } from "../../lib/theme";
 
 export const CYAN = "#00d4ff";
@@ -25,10 +26,22 @@ export type FieldProps = {
   children: React.ReactNode;
 };
 
+const LABELLABLE = new Set(["input", "select", "textarea"]);
+
 export function Field({ label, hint, error, required, children }: FieldProps) {
+  const autoId = useId();
+  const messageId = `${autoId}-msg`;
+  // A single native control gets an id so the <label> names it for screen
+  // readers; groups (radio cards, pickers) are left as they are.
+  const control = isValidElement<{ id?: string; "aria-describedby"?: string }>(children)
+    && typeof children.type === "string" && LABELLABLE.has(children.type)
+    ? children : null;
+  const controlId = control?.props.id ?? autoId;
+  const hasMessage = !!(error || hint);
   return (
     <div data-field-error={error ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <label
+        htmlFor={control ? controlId : undefined}
         style={{
           fontSize: 11,
           fontWeight: 800,
@@ -39,9 +52,14 @@ export function Field({ label, hint, error, required, children }: FieldProps) {
       >
         {label}{required && <span style={{ color: colors.state.live, marginLeft: 4 }}>*</span>}
       </label>
-      {children}
+      {control
+        ? cloneElement(control, {
+            id: controlId,
+            "aria-describedby": control.props["aria-describedby"] ?? (hasMessage ? messageId : undefined),
+          })
+        : children}
       {/* Reserved 16px error slot prevents layout shift on blur validation */}
-      <div style={{ minHeight: 16, fontSize: 12, color: colors.state.live }}>
+      <div id={messageId} style={{ minHeight: 16, fontSize: 12, color: colors.state.live }}>
         {error ? error : hint && <span style={{ color: colors.text.mutedLight }}>{hint}</span>}
       </div>
     </div>

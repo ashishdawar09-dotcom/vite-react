@@ -4,6 +4,7 @@ import { LottieLoader } from "../../components/ui/lottie-loader";
 import { usePublicTournament } from "./usePublicTournament";
 import { derivePublicTournamentState, type TeamView } from "./publicDerive";
 import type { Category } from "../../types";
+import { formatLocalDate } from "../../lib/dates";
 
 /**
  * Printable results page — /t/:slug/results
@@ -126,7 +127,7 @@ export function ResultsPage() {
           <div style={{ fontSize: 13, color: "#475569" }}>
             {[
               t.venue_name,
-              t.event_date && new Date(t.event_date).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+              t.event_date && formatLocalDate(t.event_date, { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
             ].filter(Boolean).join(" · ")}
           </div>
         </header>

@@ -13,6 +13,7 @@ import {
   trackRegistrationComplete,
 } from "../../lib/analytics";
 import { HEARD_FROM_OPTIONS, captureAttribution, getAttribution } from "../../lib/attribution";
+import { formatLocalDate } from "../../lib/dates";
 import { captureError, captureWarning } from "../../lib/sentry";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { AgeBand, Category, PublicRegistrationPayload, Tournament } from "../../types";
@@ -36,14 +37,9 @@ const TOURNAMENT_HIGHLIGHTS: Record<string, Highlight[]> = {
 
 function fmtDate(iso: string | null, time: string | null): string {
   if (!iso) return "Date TBD";
-  // Parse YYYY-MM-DD as a LOCAL date — `new Date(iso)` on a date-only
-  // string treats it as UTC midnight, which then shifts to the previous
-  // calendar day in negative-offset timezones (PST/PDT).
-  const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  const d = ymd ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) : new Date(iso);
-  const dateStr = d.toLocaleDateString("en-US", {
+  const dateStr = formatLocalDate(iso, {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  }, "en-US");
   if (!time) return dateStr;
   // time is "HH:MM:SS" — render as "9:00 AM"
   const [hh, mm] = time.split(":");
@@ -455,7 +451,7 @@ export function PublicRegistrationPage() {
     <PageShell>
       {/* Hero */}
       <div style={{ textAlign: "center", paddingTop: spacing.xxl, paddingBottom: spacing.lg }}>
-        <div style={{ color: CYAN, fontSize: 11, fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", marginBottom: spacing.sm }}>
+        <div style={{ color: CYAN_DARK, fontSize: 11, fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", marginBottom: spacing.sm }}>
           Tournament Registration
         </div>
         <h1 style={{
@@ -944,8 +940,7 @@ function numOrNull(v: number | string | null | undefined): number | null {
 }
 
 function fmtShortDate(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  return formatLocalDate(iso, { month: "short", day: "numeric", year: "numeric" }, "en-CA");
 }
 
 // "Under 18: $30. UFV students: $30." when those beat the category price.
