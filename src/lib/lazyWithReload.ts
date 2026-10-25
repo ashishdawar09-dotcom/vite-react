@@ -41,32 +41,42 @@ export function isChunkLoadError(err: unknown): boolean {
  * Call `clearChunkReloadGuard()` after a successful mount to re-arm the
  * recovery for the next deploy.
  */
-export function lazyWithReload<T extends ComponentType<unknown>>(
+// Same bound as React.lazy: components with any props. `unknown` here
+// rejected every component that takes props.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function lazyWithReload<T extends ComponentType<any>>(
   loader: () => Promise<{ default: T }>,
 ): LazyExoticComponent<T> {
-  return lazy(async () => {
+  return lazy(() => loadOrReload(loader));
+}
+
+/**
+ * The loader behind lazyWithReload, exported for tests: runs `loader`, and on
+ * a chunk-load failure reloads the page once per path. A second failure on
+ * the same path rethrows so the ErrorBoundary can show its fallback.
+ */
+export async function loadOrReload<M>(loader: () => Promise<M>): Promise<M> {
+  try {
+    return await loader();
+  } catch (err) {
+    if (!isChunkLoadError(err)) throw err;
+    const path = typeof window !== "undefined" ? window.location.pathname : "";
+    // If we already reloaded for this same path and the chunk STILL fails,
+    // give up and let the ErrorBoundary show its real-error fallback.
+    // Otherwise we'd loop forever.
+    let alreadyReloaded = false;
     try {
-      return await loader();
-    } catch (err) {
-      if (!isChunkLoadError(err)) throw err;
-      const path = typeof window !== "undefined" ? window.location.pathname : "";
-      // If we already reloaded for this same path and the chunk STILL fails,
-      // give up and let the ErrorBoundary show its real-error fallback.
-      // Otherwise we'd loop forever.
-      try {
-        if (sessionStorage.getItem(RELOAD_KEY) === path) {
-          throw err;
-        }
-        sessionStorage.setItem(RELOAD_KEY, path);
-      } catch {
-        // Private mode / sessionStorage disabled — still try one reload.
-      }
-      window.location.reload();
-      // Resolve with a never-rendered stub so the lazy promise doesn't
-      // reject before the reload navigates the page away.
-      return new Promise<{ default: T }>(() => {});
+      alreadyReloaded = sessionStorage.getItem(RELOAD_KEY) === path;
+      if (!alreadyReloaded) sessionStorage.setItem(RELOAD_KEY, path);
+    } catch {
+      // Private mode / sessionStorage disabled — still try one reload.
     }
-  });
+    if (alreadyReloaded) throw err;
+    window.location.reload();
+    // Resolve with a never-rendered stub so the lazy promise doesn't
+    // reject before the reload navigates the page away.
+    return new Promise<M>(() => {});
+  }
 }
 
 /**

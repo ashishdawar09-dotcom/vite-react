@@ -1,8 +1,10 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
+import { lazyWithReload } from "../lib/lazyWithReload";
 
 // ParticleTextEffect is heavy (canvas animation loop) so it stays lazy
-// — its own chunk only loads when this footer mounts.
-const ParticleTextEffect = lazy(() =>
+// — its own chunk only loads when this footer mounts. lazyWithReload so a
+// page left open across a deploy reloads instead of erroring.
+const ParticleTextEffect = lazyWithReload(() =>
   import("./ui/particle-text-effect").then((m) => ({ default: m.ParticleTextEffect })),
 );
 
