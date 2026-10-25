@@ -14,7 +14,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|images/|favicon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|map|json|txt|xml)).*)",
+      "source": "/((?!api/|assets/|images/|favicon|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|map|json|txt|xml)).*)",
       "destination": "/index.html"
     }
   ],

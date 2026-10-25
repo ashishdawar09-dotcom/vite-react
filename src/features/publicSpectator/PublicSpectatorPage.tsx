@@ -30,6 +30,12 @@ export function PublicSpectatorPage() {
     return <LottieLoader fullScreen label="Loading tournament…" />;
   }
 
+  // Lookup failed (network or Supabase error): usePublicTournament retries
+  // on its own, so say so instead of claiming the tournament doesn't exist.
+  if (ctx.error && !ctx.tournament) {
+    return <LottieLoader fullScreen label="Can't reach the tournament. Retrying…" />;
+  }
+
   if (ctx.notFound || !ctx.tournament) {
     return <NotFound slug={slug} />;
   }

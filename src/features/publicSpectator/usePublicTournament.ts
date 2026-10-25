@@ -21,32 +21,42 @@ export function usePublicTournament(slug: string | undefined) {
   const [resolving, setResolving] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped to retry a failed slug lookup. Without it, a phone or the venue TV
+  // that opened the page during a Wi-Fi drop or Supabase blip stayed stuck
+  // until someone reloaded it.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    let retryId: ReturnType<typeof setTimeout> | null = null;
     if (!slug) {
       setResolving(false);
       setNotFound(true);
       return;
     }
-    setResolving(true);
+    if (attempt === 0) setResolving(true);
     setNotFound(false);
-    setError(null);
     db.getTournamentBySlug(slug)
       .then(t => {
         if (cancelled) return;
+        setError(null);
         if (!t) setNotFound(true);
         else setTournament(t);
       })
       .catch(e => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
+        // 5 s, 10 s, 20 s, then every 30 s.
+        retryId = setTimeout(() => setAttempt(a => a + 1), Math.min(5_000 * 2 ** attempt, 30_000));
       })
       .finally(() => {
         if (!cancelled) setResolving(false);
       });
-    return () => { cancelled = true; };
-  }, [slug]);
+    return () => {
+      cancelled = true;
+      if (retryId) clearTimeout(retryId);
+    };
+  }, [slug, attempt]);
 
   // Spectator-mode data fetch (live_snapshot polling every 5s).
   const tournamentId = tournament?.id ?? null;
