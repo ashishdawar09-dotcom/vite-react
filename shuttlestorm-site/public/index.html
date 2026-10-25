@@ -24,9 +24,17 @@
 <script src="/consent.js" data-ga="G-FT7CJBVQ4Z" data-privacy="/privacy" data-ads="on" data-meta="1676574714107113" defer></script>
 <script src="/menu.js" defer></script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Fonts: self-hosted copies of Google Fonts' Archivo + JetBrains Mono (latin, latin-ext), so text doesn't wait on a third-party stylesheet. */
+/* latin-ext */@font-face{font-family: 'Archivo'; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-italic-latin-ext-v25.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+/* latin */@font-face{font-family: 'Archivo'; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-italic-latin-v25.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+/* latin-ext */@font-face{font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-normal-latin-ext-v25.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+/* latin */@font-face{font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-normal-latin-v25.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+/* latin-ext */@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/jetbrains-mono-latin-ext-v24.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+/* latin */@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/jetbrains-mono-latin-v24.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+/* latin-ext */@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/jetbrains-mono-latin-ext-v24.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+/* latin */@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/jetbrains-mono-latin-v24.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+</style>
 <script>
 (function(){
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -880,9 +888,9 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
 <script>
-document.addEventListener('DOMContentLoaded', function(){
+// The 3D scene and motion set-up start one frame after DOMContentLoaded, so the hero text is painted first (it's the LCP).
+document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(() => setTimeout(function(){
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const root = document.documentElement;
   if (reduce) root.classList.add('reduced');
@@ -1089,7 +1097,8 @@ document.addEventListener('DOMContentLoaded', function(){
   /* ---------- 3D shuttlecock (Three.js), turned by scroll ---------- */
   const s3 = { progress: 0, ready: false };
   const c3 = document.getElementById('shuttle3d');
-  if (window.THREE && c3){
+  // three.js (~120 KB) only drives this shuttle, well below the hero, so it loads as the section approaches.
+  function init3(){
     const T = window.THREE;
     const renderer = new T.WebGLRenderer({ canvas: c3, antialias: true, alpha: true });
     renderer.setPixelRatio(DPR);
@@ -1170,6 +1179,18 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     s3.ready = true;
     if (reduce) render3(0); else requestAnimationFrame(render3);
+  }
+  if (c3){
+    const near = new IntersectionObserver(es => {
+      if (!es.some(e => e.isIntersecting)) return;
+      near.disconnect();
+      if (window.THREE) return init3();
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+      s.onload = init3;
+      document.head.appendChild(s);
+    }, { rootMargin: '1200px 0px' });
+    near.observe(c3);
   }
 
   /* ---------- Render loop (only draws what's visible) ---------- */
@@ -1256,7 +1277,9 @@ document.addEventListener('DOMContentLoaded', function(){
        .to('.bar.b', { yPercent: 100, duration: 2.2 }, .2)
        .from('#arena', { scale: 1.18, duration: 3.4, ease: 'expo.out' }, .3)
        .from('.hero h1 .ch', { yPercent: 115, duration: 1.8, stagger: .045, ease: 'expo.out' }, 1.1)
-       .from(['#heroKick', '#heroSub', '.hero .btn', '.scroll-cue'], { opacity: 0, y: 24, duration: 1.6, stagger: .12, ease: 'power3.out' }, 1.7)
+       .from(['#heroKick', '.hero .btn', '.scroll-cue'], { opacity: 0, y: 24, duration: 1.6, stagger: .12, ease: 'power3.out' }, 1.7)
+       // #heroSub is the LCP element: it only slides (no fade), so it counts as painted from the first frame.
+       .from('#heroSub', { y: 24, duration: 1.6, ease: 'power3.out' }, 1.82)
        .add(() => root.classList.remove('intro'), 2.5);
   }
 
@@ -1324,8 +1347,9 @@ document.addEventListener('DOMContentLoaded', function(){
   // Final: glow disc breathes open
   gsap.fromTo('.final-disc', { scale: .2, opacity: 0 }, { scale: 1, opacity: 1, ease: 'none', scrollTrigger: { trigger: '.final', start: 'top bottom', end: 'center center', scrub: 1.5 } });
 
-  window.addEventListener('load', () => ScrollTrigger.refresh());
-});
+  if (document.readyState === 'complete') ScrollTrigger.refresh();
+  else window.addEventListener('load', () => ScrollTrigger.refresh());
+})));
 </script>
 <script>
 

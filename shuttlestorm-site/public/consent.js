@@ -92,28 +92,56 @@
   var stored = read();
   if (stored === "granted" || stored === "denied") gtag("consent", "update", consentFor(stored));
 
-  var s = document.createElement("script");
-  s.async = true;
-  s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(GA_ID);
-  document.head.appendChild(s);
+  // The tag libraries (gtag.js ~200 KB, fbevents.js + pixel config ~200 KB)
+  // load late: on the first tap, scroll or key press, or a few seconds after
+  // the page has loaded, whichever comes first. Every call before then
+  // (consent, config, PageView, click events) waits in the queues and is sent
+  // as soon as the library arrives.
+  afterPageSettles(function () {
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(GA_ID);
+    document.head.appendChild(s);
+    if (META) {
+      var t = document.createElement("script");
+      t.async = true;
+      t.src = "https://connect.facebook.net/en_US/fbevents.js";
+      document.head.appendChild(t);
+    }
+  });
   gtag("js", new Date());
   gtag("config", GA_ID);
 
-  // Meta Pixel (standard loader). Consent is set before init, so nothing is
-  // sent while it's revoked.
+  // Meta Pixel (standard stub; the library itself loads above). Consent is
+  // set before init, so nothing is sent while it's revoked.
   if (META) {
-    (function (f, b, e, v, n, t, x) {
+    (function (f, n) {
       if (f.fbq) return;
       n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
       if (!f._fbq) f._fbq = n;
       n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
-      t = b.createElement(e); t.async = true; t.src = v;
-      x = b.getElementsByTagName(e)[0]; x.parentNode.insertBefore(t, x);
-    })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+    })(window);
     var metaChoice = stored === "granted" || stored === "denied" ? stored : (europe ? "denied" : "granted");
     window.fbq("consent", metaChoice === "granted" ? "grant" : "revoke");
     window.fbq("init", META);
     window.fbq("track", "PageView");
+  }
+
+  function afterPageSettles(fn) {
+    var EVENTS = ["pointerdown", "keydown", "touchstart", "scroll", "wheel"];
+    var done = false;
+    function go() {
+      if (done) return;
+      done = true;
+      EVENTS.forEach(function (e) { window.removeEventListener(e, go, true); });
+      fn();
+    }
+    EVENTS.forEach(function (e) { window.addEventListener(e, go, { capture: true, passive: true }); });
+    // A visitor leaving before either trigger still gets counted.
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") go(); });
+    function later() { setTimeout(go, 5000); }
+    if (document.readyState === "complete") later();
+    else window.addEventListener("load", later);
   }
 
   function inEurope() {
