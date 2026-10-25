@@ -381,6 +381,13 @@ export async function deleteTeam(id: string) {
   if (error) throw error;
 }
 
+// Admin deletes one team from the Teams tab; the reason is kept in
+// team_deletions alongside who was on the team.
+export async function deleteTeamWithReason(id: string, reason: string) {
+  const { error } = await supabase.rpc("delete_team", { p_team_id: id, p_reason: reason });
+  if (error) throw error;
+}
+
 export async function deleteTeamsContainingPlayer(player_id: string, category_id?: string) {
   let q = supabase.from("teams").delete().or(`p1_id.eq.${player_id},p2_id.eq.${player_id}`);
   if (category_id) q = q.eq("category_id", category_id);
@@ -817,7 +824,7 @@ export async function rejectRegistration(reg_id: string, reason: string): Promis
 // gateway returns 401 even though the function itself accepts anonymous input.
 export async function submitPublicRegistration(
   payload: PublicRegistrationPayload,
-): Promise<{ success: boolean; registrationId?: string; checkoutUrl?: string; error?: string }> {
+): Promise<{ success: boolean; registrationId?: string; checkoutUrl?: string; error?: string; status?: number }> {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-player`;
   const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   const ctrl = new AbortController();
@@ -833,9 +840,9 @@ export async function submitPublicRegistration(
       success?: boolean; registrationId?: string; checkoutUrl?: string; error?: string;
     };
     if (!resp.ok) {
-      return { success: false, error: body.error ?? `HTTP ${resp.status}` };
+      return { success: false, error: body.error ?? `HTTP ${resp.status}`, status: resp.status };
     }
-    return { success: !!body.success, registrationId: body.registrationId, checkoutUrl: body.checkoutUrl, error: body.error };
+    return { success: !!body.success, registrationId: body.registrationId, checkoutUrl: body.checkoutUrl, error: body.error, status: resp.status };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
