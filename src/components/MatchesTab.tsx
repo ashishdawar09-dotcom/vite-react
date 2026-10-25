@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as db from "../lib/db";
+import { applyPlan, confirmKnockoutPlan, type KnockoutPlan } from "../lib/knockout";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
 import { MatchHistoryModal } from "./MatchHistoryModal";
@@ -296,6 +297,7 @@ export function MatchesTab({
     if (sa === 0 && sb === 0) { toast("Enter a score before confirming", "warn"); return; }
     if (sa === sb) { toast("No ties allowed", "warn"); return; }
     const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
+    const plan = confirmKnockoutPlan(matches, m, winner_id); if (!plan) return;
     await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
     /* Celebrate — small confetti burst from page bottom-center, brand palette.
        Honours prefers-reduced-motion (skip the visual jolt). */
@@ -310,39 +312,34 @@ export function MatchesTab({
         disableForReducedMotion: true,
       });
     }
-    propagateKnockout(m, winner_id);
+    await applyBracket(plan);
   };
 
-  const propagateKnockout = async (m: ProjectedMatch, winner_id: string | null) => {
-    if (m.stage !== "knockout" || m.round_idx == null || !winner_id) return;
-    const next = matches.find(x => x.category_id === m.category_id && x.stage === "knockout" && x.round_idx === (m.round_idx! + 1) && x.slot_idx === Math.floor(m.slot_idx / 2));
-    if (!next) return;
-    const side = m.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
-    const patch: Partial<ProjectedMatch> = { [side]: winner_id };
-    if (next.winner_id && (next.team_a_id === m.winner_id || next.team_b_id === m.winner_id)) {
-      patch.winner_id = null;
-      patch.confirmed = false;
-      patch.score_a = null;
-      patch.score_b = null;
-      patch.status = "pending";
-      patch.confirmed_at = null;
+  // Knockout bracket writes, scoped to the match's own category, with the
+  // bronze routing for semi-final losers (src/lib/knockout.ts).
+  const applyBracket = async (plan: KnockoutPlan) => {
+    try {
+      await applyPlan(plan, db.updateMatch);
+    } catch (e: unknown) {
+      toast(`Result saved, but the bracket didn't update: ${e instanceof Error ? e.message : "error"}. Refresh and check the next round.`, "error");
     }
-    await db.updateMatch(next.id, patch);
   };
 
   const markWalkover = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
+    const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
     await db.markWalkover(m.id, winnerId);
-    propagateKnockout(m, winnerId);
+    await applyBracket(plan);
     setTimeOverPicking(null);
   };
 
   const handleSelectWinner = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
+    const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
     await db.selectMatchWinner(m.id, winnerId);
-    propagateKnockout(m, winnerId);
+    await applyBracket(plan);
     setTimeOverPicking(null);
   };
 
