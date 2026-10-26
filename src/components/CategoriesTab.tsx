@@ -4,6 +4,7 @@ import { CategoryEditor } from "./CategoryEditor";
 import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
 import type { Category, Match, Player, PlayerCategory, Team, Tournament } from "../types";
+import { isCancelledMatch } from "../lib/matchOutcome";
 
 export function CategoriesTab({
   tournament,
@@ -76,7 +77,7 @@ export function CategoriesTab({
           {categories.map(c => {
             const cTeams = teams.filter(t => t.category_id === c.id);
             const cMatches = matches.filter(m => m.category_id === c.id);
-            const played = cMatches.filter(m => m.confirmed).length;
+            const played = cMatches.filter(m => m.confirmed && !isCancelledMatch(m)).length;
             const live = cMatches.filter(m => m.status === "live").length;
             return (
               <div key={c.id} style={{ background: "#0f1e36", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", padding: 18 }}>

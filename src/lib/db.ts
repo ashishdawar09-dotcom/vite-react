@@ -517,13 +517,35 @@ export async function deallocateCourtForMatch(id: string) {
 }
 
 /**
+ * Put a match on a court through the allocate_court RPC, which locks the
+ * tournament's courts and throws "court_taken: …" (see lib/courts.ts) if
+ * another unfinished match holds that court, so two admins can't both get
+ * it. Returns false if the RPC isn't deployed yet; the caller then does the
+ * old unguarded write and Sentry hears about it.
+ */
+async function allocateCourtRpc(id: string, court_number: number, fallback: string): Promise<boolean> {
+  const { error } = await supabase.rpc("allocate_court", { p_match_id: id, p_court: court_number });
+  if (!error) return true;
+  if (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")) {
+    Sentry.captureMessage(`allocate_court missing: ${fallback} without the court lock`, {
+      level: "warning", extra: { match_id: id, court_number },
+    });
+    return false;
+  }
+  throw error;
+}
+
+/**
  * Allocate a court and fire the player-notification email in the background.
  * Use this from UI call sites instead of allocateCourtForMatch directly so
- * the notification stays consistent. The notify call is fire-and-forget —
- * any email failure is logged to Sentry but never blocks the allocation.
+ * the notification stays consistent. Players are only notified once the
+ * court is really theirs; the notify call is fire-and-forget, and an email
+ * failure is logged to Sentry but never blocks the allocation.
  */
 export async function allocateCourtAndNotify(id: string, court_number: number) {
-  await allocateCourtForMatch(id, court_number);
+  if (!(await allocateCourtRpc(id, court_number, "allocated"))) {
+    await allocateCourtForMatch(id, court_number);
+  }
   void notifyCourtAllocated(id);
 }
 
@@ -564,7 +586,9 @@ export async function swapMatchQueuePositions(id1: string, pos1: number, id2: st
   }
 }
 
+/** Move a warming-up or live match to another court (no new notification). */
 export async function reassignCourt(id: string, court_number: number) {
+  if (await allocateCourtRpc(id, court_number, "reassigned")) return;
   const { error } = await supabase.from("matches").update({ court_number }).eq("id", id);
   if (error) throw error;
 }
@@ -605,10 +629,11 @@ export async function rescheduleMatch(id: string) {
   if (error) throw error;
 }
 
+/** No winner, nobody loses: see lib/matchOutcome.ts isCancelledMatch. */
 export async function cancelMatch(id: string) {
   const { error } = await supabase.from("matches").update({
     status: "completed", confirmed: true, score_a: 0, score_b: 0, winner_id: null,
-    is_walkover: true, confirmed_at: new Date().toISOString(),
+    is_walkover: false, confirmed_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) throw error;
 }

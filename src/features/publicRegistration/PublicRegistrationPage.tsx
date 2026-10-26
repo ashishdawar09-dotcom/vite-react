@@ -559,7 +559,20 @@ export function PublicRegistrationPage() {
       ) : (
         <form
           ref={formRef}
-          onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            // In-app browsers (Instagram, Facebook) add their own submit
+            // listener whose promise can reject; that never reaches here.
+            // This catches our own surprises so the button can't stay stuck
+            // on "Submitting".
+            // Never over a success: a throw after success (redirect,
+            // analytics) must not replace the success screen with an error.
+            handleSubmit().catch((err: unknown) => {
+              setSubmitStatus(s => (s === "success" ? s : "error"));
+              setSubmitError(prev => prev ?? "Something went wrong. Please try again.");
+              captureError(err, { where: "registration submit" });
+            });
+          }}
           noValidate
         >
           {/* Honeypot. Off-screen rather than display:none, which some bots skip. */}

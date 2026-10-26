@@ -27,6 +27,8 @@ import { MatchHistoryModal } from "./MatchHistoryModal";
 import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { courtTakenMessage, isCourtTaken } from "../lib/courts";
+import { resultLabel } from "../lib/matchOutcome";
 import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -256,7 +258,8 @@ export function MatchesTab({
       setConflictWarning(null);
       toast(`Court ${court} allocated. Players warming up.`, "success");
     } catch (e: any) {
-      toast(e?.message ?? "Failed to allocate court", "error");
+      if (isCourtTaken(e)) toast(courtTakenMessage(e, court), "warn");
+      else toast(e?.message ?? "Failed to allocate court", "error");
     }
   };
 
@@ -357,12 +360,16 @@ export function MatchesTab({
     await db.cancelMatch(m.id);
   };
 
+  // The server refuses a court another unfinished match holds, so there's
+  // no "reassign anyway": finish, reschedule or move that match first.
   const handleReassignCourt = async (m: ProjectedMatch, court: number) => {
-    if (liveByCourt[court] && liveByCourt[court]!.id !== m.id) {
-      if (!confirm(`Court ${court} already has a live match. Reassign anyway?`)) return;
+    try {
+      await db.reassignCourt(m.id, court);
+      setReassigningCourtFor(null);
+    } catch (e) {
+      if (isCourtTaken(e)) toast(courtTakenMessage(e, court), "warn");
+      else toast(e instanceof Error ? e.message : "Failed to move the match", "error");
     }
-    await db.reassignCourt(m.id, court);
-    setReassigningCourtFor(null);
   };
 
   const isTimeOver = (m: ProjectedMatch) => {
@@ -476,7 +483,8 @@ export function MatchesTab({
                 <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 8px", background: "rgba(0,184,255,0.15)", border: "1px solid rgba(0,184,255,0.3)", borderRadius: 4, letterSpacing: 1 }}>COURT {m.court_number}</span>
               )
             )}
-            {m.is_walkover && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", padding: "3px 8px", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, letterSpacing: 1 }}>W/O</span>}
+            {resultLabel(m) === "W/O" && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", padding: "3px 8px", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, letterSpacing: 1 }}>W/O</span>}
+            {resultLabel(m) === "Cancelled" && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", padding: "3px 8px", background: "rgba(148,163,184,0.1)", border: "1px solid rgba(148,163,184,0.3)", borderRadius: 4, letterSpacing: 1 }}>CANCELLED</span>}
           </div>
           <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 0.5 }}>{fmtClock(m.projected_start_at)}</div>
           <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: deltaColor, letterSpacing: 1 }}>{m.delta_label}</div>

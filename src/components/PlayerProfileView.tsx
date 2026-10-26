@@ -4,6 +4,8 @@ import { Av } from "./ui";
 import { fmtClock } from "../hooks/useScheduling";
 import { confirmPlayerDelete, requestPlayerDeleteCode, updatePlayer } from "../lib/db";
 import type { Category, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
+import { groupKeyOf, groupLetter } from "../lib/groups";
+import { isCancelledMatch } from "../lib/matchOutcome";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -139,13 +141,16 @@ export function PlayerProfileView({
     [categories, playerCatIds]
   );
 
+  // groupIdx is the group's own group_idx (its letter), not its position in
+  // `groups`, which lists every category's groups.
   const playerGroups = useMemo(() => {
+    const groupMatches = matches.filter(m => m.stage === "group");
     const out: { groupIdx: number; group: TeamView[] }[] = [];
     groups.forEach((g, gi) => {
-      if (g.some(t => teamIds.has(t.id))) out.push({ groupIdx: gi, group: g });
+      if (g.some(t => teamIds.has(t.id))) out.push({ groupIdx: groupKeyOf(g, groupMatches)?.group_idx ?? gi, group: g });
     });
     return out;
-  }, [groups, teamIds]);
+  }, [groups, teamIds, matches]);
 
   const tName = (id: string | null) => {
     if (!id) return "TBD";
@@ -257,7 +262,7 @@ export function PlayerProfileView({
             <StatTile label="MATCHES" value={recent.length} color="#3A86FF" />
             <StatTile label="WINS" value={wins} color="#22c55e" />
             <StatTile label="LOSSES" value={losses} color="#ef4444" />
-            <WinRateRing percentage={recent.length > 0 ? Math.round(wins / recent.length * 100) : null} reduceMotion={!!reduceMotion} />
+            <WinRateRing percentage={wins + losses > 0 ? Math.round(wins / (wins + losses) * 100) : null} reduceMotion={!!reduceMotion} />
           </div>
         </div>
       </div>
@@ -360,7 +365,7 @@ export function PlayerProfileView({
                 <div key={`${groupCat?.id ?? "?"}-${groupIdx}`} style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8ecf1", overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.04)" }}>
                   <div style={{ padding: "12px 16px", background: "linear-gradient(90deg,#f8fafc 0%, #fff 70%)", borderBottom: "1px solid #e8ecf1", display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ display: "inline-block", width: 4, height: 18, background: "#3A86FF", borderRadius: 1 }} />
-                    <span style={{ fontSize: 13, fontWeight: 800, color: "#1a1a2e", letterSpacing: 1.3, textTransform: "uppercase" }}>{groupCat?.name ?? "Group"} · Group {String.fromCharCode(65 + groupIdx)}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#1a1a2e", letterSpacing: 1.3, textTransform: "uppercase" }}>{groupCat?.name ?? "Group"} · Group {groupLetter(groupIdx)}</span>
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
@@ -597,7 +602,7 @@ function MatchRow({
         {variant === "recent" && (
           <>
             <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, padding: "3px 8px", borderRadius: 4, color: isWin ? "#22c55e" : isLoss ? "#ef4444" : "#94a3b8", background: isWin ? "#dcfce7" : isLoss ? "#fef2f2" : "#f8fafc", border: `1px solid ${isWin ? "#bbf7d0" : isLoss ? "#fecaca" : "#e2e8f0"}` }}>
-              {isWin ? "WON" : isLoss ? "LOST" : "—"}
+              {isWin ? "WON" : isLoss ? "LOST" : isCancelledMatch(m) ? "CANCELLED" : "—"}
             </span>
             {m.confirmed_at && <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{fmtClock(m.confirmed_at)}</span>}
           </>

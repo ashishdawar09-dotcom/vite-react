@@ -1,5 +1,6 @@
 import { CategoryFilter } from "../../components/CategoryFilter";
 import type { Category, Match, TeamWithPlayers } from "../../types";
+import { groupKeyOf, groupLetter } from "../../lib/groups";
 
 export type GroupStanding = { team: TeamWithPlayers; w: number; l: number; pts: number; pf: number; pa: number };
 
@@ -45,11 +46,14 @@ export function GroupsTab({
       <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
       {groups.map((g, gi) => {
         const st = getStandings(g, gi);
-        const ms = groupMatches.filter(m => m.group_idx === gi);
+        // group_idx restarts in every category: match on both.
+        const key = groupKeyOf(g, groupMatches);
+        const ms = key ? groupMatches.filter(m => m.category_id === key.category_id && m.group_idx === key.group_idx) : [];
+        const catName = !currentCategoryId && key ? categories.find(c => c.id === key.category_id)?.name : null;
         return (
-          <div key={gi} style={{ marginBottom: 32, background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", border: "1px solid #e8ecf1" }}>
+          <div key={key ? `${key.category_id}-${key.group_idx}` : gi} style={{ marginBottom: 32, background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.04)", border: "1px solid #e8ecf1" }}>
             <div style={{ background: "linear-gradient(90deg,#1a1a2e,#2d3a5c)", padding: "14px 20px" }}>
-              <span style={{ background: "#3A86FF", color: "#fff", borderRadius: 8, padding: "4px 14px", fontSize: 14, fontWeight: 800 }}>Group {String.fromCharCode(65 + gi)}</span>
+              <span style={{ background: "#3A86FF", color: "#fff", borderRadius: 8, padding: "4px 14px", fontSize: 14, fontWeight: 800 }}>{catName ? `${catName} · ` : ""}Group {groupLetter(key?.group_idx ?? gi)}</span>
               <span style={{ color: "#94a3b8", fontSize: 13, marginLeft: 10 }}>{g.length} teams • {ms.filter(m => m.confirmed).length}/{ms.length} matches</span>
             </div>
             <div style={{ padding: 20 }}>

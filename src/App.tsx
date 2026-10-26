@@ -26,6 +26,8 @@ import { MatchCard as ExtractedMatchCard, type MatchCardActions, type ShownScore
 import { AppHeader } from "./components/AppHeader";
 import type { Match, Player, Team, Tournament } from "./types";
 import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
+import { courtTakenMessage, isCourtTaken } from "./lib/courts";
+import { groupStandings, groupsAllConfirmed } from "./lib/groups";
 
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
 // LIVE-tab view is split out so the main bundle stays small. Suspense
@@ -392,26 +394,11 @@ export default function App() {
     setTab("groups");
   };
 
-  const getStandings = (g: TeamView[], gi: number) => {
-    const s: Record<string, { team: TeamView; w: number; l: number; pts: number; pf: number; pa: number }> = {};
-    g.forEach(t => { s[t.id] = { team: t, w: 0, l: 0, pts: 0, pf: 0, pa: 0 }; });
-    groupMatches.filter(m => m.group_idx === gi && m.confirmed).forEach(m => {
-      const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-      if (m.team_a_id && s[m.team_a_id]) { s[m.team_a_id].pf += sa; s[m.team_a_id].pa += sb; }
-      if (m.team_b_id && s[m.team_b_id]) { s[m.team_b_id].pf += sb; s[m.team_b_id].pa += sa; }
-      if (m.winner_id && s[m.winner_id]) {
-        s[m.winner_id].w++; s[m.winner_id].pts += 3;
-        const loserId = m.winner_id === m.team_a_id ? m.team_b_id : m.team_a_id;
-        if (loserId && s[loserId]) s[loserId].l++;
-      }
-    });
-    return Object.values(s).sort((a, b) => b.pts - a.pts || (b.pf - b.pa) - (a.pf - a.pa));
-  };
+  // The group's own matches decide its table (lib/groups.ts); the index
+  // argument is kept for the tabs' (g, gi) signature.
+  const getStandings = (g: TeamView[]) => groupStandings(g, groupMatches);
 
-  const allGroupsDone = groups.length > 0 && groups.every((_, gi) => {
-    const ms = groupMatches.filter(m => m.group_idx === gi);
-    return ms.length > 0 && ms.every(m => m.confirmed);
-  });
+  const allGroupsDone = groupsAllConfirmed(groups, groupMatches);
 
   // A second tap while the first insert is in flight (slow gym Wi-Fi) used to
   // create a duplicate bracket. Ignore re-entry, and refuse if this category
@@ -448,8 +435,8 @@ export default function App() {
     // standard cross-group bracket seeding — same-group teams don't meet in
     // round 1, top seeds spread across halves, byes go to top seeds when the
     // qualifier count isn't a power of 2.
-    const qualifiers: TeamView[][] = groups.map((g, gi) => {
-      const st = getStandings(g, gi);
+    const qualifiers: TeamView[][] = groups.map(g => {
+      const st = getStandings(g);
       const limit = Math.min(topN, st.length);
       return st.slice(0, limit).map(s => s.team);
     }).filter(arr => arr.length > 0);
@@ -585,7 +572,8 @@ export default function App() {
       setPickingCourtFor(null);
       toast(`Court ${court} allocated. Players warming up — click Begin Scoring when ready.`, "success");
     } catch (e: any) {
-      toast(e?.message ?? "Failed to allocate court", "error");
+      if (isCourtTaken(e)) toast(courtTakenMessage(e, court), "warn");
+      else toast(e?.message ?? "Failed to allocate court", "error");
     }
   };
 
@@ -1129,8 +1117,8 @@ export default function App() {
         const topN = currentCategory?.top_n_advance && currentCategory.top_n_advance > 0
           ? currentCategory.top_n_advance
           : 2;
-        groups.forEach((g, gi) => {
-          const st = getStandings(g, gi);
+        groups.forEach(g => {
+          const st = getStandings(g);
           for (let i = 0; i < Math.min(topN, st.length); i++) qualifiedTeamIds.add(st[i].team.id);
         });
         const targetMatch = knockoutMatches.find(m => m.id === promotePickerFor.matchId);

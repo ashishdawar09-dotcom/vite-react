@@ -1,4 +1,5 @@
 import { CategoryFilter } from "../../components/CategoryFilter";
+import { isCancelledMatch, matchLoserId } from "../../lib/matchOutcome";
 import type { Category, Match, TeamWithPlayers, Tournament } from "../../types";
 
 /**
@@ -33,19 +34,20 @@ export function ScoreboardTab({
   const all: Record<string, Row> = {};
   teamsView.forEach(t => { all[t.id] = { team: t, gw: 0, gl: 0, pf: 0, pa: 0, status: "Registered" }; });
 
-  groupMatches.filter(m => m.confirmed).forEach(m => {
+  // A cancelled match (no winner) counts for nobody.
+  groupMatches.filter(m => m.confirmed && !isCancelledMatch(m)).forEach(m => {
     const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
     if (m.team_a_id && all[m.team_a_id]) { all[m.team_a_id].pf += sa; all[m.team_a_id].pa += sb; }
     if (m.team_b_id && all[m.team_b_id]) { all[m.team_b_id].pf += sb; all[m.team_b_id].pa += sa; }
     if (m.winner_id && all[m.winner_id]) all[m.winner_id].gw++;
-    const loserId = m.winner_id === m.team_a_id ? m.team_b_id : m.team_a_id;
+    const loserId = matchLoserId(m);
     if (loserId && all[loserId]) all[loserId].gl++;
   });
 
   const koT = new Set<string>(), koL = new Set<string>();
   knockoutMatches.forEach(m => { if (m.team_a_id) koT.add(m.team_a_id); if (m.team_b_id) koT.add(m.team_b_id); });
   knockoutMatches.filter(m => m.confirmed && !m.is_bye).forEach(m => {
-    const loserId = m.winner_id === m.team_a_id ? m.team_b_id : m.team_a_id;
+    const loserId = matchLoserId(m);
     if (loserId) koL.add(loserId);
   });
 

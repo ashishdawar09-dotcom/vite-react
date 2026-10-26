@@ -5,6 +5,7 @@ import { fmtClock } from "../../hooks/useScheduling";
 import { usePublicTournament } from "./usePublicTournament";
 import { derivePublicTournamentState } from "./publicDerive";
 import type { Category, ProjectedMatch } from "../../types";
+import { isCancelledMatch } from "../../lib/matchOutcome";
 
 /**
  * Venue-TV hero card — /t/:slug/tv
@@ -63,7 +64,7 @@ export function VenueTvPage() {
     .sort((a, b) => new Date(a.projected_start_at ?? 0).getTime() - new Date(b.projected_start_at ?? 0).getTime())
     .slice(0, 3);
   const totalMatches = ctx.matches.filter(m => m.team_a_id && m.team_b_id && !m.is_bye).length;
-  const matchesPlayed = ctx.matches.filter(m => m.confirmed).length;
+  const matchesPlayed = ctx.matches.filter(m => m.confirmed && !isCancelledMatch(m)).length;
 
   // Projected event-end clock: latest projected start across pending matches
   // + that match's category match_minutes. Falls back to "—" if nothing is

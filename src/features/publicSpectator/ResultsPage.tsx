@@ -5,6 +5,7 @@ import { usePublicTournament } from "./usePublicTournament";
 import { derivePublicTournamentState, type TeamView } from "./publicDerive";
 import type { Category } from "../../types";
 import { formatLocalDate } from "../../lib/dates";
+import { isCancelledMatch } from "../../lib/matchOutcome";
 
 /**
  * Printable results page — /t/:slug/results
@@ -183,7 +184,7 @@ export function ResultsPage() {
                                   : `Round ${ri + 1}`}
                         </td>
                         <td style={tdStyle}>{teamName(derived.allTeamById, m.team_a_id)} vs {teamName(derived.allTeamById, m.team_b_id)}</td>
-                        <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{m.score_a ?? 0} – {m.score_b ?? 0}</td>
+                        <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{isCancelledMatch(m) ? "Cancelled" : `${m.score_a ?? 0} – ${m.score_b ?? 0}`}</td>
                         <td style={{ ...tdStyle, fontWeight: 700 }}>{teamName(derived.allTeamById, m.winner_id)}</td>
                       </tr>
                     )),
@@ -213,7 +214,7 @@ export function ResultsPage() {
                     if (m.team_b_id) teamIds.add(m.team_b_id);
                   });
                   const groupTeams = derived.teamsView.filter(t => teamIds.has(t.id));
-                  const standings = derived.getStandings(groupTeams, gi);
+                  const standings = derived.getStandings(groupTeams);
                   return (
                     <div key={gi} style={{ border: "1px solid #cbd5e1", borderRadius: 10, overflow: "hidden" }}>
                       <div style={{ padding: "10px 14px", borderBottom: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", fontSize: 12 }}>
