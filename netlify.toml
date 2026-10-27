@@ -12,6 +12,15 @@
   [headers.values]
     Cache-Control = "public, max-age=86400"
 
+# Volunteer flyer QR code (Shuttle Storm 2026) → Google Form. Temporary
+# (302) so it can later point at an in-app page. Must stay above the SPA
+# fallback.
+[[redirects]]
+  from = "/volunteer"
+  to = "https://forms.gle/Mhi5DaeEvwuh7NR47"
+  status = 302
+  force = true
+
 # SPA fallback
 [[redirects]]
   from = "/*"

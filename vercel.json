@@ -10,6 +10,16 @@
       ],
       "destination": "https://badminton.adawar.org/$1",
       "permanent": true
+    },
+    {
+      "source": "/volunteer",
+      "destination": "https://forms.gle/Mhi5DaeEvwuh7NR47",
+      "permanent": false
+    },
+    {
+      "source": "/volunteer/",
+      "destination": "https://forms.gle/Mhi5DaeEvwuh7NR47",
+      "permanent": false
     }
   ],
   "rewrites": [
