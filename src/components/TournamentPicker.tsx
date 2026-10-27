@@ -18,6 +18,7 @@ type EditState = {
   e_transfer_email: string;
   registration_open: boolean;
   terms_text: string;
+  whatsapp_enabled: boolean;
 };
 
 function emptyEditState(): EditState {
@@ -27,6 +28,7 @@ function emptyEditState(): EditState {
     event_time: "", registration_deadline: "",
     contact_info: "", e_transfer_email: "",
     registration_open: true, terms_text: "",
+    whatsapp_enabled: false,
   };
 }
 
@@ -88,6 +90,7 @@ export function TournamentPicker({
         e_transfer_email: current.e_transfer_email ?? "",
         registration_open: current.registration_open ?? true,
         terms_text: current.terms_text ?? "",
+        whatsapp_enabled: current.whatsapp_enabled ?? false,
       });
     }
   }, [editing, current]);
@@ -150,6 +153,7 @@ export function TournamentPicker({
         e_transfer_email: form.e_transfer_email.trim() || null,
         registration_open: form.registration_open,
         terms_text: form.terms_text.trim() || null,
+        whatsapp_enabled: form.whatsapp_enabled,
       };
       await db.updateTournament(current.id, patch);
       setEditing(false);
@@ -258,6 +262,12 @@ export function TournamentPicker({
             <input type="email" value={form.e_transfer_email} onChange={e => setField("e_transfer_email", e.target.value)} placeholder="payments@yourclub.com" style={lightInputStyle} />
             <label style={labelStyle}>Contact info (shown on the form)</label>
             <textarea value={form.contact_info} onChange={e => setField("contact_info", e.target.value)} placeholder="Email: organizer@club.com&#10;Phone: 604-XXX-XXXX" rows={3} style={{ ...lightInputStyle, resize: "vertical" }} />
+
+            <SectionHeader>Player messages</SectionHeader>
+            <label style={{ fontSize: 13, display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12, cursor: "pointer" }}>
+              <input type="checkbox" checked={form.whatsapp_enabled} onChange={e => setField("whatsapp_enabled", e.target.checked)} style={{ marginTop: 3 }} />
+              <span><strong>WhatsApp messages</strong> — a "get ready" message the evening before, and "go to Court N" when a court is assigned. Sent to the phone numbers on approved entries through our own Evolution API server. Email and push go out either way.</span>
+            </label>
 
             <SectionHeader>Terms & rules (shown on the form)</SectionHeader>
             <textarea value={form.terms_text} onChange={e => setField("terms_text", e.target.value)} placeholder="Type each paragraph separated by a blank line…" rows={6} style={{ ...lightInputStyle, resize: "vertical", fontFamily: "inherit" }} />

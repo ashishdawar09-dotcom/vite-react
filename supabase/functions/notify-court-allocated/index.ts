@@ -12,10 +12,21 @@
 // `onboarding@resend.dev` can only send to the Resend account owner during
 // development. To deliver to real players, verify a domain in Resend and
 // switch RESEND_FROM_EMAIL to e.g. `notify@yourdomain.com`.
+//
+// WhatsApp is a third, optional channel: sent when the tournament has
+// whatsapp_enabled and the EVOLUTION_* secrets are set (see
+// _shared/whatsapp.ts). Otherwise it's skipped and email + push carry on.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
 import { isUuid, json, serveWithCors } from "../_shared/http.ts";
+import {
+  joinNames,
+  pause,
+  registeredNumbers,
+  sendWhatsApp,
+  whatsappConfig,
+} from "../_shared/whatsapp.ts";
 import webpush from "npm:web-push@3.6.7";
 
 
@@ -59,7 +70,7 @@ async function handle(req: Request): Promise<Response> {
     // 2. Tournament name
     const { data: tournament } = await supabase
       .from("tournaments")
-      .select("name")
+      .select("name, whatsapp_enabled")
       .eq("id", match.tournament_id)
       .single();
     const tournamentName: string = tournament?.name ?? "Tournament";
@@ -383,7 +394,73 @@ Good luck out there!
       }
     }
 
-    return json({ sent, skipped, failed, pushSent, pushFailed }, 200);
+    // ========================================================================
+    // WHATSAPP — best-effort third channel. One message per phone number
+    // (a parent's number can be on two players' entries), short random gaps
+    // between them. Logged to notification_log with channel='whatsapp'.
+    // ========================================================================
+    let waSent = 0, waSkipped = 0, waFailed = 0;
+    const waConfig = whatsappConfig();
+    if (waConfig && tournament?.whatsapp_enabled === true && recipients.length > 0) {
+      let numbers = new Map<string, string>();
+      try {
+        numbers = await registeredNumbers(supabase, match.tournament_id);
+      } catch (e) {
+        console.error("whatsapp number lookup failed:", e instanceof Error ? e.message : e);
+      }
+      const byNumber = new Map<string, Recipient[]>();
+      for (const r of recipients) {
+        const number = numbers.get(r.player.id);
+        if (!number) {
+          await supabase.from("notification_log").insert({
+            match_id: matchId,
+            player_id: r.player.id,
+            channel: "whatsapp",
+            status: "skipped",
+            error_message: "no usable phone number on an approved entry",
+          });
+          waSkipped++;
+          continue;
+        }
+        byNumber.set(number, [...(byNumber.get(number) ?? []), r]);
+      }
+      let first = true;
+      for (const [number, group] of byNumber) {
+        if (!first) await pause(1000, 2500);
+        first = false;
+        // Players sharing a number are on the same match, but possibly on
+        // opposite sides; name each one's opponent only when there's one.
+        const opponents = [...new Set(group.map((g) => g.opponentLabel))];
+        const text =
+`🏸 ${tournamentName}
+
+Hi ${joinNames(group.map((g) => g.player.name))}, you're up now on *Court ${courtNumber}*!
+${opponents.length === 1 ? `Opponent: ${opponents[0]}\n` : ""}
+Please head to Court ${courtNumber} and warm up. Good luck!`;
+        let status: "sent" | "failed" = "sent";
+        let error: string | null = null;
+        try {
+          await sendWhatsApp(waConfig, number, text);
+          waSent++;
+        } catch (e) {
+          status = "failed";
+          error = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+          console.error("whatsapp failed for match", matchId, error);
+          waFailed++;
+        }
+        for (const g of group) {
+          await supabase.from("notification_log").insert({
+            match_id: matchId,
+            player_id: g.player.id,
+            channel: "whatsapp",
+            status,
+            error_message: error,
+          });
+        }
+      }
+    }
+
+    return json({ sent, skipped, failed, pushSent, pushFailed, waSent, waSkipped, waFailed }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("notify-court-allocated error:", msg);

@@ -42,6 +42,9 @@ export type Tournament = {
   youth_price: number | null;
   student_price: number | null;
   student_label: string | null;
+  // Send WhatsApp messages (day-before reminder, court calls) for this
+  // tournament. Needs the Evolution API server; see docs/whatsapp-setup.md.
+  whatsapp_enabled: boolean;
 };
 
 export type Category = {

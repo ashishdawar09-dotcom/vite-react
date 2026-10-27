@@ -422,3 +422,8 @@ verify_jwt = false
 # the function checks both itself.
 [functions.registration-email]
 verify_jwt = false
+
+# Called by pg_cron (pg_net) with a shared secret, or by an admin;
+# the function checks both itself.
+[functions.whatsapp-reminders]
+verify_jwt = false

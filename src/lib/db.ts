@@ -39,7 +39,7 @@ const SAFE_PLAYER_COLUMNS: string =
 // directors' alert addresses) is server-only, and anon/authenticated have no
 // SELECT on it, so "*" would be refused.
 export const TOURNAMENT_COLUMNS: string =
-  "id,name,event_date,phase,created_at,created_by,rounds_per_pair,num_courts,venue_name,venue_address,venue_map_url,event_time,registration_deadline,contact_info,e_transfer_email,fees,registration_open,terms_text,slug,rules_url,waiver_url,waiver_text,waiver_version,youth_price,student_price,student_label,reply_to_email";
+  "id,name,event_date,phase,created_at,created_by,rounds_per_pair,num_courts,venue_name,venue_address,venue_map_url,event_time,registration_deadline,contact_info,e_transfer_email,fees,registration_open,terms_text,slug,rules_url,waiver_url,waiver_text,waiver_version,youth_price,student_price,student_label,reply_to_email,whatsapp_enabled";
 
 export async function listTournaments(): Promise<Tournament[]> {
   const { data, error } = await supabase.from("tournaments").select(TOURNAMENT_COLUMNS).order("created_at", { ascending: false });
