@@ -6,7 +6,9 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { approvalRecipients, type TeamEntry } from "./approval_recipients.ts";
-import { adminNewEntry, buildIcs, type EmailData, registrationApproved, registrationReceived, shareConfirmed } from "./emails.ts";
+import {
+  adminNewEntry, buildIcs, type EmailData, type PartnerShare, registrationApproved, registrationReceived, shareConfirmed,
+} from "./emails.ts";
 import { sendEmail } from "./mailer.ts";
 
 const ASSET_BASE = Deno.env.get("EMAIL_ASSET_BASE") ?? "https://shuttlestorm.adawar.org/email";
@@ -16,7 +18,7 @@ const PRIVACY_URL = Deno.env.get("EMAIL_PRIVACY_URL") ?? "https://shuttlestorm.a
 const REG_COLUMNS =
   "id, tournament_id, category_id, status, submitted_at, player_name, player_email, player_phone, player_age, player_fee_type, partner_name, partner_email, partner_phone, partner_age, partner_fee_type, payment_method, payment_reference, amount_due_cents, payment_paid_full_for_partner, partner_consent_token, comments";
 const T_COLUMNS =
-  "id, name, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, waiver_text, reply_to_email, admin_notify_emails";
+  "id, name, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, waiver_text, waiver_version, reply_to_email, admin_notify_emails, registration_open, registration_deadline";
 
 type Kind = "confirmation" | "approval" | "admin";
 
@@ -61,25 +63,69 @@ const outcome = (who: string, err: string | null) => (err ? `${who} failed: ${er
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof load>>>;
 
-// Where the named partner stands. When each partner pays their own share,
-// the partner pays theirs by entering themselves: "due" until they have, and
-// "entered" once their own entry is in. Someone who accepted the waiver on
-// their own entry doesn't need the partner waiver link as well.
-export async function partnerContext(supabase: SupabaseClient, { reg, c }: Loaded, appOrigin: string) {
-  const email = reg.partner_email?.trim().toLowerCase();
-  if (!email) return { partnerShare: null, partnerConsented: false, registerUrl: null };
-  const ownShare = c.team_size === 2 && c.price_basis === "per_player" && !reg.payment_paid_full_for_partner;
-  const [{ count: entries }, { count: consents }] = await Promise.all([
-    supabase.from("pending_registrations").select("id", { count: "exact", head: true })
-      .eq("category_id", reg.category_id).eq("player_email", email).in("status", ["pending", "approved"]),
-    supabase.from("waiver_consents").select("id", { count: "exact", head: true })
-      .eq("tournament_id", reg.tournament_id).eq("participant_email", email),
-  ]);
-  return {
-    partnerShare: ownShare ? ((entries ?? 0) > 0 ? "entered" as const : "due" as const) : null,
-    partnerConsented: (consents ?? 0) > 0,
-    registerUrl: `${appOrigin}/register/${reg.tournament_id}?category=${reg.category_id}`,
+const norm = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
+
+// Where the named partner stands when each partner pays their own share (they
+// pay theirs by entering themselves): "due" with no entry of their own yet,
+// "entered" while it waits for a director, "confirmed" once it's approved.
+// Their entry counts when it names this player back or names nobody (solo),
+// or when an entry naming this player comes from someone with the partner's
+// name under another email. An entry of theirs with someone else is a clash
+// for the directors, so the partner gets neutral wording (null).
+// partnerConsented: they accepted the current waiver on that entry of their own.
+export async function partnerContext(supabase: SupabaseClient, { reg, c, t }: Loaded, siteUrl: string) {
+  const email = norm(reg.partner_email);
+  const closed = !t.registration_open ||
+    (!!t.registration_deadline && new Date(t.registration_deadline).getTime() < Date.now());
+  const context = {
+    partnerShare: null as PartnerShare | null,
+    partnerConsented: false,
+    registerUrl: `${siteUrl}/register/${reg.tournament_id}?category=${reg.category_id}&share=1`,
+    registrationDeadline: t.registration_deadline as string | null,
+    registrationClosed: closed,
   };
+  if (!email) return context;
+
+  const me = norm(reg.player_email);
+  const [{ data: theirs }, { data: namingMe }] = await Promise.all([
+    supabase.from("pending_registrations").select("id, status, partner_email")
+      .eq("category_id", reg.category_id).eq("player_email", email).in("status", ["pending", "approved"]),
+    supabase.from("pending_registrations").select("id, status, player_name")
+      .eq("category_id", reg.category_id).eq("partner_email", me).neq("player_email", email).neq("id", reg.id)
+      .in("status", ["pending", "approved"]),
+  ]);
+  const own = (theirs ?? []).filter((e) => !e.partner_email || norm(e.partner_email) === me);
+  const sameName = (n: string) => !!reg.partner_name && norm(n) === norm(reg.partner_name);
+  const mine = [...own, ...(namingMe ?? []).filter((e) => sameName(e.player_name))];
+
+  const ownShare = c.team_size === 2 && c.price_basis === "per_player" && !reg.payment_paid_full_for_partner;
+  if (ownShare) {
+    context.partnerShare = mine.some((e) => e.status === "approved") ? "confirmed"
+      : mine.length ? "entered"
+      : (theirs ?? []).length ? null
+      : "due";
+  }
+  if (own.length && t.waiver_version) {
+    const { count } = await supabase.from("waiver_consents").select("id", { count: "exact", head: true })
+      .in("registration_id", own.map((e) => e.id)).eq("role", "player").eq("waiver_version", t.waiver_version);
+    context.partnerConsented = (count ?? 0) > 0;
+  }
+  return context;
+}
+
+type PartnerContext = Awaited<ReturnType<typeof partnerContext>>;
+
+// The partner's one-time waiver link, while they still need it. A partner who
+// owes their share accepts the waiver on the form they pay with, until
+// registration closes; then they get this link.
+export async function partnerWaiverLink(
+  supabase: SupabaseClient, { reg, t }: Loaded, partner: PartnerContext, siteUrl: string,
+): Promise<string | null> {
+  if (!t.waiver_text || !reg.partner_email || !reg.partner_consent_token || partner.partnerConsented) return null;
+  if (partner.partnerShare === "due" && !partner.registrationClosed) return null;
+  const { count } = await supabase.from("waiver_consents").select("id", { count: "exact", head: true })
+    .eq("registration_id", reg.id).eq("role", "partner");
+  return (count ?? 0) === 0 ? `${siteUrl}/waiver/${reg.partner_consent_token}` : null;
 }
 
 // "We've got your registration" to the player and partner, then the
@@ -87,30 +133,31 @@ export async function partnerContext(supabase: SupabaseClient, { reg, c }: Loade
 export async function sendRegistrationReceived(
   supabase: SupabaseClient,
   regId: string,
-  appOrigin: string,
+  siteUrl: string,
 ): Promise<void> {
-  await confirmToPlayers(supabase, regId, appOrigin);
-  await notifyDirectors(supabase, regId, appOrigin);
+  await confirmToPlayers(supabase, regId, siteUrl);
+  await notifyDirectors(supabase, regId, siteUrl);
 }
 
 // Replaces the separate partner waiver email: the partner's copy carries
 // their waiver link, and partner_waiver_email_status records that send.
-async function confirmToPlayers(supabase: SupabaseClient, regId: string, appOrigin: string): Promise<void> {
+async function confirmToPlayers(supabase: SupabaseClient, regId: string, siteUrl: string): Promise<void> {
   try {
     if (!(await claim(supabase, regId, "confirmation"))) return;
     const loaded = await load(supabase, regId);
     if (!loaded) return await finish(supabase, regId, "confirmation", "failed: registration not found");
     const { reg, t, c } = loaded;
-    const partner = await partnerContext(supabase, loaded, appOrigin);
+    const partner = await partnerContext(supabase, loaded, siteUrl);
+    const waiverLink = await partnerWaiverLink(supabase, loaded, partner, siteUrl);
 
-    // A partner who still owes their share accepts the waiver on the form
-    // they pay with, so they get that link instead of this one.
-    let partnerNeedsWaiver = false;
-    if (t.waiver_text && reg.partner_email && reg.partner_consent_token && !partner.partnerConsented &&
-      partner.partnerShare !== "due") {
+    // The player's own copy mentions the partner's waiver whenever this entry
+    // has none from them yet. It doesn't depend on the partner's other entries,
+    // so it tells the player nothing about those.
+    let partnerWaiverPending = false;
+    if (t.waiver_text && reg.partner_email && reg.partner_consent_token) {
       const { count } = await supabase.from("waiver_consents").select("id", { count: "exact", head: true })
         .eq("registration_id", reg.id).eq("role", "partner");
-      partnerNeedsWaiver = (count ?? 0) === 0;
+      partnerWaiverPending = (count ?? 0) === 0;
     }
 
     const base: Omit<EmailData, "role"> = {
@@ -119,17 +166,14 @@ async function confirmToPlayers(supabase: SupabaseClient, regId: string, appOrig
       reg,
       assetBase: ASSET_BASE,
       privacyUrl: PRIVACY_URL,
-      partnerWaiverPending: partnerNeedsWaiver,
+      partnerWaiverPending,
     };
     const mine = registrationReceived({ ...base, role: "player" });
     const playerErr = await sendEmail({ to: reg.player_email, fromName: t.name, replyTo: t.reply_to_email, ...mine });
 
     let partnerErr: string | null = null;
     if (reg.partner_email) {
-      const waiverLink = partnerNeedsWaiver ? `${appOrigin}/waiver/${reg.partner_consent_token}` : null;
-      const theirs = registrationReceived({
-        ...base, role: "partner", waiverLink, partnerShare: partner.partnerShare, registerUrl: partner.registerUrl,
-      });
+      const theirs = registrationReceived({ ...base, role: "partner", waiverLink, ...partner });
       partnerErr = await sendEmail({ to: reg.partner_email, fromName: t.name, replyTo: t.reply_to_email, ...theirs });
       if (waiverLink) {
         await supabase.from("pending_registrations").update({
@@ -151,7 +195,7 @@ async function confirmToPlayers(supabase: SupabaseClient, regId: string, appOrig
 
 // Directors' alert for a new entry, to tournaments.admin_notify_emails.
 // Replies go to the player. Claimed separately from the player's email.
-async function notifyDirectors(supabase: SupabaseClient, regId: string, appOrigin: string): Promise<void> {
+async function notifyDirectors(supabase: SupabaseClient, regId: string, siteUrl: string): Promise<void> {
   try {
     const loaded = await load(supabase, regId);
     const to = (loaded?.t.admin_notify_emails ?? []).filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
@@ -167,7 +211,7 @@ async function notifyDirectors(supabase: SupabaseClient, regId: string, appOrigi
       waiverRequired: !!t.waiver_text,
       playerWaiver: roles.has("player"),
       partnerWaiver: roles.has("partner"),
-      adminUrl: Deno.env.get("ADMIN_APP_URL") ?? appOrigin,
+      adminUrl: Deno.env.get("ADMIN_APP_URL") ?? siteUrl,
     });
     const err = await sendEmail({ to, fromName: t.name, replyTo: reg.player_email, ...mail });
     if (err) console.error("directors' email failed:", err);
@@ -185,7 +229,7 @@ async function notifyDirectors(supabase: SupabaseClient, regId: string, appOrigi
 export async function sendRegistrationApproved(
   supabase: SupabaseClient,
   regId: string,
-  appOrigin: string,
+  siteUrl: string,
 ): Promise<{ sent: boolean; status: string }> {
   try {
     const { data: row } = await supabase.from("pending_registrations")
@@ -207,7 +251,7 @@ export async function sendRegistrationApproved(
       others = data ?? [];
     }
     const to = approvalRecipients(reg, others);
-    const partner = await partnerContext(supabase, loaded, appOrigin);
+    const partner = await partnerContext(supabase, loaded, siteUrl);
 
     const ics = buildIcs(t, reg.id);
     const attachments = ics ? [{ filename: "event.ics", content: btoa(unescape(encodeURIComponent(ics))) }] : [];
@@ -226,7 +270,7 @@ export async function sendRegistrationApproved(
       ? await sendEmail({
         to: reg.partner_email, fromName: t.name, replyTo: t.reply_to_email, attachments,
         ...registrationApproved({
-          ...base, role: "partner", partnerShare: partner.partnerShare, registerUrl: partner.registerUrl,
+          ...base, role: "partner", ...partner, waiverLink: await partnerWaiverLink(supabase, loaded, partner, siteUrl),
         }),
       })
       : null;

@@ -7,7 +7,7 @@ import { sendApprovalEmail } from "../../lib/notifications";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, FeeType, PendingRegistration, WaiverConsent } from "../../types";
 import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
-import { approvalEmailOk, approvedMessage, errorMessage } from "./approvalMessages";
+import { approvalEmailFailedMessage, approvalEmailOk, approvedMessage, errorMessage } from "./approvalMessages";
 
 type Props = {
   reg: PendingRegistration;
@@ -75,7 +75,7 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
       toast.success(approvedMessage(reg, result, email));
       if (result?.warning) toast.error(result.warning);
       if (!approvalEmailOk(email)) {
-        toast.error(`The “You're in” email didn't send (${email.status}). Let them know directly.`);
+        toast.error(approvalEmailFailedMessage(result, email));
       }
       if (!reduce) {
         confetti({ particleCount: 60, spread: 60, startVelocity: 30, origin: { y: 0.4 } });

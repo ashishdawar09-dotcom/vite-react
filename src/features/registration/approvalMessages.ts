@@ -34,8 +34,11 @@ export function approvedMessage(
   emailResult: ApprovalEmail,
 ): string {
   // A linked entry's player gets a short "your share is paid" email; both
-  // players already had "You're in" from the pair's first entry.
+  // players already had "You're in" from the pair's first entry. "not needed"
+  // comes from the registration-email version before that email existed, so
+  // the toast stays true whichever version is deployed.
   const email = !approvalEmailOk(emailResult) ? ""
+    : emailResult.status.startsWith("not needed") ? " · both already had their “You're in” email"
     : result?.linked_existing_team ? " · confirmation email sent"
     : " · “You're in” email sent";
   if (result?.linked_existing_team) {
@@ -43,4 +46,13 @@ export function approvedMessage(
     return `Approved — ${reg.player_name} linked to existing team ${team}${email}`;
   }
   return `Approved — ${reg.player_name}${reg.partner_name ? " & " + reg.partner_name : ""} added${email}`;
+}
+
+// The error toast when the approval email didn't send.
+export function approvalEmailFailedMessage(
+  result: Partial<ApproveRegistrationResult> | null,
+  emailResult: ApprovalEmail,
+): string {
+  const what = result?.linked_existing_team ? "“Your share is paid” confirmation email" : "“You're in” email";
+  return `The ${what} didn't send (${emailResult.status}). Let them know directly.`;
 }

@@ -9,6 +9,9 @@ import {
   longDate,
   registrationApproved,
   registrationReceived,
+  adminRefusedRepeat,
+  deadlineText,
+  maskEmail,
   shareConfirmed,
 } from "./emails.ts";
 
@@ -145,7 +148,9 @@ Deno.test("doubles entry without a partner is told about pairing", () => {
 
 // Sam paid their own share and named Ana, who hasn't paid hers yet.
 const ownShare = (over: Partial<EmailData> = {}) => data({
-  reg: { ...data().reg, amount_due_cents: 4000, payment_paid_full_for_partner: false },
+  reg: { ...data().reg, player_email: "sam.lee@example.com", amount_due_cents: 4000, payment_paid_full_for_partner: false },
+  registrationDeadline: "2026-11-19T07:59:00Z",
+  registrationClosed: false,
   role: "partner",
   partnerShare: "due",
   registerUrl: "https://badminton.adawar.org/register/t1?category=c1",
@@ -170,21 +175,72 @@ Deno.test("partner who still owes their share is told how to pay it, with no amo
 
 Deno.test("partner who already entered themselves has nothing to pay", () => {
   const e = registrationReceived(ownShare({ partnerShare: "entered", waiverLink: null }));
-  assertStringIncludes(e.html, "Your own entry is in too, so there's nothing else to pay.");
-  assertStringIncludes(e.text, "Your share: On your own entry");
+  assertStringIncludes(e.html, "Your own entry is in too, so there's nothing else to pay. We'll email you once a director confirms it.");
+  assertStringIncludes(e.text, "Your share: On your own entry, waiting for a director");
   assert(!e.html.includes("Pay your share"));
 });
 
-Deno.test("paid-for-both and per-team partner copies are unchanged", () => {
+Deno.test("partner whose own entry is already confirmed isn't told to wait or promised another email", () => {
+  const e = registrationReceived(ownShare({ partnerShare: "confirmed", waiverLink: null }));
+  assertStringIncludes(e.text, "1. You're all set");
+  assertStringIncludes(e.text, "Your place is already confirmed, and Sam's share is in now too. There's nothing else to do.");
+  assertStringIncludes(e.text, "Status: Confirmed");
+  assertStringIncludes(e.text, "Your share: Paid · confirmed");
+  assert(!e.text.includes("awaiting confirmation"));
+  assert(!e.text.includes("You'll get"));
+  const approved = registrationApproved(ownShare({ partnerShare: "confirmed" }));
+  assert(!approved.text.includes("we'll email you"));
+});
+
+Deno.test("pay step gives the deadline and which email to use, without an amount", () => {
+  const e = registrationReceived(ownShare());
+  assertStringIncludes(e.text, "by Wednesday, November 18 at 11:59 pm");
+  assertStringIncludes(e.text, "with the email address Sam registered with (s•••@example.com)");
+  assert(!e.text.includes("sam.lee@example.com"), "full address isn't shown");
+});
+
+Deno.test("after registration closes, the pay step says to reply and carries the waiver link", () => {
+  const e = registrationApproved(ownShare({ registrationClosed: true }));
+  assertStringIncludes(e.text, "Registration has closed, so reply to this email and a director will arrange your share.");
+  assertStringIncludes(e.text, "Accept the waiver: https://badminton.adawar.org/waiver/abc");
+  assert(!e.html.includes("/register/t1"), "no link to the closed form");
+  const noWaiver = registrationReceived(ownShare({ registrationClosed: true, waiverLink: null }));
+  assert(!noWaiver.text.includes("Accept the waiver"));
+});
+
+Deno.test("a partner named on an entry that clashes gets neutral wording", () => {
+  const e = registrationReceived(ownShare({ partnerShare: null, waiverLink: null }));
+  assertStringIncludes(e.text, "Sam has entered you as their partner. If you weren't expecting this, just reply to this email.");
+  assert(!e.text.includes("nothing else to pay"));
+  assert(!e.html.includes("Pay your share"));
+});
+
+Deno.test("the other player's card payment isn't described as on the reader's statement", () => {
+  const card = { ...data().reg, payment_method: "card", amount_due_cents: 4120, payment_paid_full_for_partner: false };
+  const partner = registrationReceived(ownShare({ reg: card }));
+  assertStringIncludes(partner.text, "Sam's share: $41.20 CAD · Paid by card");
+  assert(!partner.text.includes("your statement"));
+  const player = registrationReceived(data({ reg: card }));
+  assertStringIncludes(player.text, "shows on your statement");
+});
+
+Deno.test("paid-for-both partner copy says there's nothing for them to pay", () => {
   const e = registrationReceived(data({ role: "partner", waiverLink: null }));
   assertStringIncludes(e.html, "Sam has submitted the entry for you both.");
+  assertStringIncludes(e.text, "They paid for you both, so there's nothing for you to pay.");
   assertStringIncludes(e.text, "Payment: $80.00 CAD · e-Transfer (ref SL-123)");
-  assert(!e.text.includes("Your share"));
+  assertStringIncludes(e.text, "Your share: Paid by Sam");
+  const withWaiver = registrationReceived(data({ role: "partner", waiverLink: "https://badminton.adawar.org/waiver/abc" }));
+  assertStringIncludes(withWaiver.text, "nothing for you to pay");
+  assertStringIncludes(withWaiver.html, "/waiver/abc");
 });
 
 Deno.test("approval tells a partner who owes their share that their place is held", () => {
   const e = registrationApproved(ownShare());
   assertEquals(e.subject, "One step left: pay your share for Mixed Doubles at Shuttle Storm Abbotsford 2026");
+  assert(!e.html.includes("approved.gif"), "no big YOU'RE IN header");
+  assert(!e.html.includes("You&#39;re in. "), "no You're in alt text");
+  assertStringIncludes(e.html, "/email/hero.gif");
   assertStringIncludes(e.html, "One step left, Ana.");
   assertStringIncludes(e.html, "your place on the team is held. Your share isn't paid yet.");
   assertStringIncludes(e.text, "Status: Place held · waiting for your share");
@@ -208,4 +264,26 @@ Deno.test("second half of a pair gets a short share-paid email", () => {
   assertStringIncludes(e.html, "You and Sam Lee are in, and there's nothing else to pay.");
   assertStringIncludes(e.text, "Payment: $41.20 CAD · Paid by card");
   assert(!/<[a-z]/i.test(e.text), "text part has no tags");
+});
+
+Deno.test("second half that paid for both is told one share will be refunded", () => {
+  const e = shareConfirmed(data({ reg: { ...data().reg, player_name: "Ana Diaz", partner_name: "Sam Lee" } }));
+  assertStringIncludes(e.text, "You paid for you both, but Sam had already paid their own share, so one share will be refunded to you.");
+});
+
+Deno.test("directors hear about a refused repeat entry, escaped", () => {
+  const e = adminRefusedRepeat({
+    category: { name: "Mixed <Doubles>" }, playerName: "Ana <b>Diaz</b>", playerEmail: "ana@x.com", paidBy: "Sam Lee", reference: "REF-9",
+  });
+  assertStringIncludes(e.subject, "Refused repeat entry: Ana <b>Diaz</b> · Mixed <Doubles>");
+  assertStringIncludes(e.html, "Ana &lt;b&gt;Diaz&lt;/b&gt;");
+  assert(!e.html.includes("<b>Diaz"));
+  assertStringIncludes(e.text, "They gave e-Transfer reference REF-9. If that e-Transfer arrives, refund it.");
+});
+
+Deno.test("deadline and masked email helpers", () => {
+  assertEquals(deadlineText("2026-11-19T07:59:00Z"), "Wednesday, November 18 at 11:59 pm");
+  assertEquals(deadlineText(null), null);
+  assertEquals(maskEmail("sam.lee@example.com"), "s•••@example.com");
+  assertEquals(maskEmail("not an email"), null);
 });

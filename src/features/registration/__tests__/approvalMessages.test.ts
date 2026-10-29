@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalEmailOk, approvedMessage, errorMessage } from "../approvalMessages";
+import { approvalEmailFailedMessage, approvalEmailOk, approvedMessage, errorMessage } from "../approvalMessages";
 
 const pair = { player_name: "Ryan Joseph", partner_name: "Duong Hoac" };
 const sent = { sent: true, status: "sent" };
@@ -32,6 +32,22 @@ describe("approval email", () => {
   it("counts the database's own send as done, and a failure as not", () => {
     expect(approvalEmailOk({ sent: false, status: "already sent" })).toBe(true);
     expect(approvalEmailOk(failed)).toBe(false);
+  });
+});
+
+describe("approval email toasts whichever registration-email version is live", () => {
+  const linked = { player_id: "p", partner_id: "q", team_id: "t", linked_existing_team: true, team_name: "Duong Hoac & Ryan Joseph" };
+
+  it("says nobody was emailed again when the older version skipped the email", () => {
+    expect(approvedMessage(pair, linked, { sent: true, status: "not needed: already emailed for this team" }))
+      .toBe("Approved — Ryan Joseph linked to existing team Duong Hoac & Ryan Joseph · both already had their “You're in” email");
+  });
+
+  it("names the email that failed", () => {
+    expect(approvalEmailFailedMessage(linked, failed))
+      .toBe("The “Your share is paid” confirmation email didn't send (failed: player failed: 500). Let them know directly.");
+    expect(approvalEmailFailedMessage({ ...linked, linked_existing_team: false }, failed))
+      .toBe("The “You're in” email didn't send (failed: player failed: 500). Let them know directly.");
   });
 });
 
