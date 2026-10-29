@@ -8,6 +8,7 @@ import { supabase } from "../../lib/supabase";
 import { colors } from "../../lib/theme";
 import { Login } from "../../components/Login";
 import type { Category, PendingRegistration, Tournament } from "../../types";
+import { paymentTotals, splitPaidTeams } from "./paymentTotals";
 
 // /payments — live report of every paid entry for the tournament directors.
 // Admin-only: RLS on pending_registrations already limits reads to admins, and
@@ -145,16 +146,8 @@ export function PaymentsPage() {
   const sortByPaid = (list: PendingRegistration[]) =>
     [...list].sort((a, b) => (paymentTime(b).at ?? "").localeCompare(paymentTime(a).at ?? ""));
 
-  const totals = useMemo(() => {
-    const sum = (list: PendingRegistration[]) => list.reduce((s, r) => s + (r.amount_due_cents ?? 0), 0);
-    return {
-      entries: approved.length,
-      players: approved.reduce((n, r) => n + (r.partner_name ? 2 : 1), 0),
-      total: sum(approved),
-      etransfer: sum(approved.filter(r => r.payment_method !== "card")),
-      card: sum(approved.filter(r => r.payment_method === "card")),
-    };
-  }, [approved]);
+  const totals = useMemo(() => paymentTotals(approved), [approved]);
+  const splitTeams = useMemo(() => splitPaidTeams(approved), [approved]);
 
   const downloadCsv = () => {
     const blob = new Blob([toCsv([...sortByPaid(approved), ...waiting], catName)], { type: "text/csv;charset=utf-8" });
@@ -211,7 +204,8 @@ export function PaymentsPage() {
       {error && <div style={{ ...card, borderColor: "#fecaca", color: "#b91c1c", marginBottom: 16 }}>Couldn't load payments: {error}</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
-        <Stat label="Entries in" value={String(totals.entries)} sub={`${totals.players} player${totals.players === 1 ? "" : "s"}`} />
+        <Stat label="Entries in" value={String(totals.entries)}
+          sub={`${totals.players} player${totals.players === 1 ? "" : "s"} · ${totals.payments} payment${totals.payments === 1 ? "" : "s"}`} />
         <Stat label="Total received" value={money(totals.total)} sub="approved entries" />
         <Stat label="e-Transfer" value={money(totals.etransfer)} />
         <Stat label="Card" value={money(totals.card)} sub="before Stripe fees" />
@@ -220,7 +214,7 @@ export function PaymentsPage() {
       <Section title={`Paid and in (${approved.length})`}>
         {approved.length === 0
           ? <p style={muted}>No approved entries yet.</p>
-          : <Rows list={sortByPaid(approved)} catName={catName} isMobile={isMobile} />}
+          : <Rows list={sortByPaid(approved)} catName={catName} isMobile={isMobile} splitTeams={splitTeams} />}
       </Section>
 
       {waiting.length > 0 && (
@@ -232,7 +226,16 @@ export function PaymentsPage() {
   );
 }
 
-function Rows({ list, catName, isMobile }: { list: PendingRegistration[]; catName: (id: string) => string; isMobile: boolean }) {
+// "(paid for both)" or, when each partner paid their own share, "(paid separately)".
+function partnerNote(r: PendingRegistration, splitTeams?: Set<string>): string {
+  if (r.payment_paid_full_for_partner) return " (paid for both)";
+  if (r.approved_team_id && splitTeams?.has(r.approved_team_id)) return " (paid separately)";
+  return "";
+}
+
+function Rows({ list, catName, isMobile, splitTeams }: {
+  list: PendingRegistration[]; catName: (id: string) => string; isMobile: boolean; splitTeams?: Set<string>;
+}) {
   if (isMobile) {
     return (
       <div style={{ display: "grid", gap: 10 }}>
@@ -250,7 +253,7 @@ function Rows({ list, catName, isMobile }: { list: PendingRegistration[]; catNam
               <Line k="Reference" v={r.payment_reference ?? "—"} mono />
               <Line k="Email" v={<a href={`mailto:${r.player_email}`}>{r.player_email}</a>} />
               <Line k="Phone" v={r.player_phone ? <a href={`tel:${r.player_phone}`}>{r.player_phone}</a> : "—"} />
-              {r.partner_name && <Partner r={r} />}
+              {r.partner_name && <Partner r={r} note={partnerNote(r, splitTeams)} />}
             </div>
           );
         })}
@@ -281,7 +284,7 @@ function Rows({ list, catName, isMobile }: { list: PendingRegistration[]; catNam
                 <td style={td}>{catName(r.category_id)}</td>
                 <td style={td}>
                   <strong>{r.player_name}</strong>
-                  {r.partner_name && <><br /><span style={muted}>with {r.partner_name}{r.payment_paid_full_for_partner ? " (paid for both)" : ""}</span></>}
+                  {r.partner_name && <><br /><span style={muted}>with {r.partner_name}{partnerNote(r, splitTeams)}</span></>}
                 </td>
                 <td style={td}>
                   <a href={`mailto:${r.player_email}`}>{r.player_email}</a>
@@ -300,10 +303,10 @@ function Rows({ list, catName, isMobile }: { list: PendingRegistration[]; catNam
   );
 }
 
-function Partner({ r }: { r: PendingRegistration }) {
+function Partner({ r, note }: { r: PendingRegistration; note: string }) {
   return (
     <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${colors.border.light}` }}>
-      <Line k="Partner" v={`${r.partner_name}${r.payment_paid_full_for_partner ? " (paid for both)" : ""}`} />
+      <Line k="Partner" v={`${r.partner_name}${note}`} />
       {r.partner_email && <Line k="Email" v={<a href={`mailto:${r.partner_email}`}>{r.partner_email}</a>} />}
       {r.partner_phone && <Line k="Phone" v={<a href={`tel:${r.partner_phone}`}>{r.partner_phone}</a>} />}
     </div>
