@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion"; /* NEW: stagger reveal on roster */
 import * as db from "../../lib/db";
 import { CategoryFilter } from "../../components/CategoryFilter";
+import { PlayerSearch } from "../../components/PlayerSearch";
+import { matchesPlayerSearch } from "../../lib/playerSearch";
 import { Av } from "../../components/ui";
 import { toast } from "../../components/Toast";
 import type { Category, Player, Tournament } from "../../types";
@@ -84,9 +87,14 @@ export function RegisterTab({
 }) {
   const reduceMotion = useReducedMotion();
   const currentCategory = currentCategoryId ? catById[currentCategoryId] : undefined;
-  const filteredPlayers = currentCategoryId
+  const [search, setSearch] = useState("");
+  const categoryPlayers = currentCategoryId
     ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId))
     : players;
+  // Numbered before the search filter so a player keeps their # while searching.
+  const filteredPlayers = categoryPlayers
+    .map((p, i) => ({ p, n: i + 1 }))
+    .filter(({ p }) => matchesPlayerSearch(p.name, search));
   /* Stagger reveal variants — cards fade-up in sequence on first paint and
      whenever the filtered list changes (re-key on category). Reduce-motion
      gate happens at the motion.div's initial/animate props (set to false). */
@@ -135,6 +143,11 @@ export function RegisterTab({
         </div>
       )}
 
+      <PlayerSearch value={search} onChange={setSearch} />
+      {filteredPlayers.length === 0 && search.trim() && (
+        <div style={{ textAlign: "center", padding: 24, color: "#64748b" }}>No players match "{search.trim()}".</div>
+      )}
+
       {/* Player list */}
       <motion.div
         key={currentCategoryId ?? "all"} /* re-trigger stagger when category filter changes */
@@ -143,7 +156,7 @@ export function RegisterTab({
         animate={reduceMotion ? false : "visible"}
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}
       >
-        {filteredPlayers.map((p, i) => {
+        {filteredPlayers.map(({ p, n }) => {
           const pCats = playerCategoryMap.get(p.id);
           const isEditingCats = editingPlayerCats === p.id;
           return (
@@ -159,7 +172,7 @@ export function RegisterTab({
                   <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} onBlur={() => saveEdit(p.id)} onKeyDown={e => e.key === "Enter" && saveEdit(p.id)} style={{ width: "100%", padding: "6px 10px", borderRadius: 8, border: "2px solid #3A86FF", fontSize: 15, outline: "none" }} />
                 ) : (
                   <div style={{ fontWeight: 700, fontSize: 16, cursor: isAdmin ? "pointer" : "default" }} onClick={() => isAdmin && startEdit(p)}>
-                    <span style={{ color: "#94a3b8", marginRight: 6, fontSize: 12, fontWeight: 500 }}>#{i + 1}</span>{p.name}
+                    <span style={{ color: "#94a3b8", marginRight: 6, fontSize: 12, fontWeight: 500 }}>#{n}</span>{p.name}
                   </div>
                 )}
                 {p.note && <div style={{ fontSize: 12, color: "#E63946", marginTop: 3 }}>⚠️ {p.note}</div>}

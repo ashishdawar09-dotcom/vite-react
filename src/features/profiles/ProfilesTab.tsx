@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { CategoryFilter } from "../../components/CategoryFilter";
+import { PlayerSearch } from "../../components/PlayerSearch";
+import { matchesPlayerSearch } from "../../lib/playerSearch";
 import { Av } from "../../components/ui";
 import { PlayerProfileView } from "../../components/PlayerProfileView";
 import type { Category, Player, PlayerCategory, ProjectedMatch, TeamWithPlayers } from "../../types";
@@ -62,6 +65,7 @@ export function ProfilesTab({
   fileRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
   handlePhoto: (id: string, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
 }) {
+  const [search, setSearch] = useState("");
   // Single-player profile view takes precedence over the grid.
   if (profileViewPlayerId) {
     const p = players.find(x => x.id === profileViewPlayerId);
@@ -86,9 +90,13 @@ export function ProfilesTab({
     );
   }
 
-  const filteredProfiles = currentCategoryId
+  const categoryProfiles = currentCategoryId
     ? players.filter(p => playerCategoryMap.get(p.id)?.has(currentCategoryId))
     : players;
+  // Numbered before the search filter so a player keeps their # while searching.
+  const filteredProfiles = categoryProfiles
+    .map((p, i) => ({ p, n: i + 1 }))
+    .filter(({ p }) => matchesPlayerSearch(p.name, search));
 
   return (
     <div>
@@ -100,8 +108,12 @@ export function ProfilesTab({
           {isAdmin ? "Click photo to upload, name to edit, or VIEW for full profile" : "Click VIEW for full profile"}
         </span>
       </div>
+      <PlayerSearch value={search} onChange={setSearch} />
+      {filteredProfiles.length === 0 && search.trim() && (
+        <div style={{ textAlign: "center", padding: 24, color: "#64748b" }}>No players match "{search.trim()}".</div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 18 }}>
-        {filteredProfiles.map((p, i) => (
+        {filteredProfiles.map(({ p, n }) => (
           <div key={p.id} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", border: "1px solid #e8ecf1", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", opacity: p.active ? 1 : 0.55, position: "relative" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: p.color }} />
             <div style={{ padding: "26px 16px 18px", textAlign: "center" }}>
@@ -116,7 +128,7 @@ export function ProfilesTab({
                 <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} onBlur={() => saveEdit(p.id)} onKeyDown={e => e.key === "Enter" && saveEdit(p.id)} style={{ width: "85%", marginTop: 14, padding: "8px 12px", borderRadius: 8, border: "2px solid #3A86FF", fontSize: 17, outline: "none", textAlign: "center", fontWeight: 700 }} />
               ) : (
                 <div onClick={() => isAdmin && startEdit(p)} style={{ marginTop: 14, fontSize: 18, fontWeight: 800, cursor: isAdmin ? "pointer" : "default", color: "#1a1a2e" }}>
-                  <span style={{ color: "#94a3b8", fontSize: 13, fontWeight: 500, marginRight: 6 }}>#{i + 1}</span>{p.name}
+                  <span style={{ color: "#94a3b8", fontSize: 13, fontWeight: 500, marginRight: 6 }}>#{n}</span>{p.name}
                 </div>
               )}
               {isAdmin && (
