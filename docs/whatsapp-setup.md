@@ -33,10 +33,17 @@ People will also write to this number with questions. Those get no automatic rep
 
 ## 2. The server (runs all the time)
 
-Opt-ins arrive whenever people register, so the server has to run continuously from the day the button goes live, not only on tournament days. Use the **Oracle Cloud "Always Free" VM** (free permanently): an *Ampere A1* (ARM) instance with Ubuntu, 1 OCPU / 6 GB RAM is plenty. Install Docker:
-`curl -fsSL https://get.docker.com | sh`.
+Opt-ins arrive whenever people register, so the server has to run continuously from the day the button goes live, not only on tournament days.
 
-Make a folder with these two files.
+**What we run (set up 2026-10-29):** a DigitalOcean droplet `shuttlestorm-whatsapp` in Toronto (Basic, 1 GB, $6/month, Ubuntu 24.04), logged into with an SSH key only. It has:
+- a ufw firewall with only SSH open,
+- unattended-upgrades for security updates,
+- 2 GB of swap,
+- Docker from Ubuntu's own packages (`docker.io`, `docker-compose-v2`).
+
+Evolution lives in `/opt/evolution`, along with `webhook-secret` (password 3 below).
+
+Any small Linux server works the same way (the Oracle Cloud free tier is another option). Install Docker, then make a folder with these two files.
 
 `docker-compose.yml`:
 
@@ -91,7 +98,9 @@ Evolution keeps its own small Postgres on the VM. It doesn't touch the tournamen
 Supabase needs to reach the server over HTTPS. adawar.org is already on Cloudflare, so:
 
 1. Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel** (type *Cloudflared*). Name it `whatsapp`.
-2. Run the install command it shows on the VM.
+2. Run the install command it shows on the server.
+
+   We used the CLI on the server instead: `cloudflared tunnel login` (approve adawar.org in the browser), then `cloudflared tunnel create shuttlestorm-whatsapp`, `cloudflared tunnel route dns shuttlestorm-whatsapp wa.adawar.org`, an `/etc/cloudflared/config.yml` that sends `wa.adawar.org` to `http://127.0.0.1:8080`, and `cloudflared service install`.
 3. Add a **public hostname**: `wa.adawar.org` → service `HTTP` → `localhost:8080`.
 
 Every request needs the API key (password 2), so the address being public is fine.
