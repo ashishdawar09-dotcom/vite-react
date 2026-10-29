@@ -8,7 +8,7 @@ import { supabase } from "../../lib/supabase";
 import { colors } from "../../lib/theme";
 import { Login } from "../../components/Login";
 import type { Category, PendingRegistration, Tournament } from "../../types";
-import { paymentTotals, splitPaidTeams } from "./paymentTotals";
+import { entryKey, type PaymentNote, paymentNotes, paymentTotals } from "./paymentTotals";
 
 // /payments — live report of every paid entry for the tournament directors.
 // Admin-only: RLS on pending_registrations already limits reads to admins, and
@@ -45,9 +45,9 @@ function pickDefault(list: Tournament[]): Tournament | null {
   return upcoming[0] ?? list[0] ?? null;
 }
 
-function toCsv(rows: PendingRegistration[], catName: (id: string) => string): string {
+function toCsv(rows: PendingRegistration[], catName: (id: string) => string, notes: Map<string, PaymentNote>): string {
   const head = ["Status", "Payment date", "Payment time", "Amount", "Method", "Reference", "Category",
-    "Name", "Email", "Phone", "Partner", "Partner email", "Partner phone", "Paid for partner"];
+    "Name", "Email", "Phone", "Partner", "Partner email", "Partner phone", "Paid for partner", "Note"];
   const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   const lines = rows.map(r => {
     const { at } = paymentTime(r);
@@ -62,6 +62,7 @@ function toCsv(rows: PendingRegistration[], catName: (id: string) => string): st
       r.player_name, r.player_email, r.player_phone ?? "",
       r.partner_name ?? "", r.partner_email ?? "", r.partner_phone ?? "",
       r.payment_paid_full_for_partner ? "Yes" : "No",
+      notes.get(r.id) ?? "",
     ].map(v => esc(String(v))).join(",");
   });
   return [head.join(","), ...lines].join("\n");
@@ -147,10 +148,12 @@ export function PaymentsPage() {
     [...list].sort((a, b) => (paymentTime(b).at ?? "").localeCompare(paymentTime(a).at ?? ""));
 
   const totals = useMemo(() => paymentTotals(approved), [approved]);
-  const splitTeams = useMemo(() => splitPaidTeams(approved), [approved]);
+  const notes = useMemo(() => paymentNotes(approved, rows, categories), [approved, rows, categories]);
+  const sharesDue = [...notes.values()].filter(n => n === "partner's share not paid yet").length;
+  const paidTwice = new Set(approved.filter(r => notes.get(r.id) === "share paid twice").map(entryKey)).size;
 
   const downloadCsv = () => {
-    const blob = new Blob([toCsv([...sortByPaid(approved), ...waiting], catName)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([toCsv([...sortByPaid(approved), ...waiting], catName, notes)], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${(tournament?.name ?? "payments").replace(/[^\w]+/g, "-")}-payments.csv`;
@@ -211,10 +214,18 @@ export function PaymentsPage() {
         <Stat label="Card" value={money(totals.card)} sub="before Stripe fees" />
       </div>
 
-      <Section title={`Paid and in (${approved.length})`}>
+      <Section
+        title={totals.entries === totals.payments
+          ? `Paid and in (${totals.entries})`
+          : `Paid and in (${totals.entries} entries · ${totals.payments} payments)`}
+        note={[
+          sharesDue ? `${sharesDue} partner${sharesDue === 1 ? " hasn't" : "s haven't"} paid their share yet (they pay by registering themselves).` : "",
+          paidTwice ? `${paidTwice} entr${paidTwice === 1 ? "y has" : "ies have"} a share paid twice: refund one share.` : "",
+        ].filter(Boolean).join(" ") || undefined}
+      >
         {approved.length === 0
           ? <p style={muted}>No approved entries yet.</p>
-          : <Rows list={sortByPaid(approved)} catName={catName} isMobile={isMobile} splitTeams={splitTeams} />}
+          : <Rows list={sortByPaid(approved)} catName={catName} isMobile={isMobile} notes={notes} />}
       </Section>
 
       {waiting.length > 0 && (
@@ -226,15 +237,16 @@ export function PaymentsPage() {
   );
 }
 
-// "(paid for both)" or, when each partner paid their own share, "(paid separately)".
-function partnerNote(r: PendingRegistration, splitTeams?: Set<string>): string {
-  if (r.payment_paid_full_for_partner) return " (paid for both)";
-  if (r.approved_team_id && splitTeams?.has(r.approved_team_id)) return " (paid separately)";
-  return "";
+// The note after the partner's name. Rows waiting for approval only say
+// whether the entry paid for both.
+function partnerNote(r: PendingRegistration, notes?: Map<string, PaymentNote>): string {
+  const note = notes ? notes.get(r.id) : r.payment_paid_full_for_partner ? "paid for both" : undefined;
+  if (note === "share paid twice") return " (share paid twice: refund one)";
+  return note ? ` (${note})` : "";
 }
 
-function Rows({ list, catName, isMobile, splitTeams }: {
-  list: PendingRegistration[]; catName: (id: string) => string; isMobile: boolean; splitTeams?: Set<string>;
+function Rows({ list, catName, isMobile, notes }: {
+  list: PendingRegistration[]; catName: (id: string) => string; isMobile: boolean; notes?: Map<string, PaymentNote>;
 }) {
   if (isMobile) {
     return (
@@ -253,7 +265,7 @@ function Rows({ list, catName, isMobile, splitTeams }: {
               <Line k="Reference" v={r.payment_reference ?? "—"} mono />
               <Line k="Email" v={<a href={`mailto:${r.player_email}`}>{r.player_email}</a>} />
               <Line k="Phone" v={r.player_phone ? <a href={`tel:${r.player_phone}`}>{r.player_phone}</a> : "—"} />
-              {r.partner_name && <Partner r={r} note={partnerNote(r, splitTeams)} />}
+              {r.partner_name && <Partner r={r} note={partnerNote(r, notes)} />}
             </div>
           );
         })}
@@ -284,7 +296,7 @@ function Rows({ list, catName, isMobile, splitTeams }: {
                 <td style={td}>{catName(r.category_id)}</td>
                 <td style={td}>
                   <strong>{r.player_name}</strong>
-                  {r.partner_name && <><br /><span style={muted}>with {r.partner_name}{partnerNote(r, splitTeams)}</span></>}
+                  {r.partner_name && <><br /><span style={muted}>with {r.partner_name}{partnerNote(r, notes)}</span></>}
                 </td>
                 <td style={td}>
                   <a href={`mailto:${r.player_email}`}>{r.player_email}</a>
