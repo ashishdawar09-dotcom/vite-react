@@ -48,6 +48,10 @@ type Payload = {
   consent?: ConsentInput;    // required when the tournament has a waiver
 };
 
+// Emails are stored trimmed and lowercased, and matched exactly; % and * are
+// refused because they would act as wildcards in a pattern match.
+const EMAIL_RE = /^[^\s@%*]+@[^\s@%*]+\.[^\s@%*]+$/;
+
 serveWithCors(handle);
 
 async function handle(req: Request): Promise<Response> {
@@ -129,7 +133,7 @@ async function handle(req: Request): Promise<Response> {
     }
 
     const playerEmail = body.player_email!.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerEmail)) {
+    if (!EMAIL_RE.test(playerEmail)) {
       return json({ success: false, error: "Invalid player email" }, 400);
     }
 
@@ -177,7 +181,7 @@ async function handle(req: Request): Promise<Response> {
     let partnerEmail: string | null = null;
     if (partnerProvided) {
       partnerEmail = body.partner_email!.trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerEmail)) {
+      if (!EMAIL_RE.test(partnerEmail)) {
         return json({ success: false, error: "Invalid partner email" }, 400);
       }
       if (partnerEmail === playerEmail) {
@@ -243,10 +247,10 @@ async function handle(req: Request): Promise<Response> {
       .select("id, status")
       .eq("category_id", body.category_id)
       .in("status", ["pending", "approved"])
-      .ilike("player_email", playerEmail)
-      .maybeSingle();
-    if (dup) {
-      const label = dup.status === "approved" ? "already approved" : "already submitted";
+      .eq("player_email", playerEmail)
+      .limit(1);
+    if (dup?.length) {
+      const label = dup[0].status === "approved" ? "already approved" : "already submitted";
       return json(
         { success: false, error: `You are ${label} for this category` },
         409,
@@ -309,7 +313,7 @@ async function handle(req: Request): Promise<Response> {
       .select("id", { count: "exact", head: true })
       .eq("tournament_id", body.tournament_id)
       .neq("status", "payment_expired")
-      .ilike("player_email", playerEmail);
+      .eq("player_email", playerEmail);
     if ((emailCount ?? 0) >= 8) {
       return json(
         { success: false, error: "Too many registrations for this email" },
@@ -325,7 +329,7 @@ async function handle(req: Request): Promise<Response> {
         .update({ status: "payment_expired", card_payment_status: "expired" })
         .eq("category_id", body.category_id)
         .eq("status", "awaiting_payment")
-        .ilike("player_email", playerEmail)
+        .eq("player_email", playerEmail)
         .select("stripe_checkout_session_id");
       for (const row of stale ?? []) {
         if (!row.stripe_checkout_session_id) continue;

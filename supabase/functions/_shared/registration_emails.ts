@@ -68,11 +68,13 @@ const norm = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
 // Where the named partner stands when each partner pays their own share (they
 // pay theirs by entering themselves): "due" with no entry of their own yet,
 // "entered" while it waits for a director, "confirmed" once it's approved.
-// Their entry counts when it names this player back or names nobody (solo),
-// or when an entry naming this player comes from someone with the partner's
-// name under another email. An entry of theirs with someone else is a clash
-// for the directors, so the partner gets neutral wording (null).
-// partnerConsented: they accepted the current waiver on that entry of their own.
+// Their entry counts when it names this player back, or when an entry naming
+// this player comes from someone with the partner's name under another email.
+// Any other entry of theirs gets neutral wording (null): one with someone else
+// is a clash for the directors, and a solo one isn't linked to this team when
+// approved (and may already be paired by hand).
+// partnerConsented: they accepted the current waiver on an entry of their own
+// (with this player, or solo) in this event.
 export async function partnerContext(supabase: SupabaseClient, { reg, c, t }: Loaded, siteUrl: string) {
   const email = norm(reg.partner_email);
   const closed = !t.registration_open ||
@@ -96,7 +98,7 @@ export async function partnerContext(supabase: SupabaseClient, { reg, c, t }: Lo
   ]);
   const own = (theirs ?? []).filter((e) => !e.partner_email || norm(e.partner_email) === me);
   const sameName = (n: string) => !!reg.partner_name && norm(n) === norm(reg.partner_name);
-  const mine = [...own, ...(namingMe ?? []).filter((e) => sameName(e.player_name))];
+  const mine = [...own.filter((e) => e.partner_email), ...(namingMe ?? []).filter((e) => sameName(e.player_name))];
 
   const ownShare = c.team_size === 2 && c.price_basis === "per_player" && !reg.payment_paid_full_for_partner;
   if (ownShare) {
@@ -233,7 +235,7 @@ export async function sendRegistrationApproved(
 ): Promise<{ sent: boolean; status: string }> {
   try {
     const { data: row } = await supabase.from("pending_registrations")
-      .select("status, approved_team_id").eq("id", regId).maybeSingle();
+      .select("status, approved_team_id, reviewed_at").eq("id", regId).maybeSingle();
     if (row?.status !== "approved") return { sent: false, status: "not approved" };
     if (!(await claim(supabase, regId, "approval"))) return { sent: false, status: "already sent" };
     const loaded = await load(supabase, regId);
@@ -243,15 +245,25 @@ export async function sendRegistrationApproved(
     }
     const { reg, t, c } = loaded;
 
-    let others: TeamEntry[] = [];
-    if (row.approved_team_id) {
+    // When both halves of a pair are approved a moment apart, the first one's
+    // email may still be going out. Wait for it (up to ~10 s, inside pg_net's
+    // 15 s timeout) so this one sees who it reached instead of emailing them
+    // again. Only earlier approvals are waited on, so two never wait on each
+    // other; a claim stuck in 'sending' just means both get emailed.
+    let others: (TeamEntry & { id: string; reviewed_at: string | null })[] = [];
+    const earlier = (o: { id: string; reviewed_at: string | null }) =>
+      (o.reviewed_at ?? "") < (row.reviewed_at ?? "") || (o.reviewed_at === row.reviewed_at && o.id < regId);
+    for (let tries = 0; row.approved_team_id && tries < 20; tries++) {
       const { data } = await supabase.from("pending_registrations")
-        .select("player_email, partner_email, approval_email_status")
+        .select("id, reviewed_at, player_email, partner_email, approval_email_status")
         .eq("approved_team_id", row.approved_team_id).eq("status", "approved").neq("id", regId);
       others = data ?? [];
+      if (!others.some((o) => o.approval_email_status === "sending" && earlier(o))) break;
+      await new Promise((r) => setTimeout(r, 500));
     }
     const to = approvalRecipients(reg, others);
     const partner = await partnerContext(supabase, loaded, siteUrl);
+    const waiverLink = to.partner ? await partnerWaiverLink(supabase, loaded, partner, siteUrl) : null;
 
     const ics = buildIcs(t, reg.id);
     const attachments = ics ? [{ filename: "event.ics", content: btoa(unescape(encodeURIComponent(ics))) }] : [];
@@ -269,11 +281,17 @@ export async function sendRegistrationApproved(
     const partnerErr = to.partner && reg.partner_email
       ? await sendEmail({
         to: reg.partner_email, fromName: t.name, replyTo: t.reply_to_email, attachments,
-        ...registrationApproved({
-          ...base, role: "partner", ...partner, waiverLink: await partnerWaiverLink(supabase, loaded, partner, siteUrl),
-        }),
+        ...registrationApproved({ ...base, role: "partner", ...partner, waiverLink }),
       })
       : null;
+    // Only a partner who owes their share after registration closed gets the
+    // waiver link here; record it as the received email does.
+    if (to.partner && waiverLink && partner.partnerShare === "due") {
+      await supabase.from("pending_registrations").update({
+        partner_waiver_email_status: partnerErr ? short(`failed: ${partnerErr}`) : "sent",
+        partner_waiver_emailed_at: new Date().toISOString(),
+      }).eq("id", reg.id);
+    }
 
     const problems = [outcome("player", playerErr), outcome("partner", partnerErr)].filter(Boolean);
     const status = problems.length ? `failed: ${problems.join("; ")}` : "sent";
