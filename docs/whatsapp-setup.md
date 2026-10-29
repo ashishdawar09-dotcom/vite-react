@@ -190,9 +190,35 @@ To see what the day-before message looks like, send it to **your own number** on
 curl -s -X POST https://wdqooznwzesmjdvlcrxw.supabase.co/functions/v1/whatsapp-reminders -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tournament_id":"<id>","test_number":"778 555 0123"}'
 ```
 
+## Inviting people who registered before the button
+
+`whatsapp-invite` emails everyone who registered before the tournament's WhatsApp switch went on (`whatsapp_enabled_at`) an invitation with their own code: one email per person, partners included, skipping anyone who already opted in or stopped. `whatsapp_invites` records each email sent, so nobody gets it twice. Admins only.
+
+Before the first send:
+
+1. Upload `whatsapp-hero.gif` and `whatsapp-avatar.png` next to the other email images at https://shuttlestorm.adawar.org/email/.
+2. Add WhatsApp to the privacy page (the email links to it).
+3. Deploy the partner-code and invites migrations and the new `whatsapp-inbound`, and check a partner code works from your own phone.
+
+Then work through the modes in order:
+
+```bash
+F=https://wdqooznwzesmjdvlcrxw.supabase.co/functions/v1/whatsapp-invite
+# Who would get it, and who is skipped and why. Sends nothing.
+curl -s -X POST $F -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tournament_id":"<id>","mode":"dry_run"}'
+# The email for person number 0 on that list, as JSON.
+curl -s -X POST $F -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tournament_id":"<id>","mode":"preview","index":0}'
+# That email, sent to a director's address only, with [TEST] in the subject.
+curl -s -X POST $F -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tournament_id":"<id>","mode":"test","index":0,"to":"you@example.com"}'
+# The real thing, 40 per call: repeat while "remaining" is above 0.
+curl -s -X POST $F -H "Authorization: Bearer $ADMIN_TOKEN" -d '{"tournament_id":"<id>","mode":"send"}'
+```
+
+The sign-off, the club's WhatsApp profile name and the sender address under the email default to Shuttle Storm's. Override them with the `EMAIL_SIGNOFF`, `WHATSAPP_PROFILE_NAME` and `EMAIL_SENDER_ADDRESS` secrets.
+
 ## How it works
 
-- **Opt-in** (`whatsapp-inbound`): the code is the first 8 characters of the registration ID. The opt-in is stored in `whatsapp_optins` with the chat it came from, and updates go to that chat. Up to 3 chats can opt in for one entry, e.g. a player and a parent. A player can opt in before their entry is approved; they get updates once it is.
+- **Opt-in** (`whatsapp-inbound`): the registrant's code is the first 8 characters of the registration ID, and their doubles partner's code is the last 8. The opt-in is stored in `whatsapp_optins` with the chat it came from, and updates go to that chat. Up to 3 chats can opt in for one entry, e.g. a player and a parent. A player can opt in before their entry is approved; they get updates once it is.
 - **STOP / START**: STOP sets `opted_out_at` for every entry on that chat and cancels anything queued for it. START clears it.
 - **Two IDs per chat**: a WhatsApp chat has a phone ID and a private `@lid` ID, and each message carries only one. They're tied together only on a join, where the sender has the code, if the entry already has an opt-in under the other form with the same WhatsApp profile name. The phone ID is the one we send to. STOP and START never redirect anyone's updates. A STOP from an unknown chat is ignored, unless an opt-in stored under the other form has the same WhatsApp name: one match is opted out, and several get an email to the organisers of those tournaments (at most 1 per sender and 10 overall a day). START from an unknown chat does nothing; the player can use the button again.
 - **Queue** (`whatsapp_outbox`, `whatsapp-send`): every message is queued, then sent one at a time by a single sender, 2–4 s apart (5–9 s for day-before messages). Replies and court calls go first. A failed message is retried a minute later, 3 tries in total. The functions wake the sender when they queue something, and pg_cron checks every minute as a backstop.
@@ -204,7 +230,7 @@ curl -s -X POST https://wdqooznwzesmjdvlcrxw.supabase.co/functions/v1/whatsapp-r
   - anything for a tournament whose switch has been turned off.
 - **Day before**: between 6 and 9 pm Pacific on the day before a tournament with WhatsApp on, pg_cron calls `whatsapp-reminders` every 5 minutes. Each chat is queued once, so people who opt in that evening still get it. If a message fails 3 times (the phone was offline, say), a later run that evening queues it again, up to 2 rounds per chat.
 - **Court calls**: `notify-court-allocated` queues one message per chat on the match. Results are in `notification_log` with `channel = 'whatsapp'`. Players who haven't opted in are counted in the function's response, not logged.
-- **Doubles partners** can't opt in yet: the button is only on the confirmation screen of the person who registered.
+- **Doubles partners** opt in with their own code (the last 8 characters). The button is only on the registrant's confirmation screen, so partners get their code from the invitation email.
 - **To stop everything**: untick the setting. Anything already queued for that tournament is dropped. Or run `supabase secrets unset EVOLUTION_API_URL`.
 
 ## Tournament day
