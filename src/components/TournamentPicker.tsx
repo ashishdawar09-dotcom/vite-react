@@ -19,6 +19,7 @@ type EditState = {
   registration_open: boolean;
   terms_text: string;
   whatsapp_enabled: boolean;
+  whatsapp_number: string;
 };
 
 function emptyEditState(): EditState {
@@ -28,8 +29,16 @@ function emptyEditState(): EditState {
     event_time: "", registration_deadline: "",
     contact_info: "", e_transfer_email: "",
     registration_open: true, terms_text: "",
-    whatsapp_enabled: false,
+    whatsapp_enabled: false, whatsapp_number: "",
   };
+}
+
+// "+1 (778) 555-0123" -> "17785550123"; 10 digits get the North American 1.
+// Empty when it can't be a full international number.
+function whatsappDigits(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 10) d = "1" + d;
+  return /^[1-9]\d{7,14}$/.test(d) ? d : "";
 }
 
 // Convert a YYYY-MM-DD event_date into a "2 days before, 23:59 local" deadline
@@ -91,6 +100,7 @@ export function TournamentPicker({
         registration_open: current.registration_open ?? true,
         terms_text: current.terms_text ?? "",
         whatsapp_enabled: current.whatsapp_enabled ?? false,
+        whatsapp_number: current.whatsapp_number ?? "",
       });
     }
   }, [editing, current]);
@@ -136,6 +146,14 @@ export function TournamentPicker({
 
   const saveEdit = async () => {
     if (!current || !form.name.trim()) return;
+    if (form.whatsapp_number.trim() && !whatsappDigits(form.whatsapp_number)) {
+      toast("WhatsApp number: include the country code, e.g. +1 778 555 0123", "error");
+      return;
+    }
+    if (form.whatsapp_enabled && !form.whatsapp_number.trim()) {
+      toast("Add the club's WhatsApp number to turn on WhatsApp updates", "error");
+      return;
+    }
     setBusy(true);
     try {
       const patch: Partial<Tournament> = {
@@ -154,6 +172,7 @@ export function TournamentPicker({
         registration_open: form.registration_open,
         terms_text: form.terms_text.trim() || null,
         whatsapp_enabled: form.whatsapp_enabled,
+        whatsapp_number: whatsappDigits(form.whatsapp_number) || null,
       };
       await db.updateTournament(current.id, patch);
       setEditing(false);
@@ -266,8 +285,10 @@ export function TournamentPicker({
             <SectionHeader>Player messages</SectionHeader>
             <label style={{ fontSize: 13, display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12, cursor: "pointer" }}>
               <input type="checkbox" checked={form.whatsapp_enabled} onChange={e => setField("whatsapp_enabled", e.target.checked)} style={{ marginTop: 3 }} />
-              <span><strong>WhatsApp messages</strong> — a "get ready" message the evening before, and "go to Court N" when a court is assigned. Sent to the phone numbers on approved entries through our own Evolution API server. Email and push go out either way.</span>
+              <span><strong>WhatsApp updates</strong> — players who ask for them get a "get ready" message the evening before, and "go to Court N" when a court is assigned. The registration confirmation shows a button that opens WhatsApp with their code; sending it is the opt-in. Sent through our own Evolution API server. Email and push go out either way.</span>
             </label>
+            <label style={labelStyle}>Club WhatsApp number (players message this to opt in)</label>
+            <input type="tel" value={form.whatsapp_number} onChange={e => setField("whatsapp_number", e.target.value)} placeholder="+1 778 555 0123" style={lightInputStyle} />
 
             <SectionHeader>Terms & rules (shown on the form)</SectionHeader>
             <textarea value={form.terms_text} onChange={e => setField("terms_text", e.target.value)} placeholder="Type each paragraph separated by a blank line…" rows={6} style={{ ...lightInputStyle, resize: "vertical", fontFamily: "inherit" }} />
