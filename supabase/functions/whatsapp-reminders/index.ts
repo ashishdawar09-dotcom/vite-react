@@ -91,8 +91,9 @@ async function handle(req: Request): Promise<Response> {
       // A message that failed 3 times frees its slot so a later run can try
       // again (the phone may have been offline for a few minutes); after 2
       // such rounds, leave that chat alone for the evening.
-      const { data: failedRows } = await supabase.from("whatsapp_outbox").select("jid")
+      const { data: failedRows, error: failErr } = await supabase.from("whatsapp_outbox").select("jid")
         .eq("tournament_id", t.id).eq("kind", "day_before").eq("status", "failed");
+      if (failErr) throw new Error(`failed rows: ${failErr.message}`);
       const failures = new Map<string, number>();
       for (const f of failedRows ?? []) failures.set(f.jid, (failures.get(f.jid) ?? 0) + 1);
       const todo = [...chats].filter(([jid]) => (failures.get(jid) ?? 0) < 2);

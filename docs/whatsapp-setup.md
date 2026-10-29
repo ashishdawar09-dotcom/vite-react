@@ -140,7 +140,7 @@ supabase secrets set EVOLUTION_API_URL=https://wa.adawar.org EVOLUTION_API_KEY=<
 The migration created the secret the database uses to wake the functions. Copy it into the functions' secrets without printing it:
 
 ```bash
-WA_SECRET="$(supabase db query --linked --output-format json "select decrypted_secret as s from vault.decrypted_secrets where name = 'whatsapp_internal_secret'" | jq -r '.rows[0].s')"
+WA_SECRET="$(supabase db query --linked --output-format json "select decrypted_secret as s from vault.decrypted_secrets where name = 'whatsapp_internal_secret'" | jq -r '(if type == "array" then . else .rows end)[0].s')"
 ```
 
 It must be exactly 64 characters. If this prints anything else, stop and look:
@@ -184,7 +184,8 @@ curl -s -X POST https://wdqooznwzesmjdvlcrxw.supabase.co/functions/v1/whatsapp-r
 ## How it works
 
 - **Opt-in** (`whatsapp-inbound`): the code is the first 8 characters of the registration ID. The opt-in is stored in `whatsapp_optins` with the chat it came from, and updates go to that chat. Up to 3 chats can opt in for one entry, e.g. a player and a parent. A player can opt in before their entry is approved; they get updates once it is.
-- **STOP / START**: STOP sets `opted_out_at` for every entry on that chat and cancels anything queued for it. START clears it. START only counts when it's the whole message, so a question like "Start time tomorrow?" doesn't turn updates back on. A message that's only an 8-character code we don't recognise gets no reply.
+- **STOP / START**: STOP sets `opted_out_at` for every entry on that chat and cancels anything queued for it. START clears it.
+- **Two IDs per chat**: a WhatsApp chat has a phone ID and a private `@lid` ID, and each message carries only one. When a message arrives under the form we don't have on file, it's linked to the stored chat if the WhatsApp profile name matches exactly one candidate. If a STOP still can't be matched while such unlinked opt-ins exist, the organisers (`admin_notify_emails`) get an email to turn that player off by hand, and the sender is told it's in hand. START only counts when it's the whole message, so a question like "Start time tomorrow?" doesn't turn updates back on. A message that's only an 8-character code we don't recognise gets no reply.
 - **Queue** (`whatsapp_outbox`, `whatsapp-send`): every message is queued, then sent one at a time by a single sender, 2–4 s apart (5–9 s for day-before messages). Replies and court calls go first. A failed message is retried a minute later, 3 tries in total. The functions wake the sender when they queue something, and pg_cron checks every minute as a backstop.
 - **Dropped instead of sent late**:
   - a court call still unsent after 20 minutes ("you're up now" would be wrong by then),
