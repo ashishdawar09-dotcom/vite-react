@@ -8,7 +8,7 @@ import { supabase } from "../../lib/supabase";
 import { colors } from "../../lib/theme";
 import { Login } from "../../components/Login";
 import type { Category, PendingRegistration, Tournament } from "../../types";
-import { entryKey, type PaymentNote, paymentNotes, paymentTotals } from "./paymentTotals";
+import { entryGroups, type PaymentNote, paymentNotes, paymentTotals } from "./paymentTotals";
 
 // /payments — live report of every paid entry for the tournament directors.
 // Admin-only: RLS on pending_registrations already limits reads to admins, and
@@ -150,7 +150,10 @@ export function PaymentsPage() {
   const totals = useMemo(() => paymentTotals(approved), [approved]);
   const notes = useMemo(() => paymentNotes(approved, rows, categories), [approved, rows, categories]);
   const sharesDue = [...notes.values()].filter(n => n === "partner's share not paid yet").length;
-  const paidTwice = new Set(approved.filter(r => notes.get(r.id) === "share paid twice").map(entryKey)).size;
+  const paidTwice = useMemo(() => {
+    const groups = entryGroups(approved);
+    return new Set(approved.filter(r => notes.get(r.id) === "share paid twice").map(r => groups.get(r.id))).size;
+  }, [approved, notes]);
 
   const downloadCsv = () => {
     const blob = new Blob([toCsv([...sortByPaid(approved), ...waiting], catName, notes)], { type: "text/csv;charset=utf-8" });

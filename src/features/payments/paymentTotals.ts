@@ -14,6 +14,21 @@ export function entryKey(r: Pick<Row, "id" | "category_id" | "approved_team_id" 
   return r.approved_team_id ?? r.id;
 }
 
+// Which approved rows are the same entry: a pair's two registrations (same
+// key), and a solo registration from someone another row names as partner in
+// that event (they paid their share without naming anyone). Returns one group
+// key per row id.
+export function entryGroups(approved: Pick<Row, "id" | "category_id" | "approved_team_id" | "player_email" | "partner_email">[]) {
+  const group = new Map(approved.map(r => [r.id, entryKey(r)]));
+  const named = new Map<string, string>();
+  for (const r of approved) if (r.partner_email) named.set(`${r.category_id}|${norm(r.partner_email)}`, group.get(r.id)!);
+  for (const r of approved) {
+    const pairKey = r.partner_email ? undefined : named.get(`${r.category_id}|${norm(r.player_email)}`);
+    if (pairKey) group.set(r.id, pairKey);
+  }
+  return group;
+}
+
 // Headline numbers for approved entries: a pair who paid in two payments is
 // one entry. Players are counted once each, by email.
 export function paymentTotals(approved: Row[]) {
@@ -25,7 +40,7 @@ export function paymentTotals(approved: Row[]) {
     else if (r.partner_name) people.add(`${r.id}:partner`);
   }
   return {
-    entries: new Set(approved.map(entryKey)).size,
+    entries: new Set(entryGroups(approved).values()).size,
     players: people.size,
     payments: approved.length,
     total: sum(approved),
@@ -48,8 +63,9 @@ export function paymentNotes(
   rows: Pick<Row, "category_id" | "status" | "player_email">[],
   categories: Pick<Category, "id" | "team_size" | "price_basis">[],
 ): Map<string, PaymentNote> {
+  const groups = entryGroups(approved);
   const byEntry = new Map<string, Row[]>();
-  for (const r of approved) byEntry.set(entryKey(r), [...(byEntry.get(entryKey(r)) ?? []), r]);
+  for (const r of approved) byEntry.set(groups.get(r.id)!, [...(byEntry.get(groups.get(r.id)!) ?? []), r]);
   const entered = new Set(rows.filter(r => r.status === "pending" || r.status === "approved")
     .map(r => `${r.category_id}|${norm(r.player_email)}`));
   const ownShareDoubles = new Set(categories
@@ -57,7 +73,7 @@ export function paymentNotes(
 
   const notes = new Map<string, PaymentNote>();
   for (const r of approved) {
-    const group = byEntry.get(entryKey(r))!;
+    const group = byEntry.get(groups.get(r.id)!)!;
     if (group.length > 1) {
       notes.set(r.id, group.some(g => g.payment_paid_full_for_partner) ? "share paid twice" : "paid separately");
     } else if (r.payment_paid_full_for_partner) {

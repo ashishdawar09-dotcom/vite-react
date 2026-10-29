@@ -51,6 +51,22 @@ describe("paymentTotals", () => {
   });
 });
 
+describe("solo halves", () => {
+  // Bea entered solo; Al then named her.
+  const bea = row({ id: "s1", player_email: "bea@x.com" });
+  const alOwn = row({ id: "s2", player_email: "al@x.com", partner_name: "Bea", partner_email: "Bea@x.com", approved_team_id: "t9" });
+
+  it("counts a solo entry and the entry naming that player as one entry", () => {
+    expect(paymentTotals([bea, alOwn])).toMatchObject({ entries: 1, players: 2, payments: 2 });
+    expect(Object.fromEntries(paymentNotes([bea, alOwn], [bea, alOwn], categories))).toEqual({ s1: "paid separately", s2: "paid separately" });
+  });
+
+  it("flags a share paid twice when the entry naming them paid for both", () => {
+    const alBoth = { ...alOwn, payment_paid_full_for_partner: true, amount_due_cents: 8000 };
+    expect(Object.fromEntries(paymentNotes([bea, alBoth], [bea, alBoth], categories))).toEqual({ s1: "share paid twice", s2: "share paid twice" });
+  });
+});
+
 describe("paymentNotes", () => {
   const notesFor = (approved: R[], pending: R[] = []) =>
     Object.fromEntries(paymentNotes(approved, [...approved, ...pending], categories));
