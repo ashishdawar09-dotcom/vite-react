@@ -77,6 +77,18 @@ export function PublicRegistrationPage() {
   const reduce = useReducedMotion();
 
   const [form, setForm] = useState<FormState>(emptyFormState());
+  // ?category=<id> picks the event once categories load, e.g. from the "Pay
+  // your share" button in a partner's email. Set during render (not in an
+  // effect) so the form never shows without it.
+  const [wantedCategory, setWantedCategory] = useState(() => new URLSearchParams(window.location.search).get("category"));
+  if (wantedCategory && categories.some((c) => c.id === wantedCategory)) {
+    setWantedCategory(null);
+    setForm((f) => (f.category_id ? f : { ...f, category_id: wantedCategory }));
+  }
+  // ?share=1: they came to pay their share of an entry that named them, so
+  // they must name that partner (with the email the partner registered with)
+  // for the two entries to be matched; entering solo would leave them unpaired.
+  const [payingShare] = useState(() => new URLSearchParams(window.location.search).get("share") === "1");
   const [touched, setTouched] = useState<Set<keyof FormState>>(new Set());
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -132,8 +144,9 @@ export function PublicRegistrationPage() {
       requireAge: ageRequired,
       requireWaiver: waiverRequired,
       requirePartnerAge: partnerAgeNeeded,
+      requirePartner: payingShare,
     }),
-    [form, payMethod, selectedCategory, ageRequired, waiverRequired, partnerAgeNeeded],
+    [form, payMethod, selectedCategory, ageRequired, waiverRequired, partnerAgeNeeded, payingShare],
   );
   const visibleErrors: FormErrors = useMemo(() => {
     const out: FormErrors = {};
@@ -425,7 +438,7 @@ export function PublicRegistrationPage() {
           )}
           {tournament?.waiver_text && (
             <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 13, lineHeight: 1.5 }}>
-              If you entered a doubles partner, we've emailed them a link to accept the waiver. They need to do this before they can play.
+              If you entered a doubles partner, we've emailed them what they still need to do before they can play.
             </p>
           )}
           <p style={{ color: colors.text.mutedLight, marginTop: spacing.md, fontSize: 13 }}>
@@ -480,7 +493,7 @@ export function PublicRegistrationPage() {
       </div>
 
       {highlights && <Highlights items={highlights} isMobile={isMobile} />}
-      {soloDoublesOffered && !formClosed && <PartnerPromise />}
+      {soloDoublesOffered && !formClosed && !payingShare && <PartnerPromise />}
 
       {/* Preamble card */}
       <Card>
@@ -685,22 +698,24 @@ export function PublicRegistrationPage() {
                   <SectionHeader
                     step={stepOf("partner")}
                     title="Your partner"
-                    sub={selectedCategory.allow_solo_signup ? undefined : "Only one member of each team needs to submit this form."}
+                    sub={payingShare
+                      ? "Paying your share? Enter the partner who entered you, with the email address they registered with."
+                      : selectedCategory.allow_solo_signup ? undefined : "Paying for both of you? Then only one of you needs to submit this form."}
                   />
-                  {selectedCategory.allow_solo_signup && <PartnerPromise compact />}
-                  <Field label="Partner Name" required={!selectedCategory.allow_solo_signup} error={visibleErrors.partner_name}>
+                  {selectedCategory.allow_solo_signup && !payingShare && <PartnerPromise compact />}
+                  <Field label="Partner Name" required={!selectedCategory.allow_solo_signup || payingShare} error={visibleErrors.partner_name}>
                     <input type="text" style={inputStyle}
                       value={form.partner_name}
                       onChange={(e) => set("partner_name", e.target.value)}
                       onBlur={() => markTouched("partner_name")} />
                   </Field>
-                  <Field label="Partner Contact" required={!selectedCategory.allow_solo_signup} hint="Numbers only" error={visibleErrors.partner_phone}>
+                  <Field label="Partner Contact" required={!selectedCategory.allow_solo_signup || payingShare} hint="Numbers only" error={visibleErrors.partner_phone}>
                     <input type="tel" inputMode="numeric" style={inputStyle}
                       value={form.partner_phone}
                       onChange={(e) => set("partner_phone", phoneInput(e.target.value))}
                       onBlur={() => markTouched("partner_phone")} />
                   </Field>
-                  <Field label="Partner Email" required={!selectedCategory.allow_solo_signup} error={visibleErrors.partner_email}>
+                  <Field label="Partner Email" required={!selectedCategory.allow_solo_signup || payingShare} error={visibleErrors.partner_email}>
                     <input type="email" inputMode="email" style={inputStyle}
                       value={form.partner_email}
                       onChange={(e) => set("partner_email", e.target.value)}
@@ -773,7 +788,9 @@ export function PublicRegistrationPage() {
               </Field>
               {selectedCategory?.team_size === 2 && form.partner_email.trim() && (
                 <p style={{ fontSize: 13, color: colors.text.mutedLight, margin: 0, lineHeight: 1.5 }}>
-                  We'll email {form.partner_name.trim() || "your partner"} a link to read the regulations and accept the waiver too.
+                  {showPaymentSplit && paymentSplit === "separate"
+                    ? `We'll email ${form.partner_name.trim() || "your partner"} too. If they haven't entered yet, it tells them how to pay their share; the form they use has the waiver.`
+                    : `If ${form.partner_name.trim() || "your partner"} hasn't accepted the waiver yet, we'll email them a link to read the regulations and accept it.`}
                 </p>
               )}
             </Card>

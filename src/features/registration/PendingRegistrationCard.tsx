@@ -7,7 +7,7 @@ import { sendApprovalEmail } from "../../lib/notifications";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, FeeType, PendingRegistration, WaiverConsent } from "../../types";
 import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
-import { approvalEmailOk, approvedMessage, errorMessage } from "./approvalMessages";
+import { approvalEmailFailedMessage, approvalEmailOk, approvedMessage, errorMessage } from "./approvalMessages";
 
 type Props = {
   reg: PendingRegistration;
@@ -62,6 +62,11 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
   const partnerPaysSeparately =
     !!category && category.team_size === 2 && priceBasis(category) === "per_player" &&
     !!reg.partner_name && !reg.payment_paid_full_for_partner;
+  // Own-share partner who hasn't been sent a waiver link (they get one only
+  // after registration closes): point directors at the pay link instead.
+  const payShareLink = partnerPaysSeparately && !reg.partner_waiver_email_status
+    ? `${window.location.origin}/register/${reg.tournament_id}?category=${reg.category_id}&share=1`
+    : null;
   const coversTeam =
     !!category && category.team_size === 2 && !!reg.partner_name && !partnerPaysSeparately;
 
@@ -75,7 +80,7 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
       toast.success(approvedMessage(reg, result, email));
       if (result?.warning) toast.error(result.warning);
       if (!approvalEmailOk(email)) {
-        toast.error(`The “You're in” email didn't send (${email.status}). Let them know directly.`);
+        toast.error(approvalEmailFailedMessage(result, email));
       }
       if (!reduce) {
         confetti({ particleCount: 60, spread: 60, startVelocity: 30, origin: { y: 0.4 } });
@@ -263,7 +268,23 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
                     : "Email to partner failed: share the link yourself"}
                 </span>
               )}
-              {!partnerConsent && reg.partner_consent_token && (
+              {/* A partner who pays their own share signs on the form they pay
+                  with; the waiver link alone would tell them they're all set. */}
+              {!partnerConsent && payShareLink && (
+                <span>Partner signs and pays their share on their own entry</span>
+              )}
+              {!partnerConsent && payShareLink && (
+                <button type="button"
+                  onClick={() => onCopy(`pl-${reg.id}`, payShareLink)}
+                  style={{
+                    padding: "4px 10px", border: `1px solid ${colors.border.lightStrong}`,
+                    borderRadius: radii.sm, background: colors.bg.card, fontSize: 12,
+                    fontWeight: 700, cursor: "pointer", color: colors.text.primaryLight,
+                  }}>
+                  {copiedKey === `pl-${reg.id}` ? "Copied!" : "Copy partner's pay link"}
+                </button>
+              )}
+              {!partnerConsent && !payShareLink && reg.partner_consent_token && (
                 <button type="button"
                   onClick={() => onCopy(`wl-${reg.id}`, `${window.location.origin}/waiver/${reg.partner_consent_token}`)}
                   style={{

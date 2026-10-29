@@ -11,10 +11,12 @@
 //   SUPABASE_SERVICE_ROLE_KEY
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
-import { allow, allowClient, appOrigin, isUuid, json, serveWithCors } from "../_shared/http.ts";
+import { allow, allowClient, appOrigin, isUuid, json, serveWithCors, SITE_URL } from "../_shared/http.ts";
 import { cardCents, etransferCents, playerShare, STATEMENT_SUFFIX } from "../_shared/pricing.ts";
 import { stripeConfigured, stripePost } from "../_shared/stripe.ts";
 import { sendRegistrationReceived } from "../_shared/registration_emails.ts";
+import { adminRefusedRepeat } from "../_shared/emails.ts";
+import { sendEmail } from "../_shared/mailer.ts";
 import { type ConsentInput, parseAge, recordConsent, validateConsent } from "../_shared/waiver.ts";
 import { ageProblem } from "../_shared/ages.ts";
 import { cleanAttribution, cleanHeardFrom } from "../_shared/attribution.ts";
@@ -45,6 +47,10 @@ type Payload = {
   partner_student?: boolean;
   consent?: ConsentInput;    // required when the tournament has a waiver
 };
+
+// Emails are stored trimmed and lowercased, and matched exactly; % and * are
+// refused because they would act as wildcards in a pattern match.
+const EMAIL_RE = /^[^\s@%*]+@[^\s@%*]+\.[^\s@%*]+$/;
 
 serveWithCors(handle);
 
@@ -127,14 +133,14 @@ async function handle(req: Request): Promise<Response> {
     }
 
     const playerEmail = body.player_email!.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerEmail)) {
+    if (!EMAIL_RE.test(playerEmail)) {
       return json({ success: false, error: "Invalid player email" }, 400);
     }
 
     // ---- Validation: tournament exists, open, not past deadline ----
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("id, name, registration_open, registration_deadline, waiver_text, waiver_version, youth_price, student_price")
+      .select("id, name, registration_open, registration_deadline, waiver_text, waiver_version, youth_price, student_price, admin_notify_emails")
       .eq("id", body.tournament_id)
       .maybeSingle();
     if (tErr || !t) {
@@ -175,7 +181,7 @@ async function handle(req: Request): Promise<Response> {
     let partnerEmail: string | null = null;
     if (partnerProvided) {
       partnerEmail = body.partner_email!.trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerEmail)) {
+      if (!EMAIL_RE.test(partnerEmail)) {
         return json({ success: false, error: "Invalid partner email" }, 400);
       }
       if (partnerEmail === playerEmail) {
@@ -241,14 +247,62 @@ async function handle(req: Request): Promise<Response> {
       .select("id, status")
       .eq("category_id", body.category_id)
       .in("status", ["pending", "approved"])
-      .ilike("player_email", playerEmail)
-      .maybeSingle();
-    if (dup) {
-      const label = dup.status === "approved" ? "already approved" : "already submitted";
+      .eq("player_email", playerEmail)
+      .limit(1);
+    if (dup?.length) {
+      const label = dup[0].status === "approved" ? "already approved" : "already submitted";
       return json(
         { success: false, error: `You are ${label} for this category` },
         409,
       );
+    }
+
+    // ---- Already paid for by the partner ----
+    // The partner's entry names this player and paid for both of them, and
+    // this entry names that partner back: it would pay the same share twice.
+    // Only an exact match is refused, and the message names nobody, so typing
+    // someone's email doesn't reveal who entered with them. The waiver they
+    // just accepted is kept as the partner's acceptance on that entry, and an
+    // e-Transfer (sent before submitting) is flagged to the directors.
+    if (partnerEmail) {
+      const { data: covered } = await supabase
+        .from("pending_registrations")
+        .select("id, player_name")
+        .eq("category_id", body.category_id)
+        .in("status", ["pending", "approved"])
+        .eq("player_email", partnerEmail)
+        .eq("partner_email", playerEmail)
+        .eq("payment_paid_full_for_partner", true)
+        .limit(1);
+      if (covered?.length) {
+        if (consent) {
+          const err = await recordConsent(supabase, req, t, {
+            registration_id: covered[0].id,
+            role: "partner",
+            participant_name: body.player_name!.trim(),
+            participant_email: playerEmail,
+            consent,
+          });
+          // Already accepted on that entry: nothing to add.
+          if (err && !/duplicate key/i.test(err)) console.error("register-player: refused entry's waiver not saved:", err);
+        }
+        const directors = ((t.admin_notify_emails ?? []) as string[]).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        if (!payByCard && directors.length) {
+          const err = await sendEmail({
+            to: directors, fromName: t.name, replyTo: playerEmail,
+            ...adminRefusedRepeat({
+              category: c, playerName: body.player_name!, playerEmail, paidBy: covered[0].player_name,
+              reference: body.payment_reference ?? null,
+            }),
+          });
+          if (err) console.error("register-player: refused-entry alert failed:", err);
+        }
+        return json({
+          success: false,
+          error: "You've already been entered and paid for in this event, so you don't need to register again." +
+            (payByCard ? "" : " If you've already sent an e-Transfer for this, reply to the email you got when you were entered and we'll refund it."),
+        }, 409);
+      }
     }
 
     // ---- Flood guard: cap total registrations per email per tournament ----
@@ -259,7 +313,7 @@ async function handle(req: Request): Promise<Response> {
       .select("id", { count: "exact", head: true })
       .eq("tournament_id", body.tournament_id)
       .neq("status", "payment_expired")
-      .ilike("player_email", playerEmail);
+      .eq("player_email", playerEmail);
     if ((emailCount ?? 0) >= 8) {
       return json(
         { success: false, error: "Too many registrations for this email" },
@@ -275,7 +329,7 @@ async function handle(req: Request): Promise<Response> {
         .update({ status: "payment_expired", card_payment_status: "expired" })
         .eq("category_id", body.category_id)
         .eq("status", "awaiting_payment")
-        .ilike("player_email", playerEmail)
+        .eq("player_email", playerEmail)
         .select("stripe_checkout_session_id");
       for (const row of stale ?? []) {
         if (!row.stripe_checkout_session_id) continue;
@@ -355,7 +409,7 @@ async function handle(req: Request): Promise<Response> {
     if (!payByCard) {
       // Confirmation to the player and partner (with the partner's waiver
       // link). Card entries get theirs once payment completes (stripe-webhook).
-      await sendRegistrationReceived(supabase, ins.id, appOrigin(req));
+      await sendRegistrationReceived(supabase, ins.id, SITE_URL);
       return json({ success: true, registrationId: ins.id }, 200);
     }
 
@@ -390,7 +444,7 @@ async function handle(req: Request): Promise<Response> {
         // makes sure it does, whatever the account's email settings.
         payment_intent_data: { metadata: meta, receipt_email: playerEmail, statement_descriptor_suffix: STATEMENT_SUFFIX },
         success_url: `${back}?payment=success&reg=${ins.id}`,
-        cancel_url: `${back}?payment=cancelled`,
+        cancel_url: `${back}?payment=cancelled&category=${body.category_id}`,
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
       }, `badminton-checkout-${ins.id}`);
       await supabase
