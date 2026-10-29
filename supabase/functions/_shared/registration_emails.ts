@@ -5,6 +5,7 @@
 // registration, a payment webhook or an approval.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { approvalRecipients, type TeamEntry } from "./approval_recipients.ts";
 import { adminNewEntry, buildIcs, type EmailData, registrationApproved, registrationReceived } from "./emails.ts";
 import { sendEmail } from "./mailer.ts";
 
@@ -149,13 +150,19 @@ async function notifyDirectors(supabase: SupabaseClient, regId: string, appOrigi
   }
 }
 
+// Status for an approval that needed no email: the pair's other entry on the
+// same team already sent "You're in" to both of them.
+export const NOT_NEEDED = "not needed: already emailed for this team";
+
 // "You're in!", with a calendar invite. Only for approved entries.
+// A NOT_NEEDED result counts as sent: nobody is missing their email.
 export async function sendRegistrationApproved(
   supabase: SupabaseClient,
   regId: string,
 ): Promise<{ sent: boolean; status: string }> {
   try {
-    const { data: row } = await supabase.from("pending_registrations").select("status").eq("id", regId).maybeSingle();
+    const { data: row } = await supabase.from("pending_registrations")
+      .select("status, approved_team_id").eq("id", regId).maybeSingle();
     if (row?.status !== "approved") return { sent: false, status: "not approved" };
     if (!(await claim(supabase, regId, "approval"))) return { sent: false, status: "already sent" };
     const loaded = await load(supabase, regId);
@@ -164,15 +171,31 @@ export async function sendRegistrationApproved(
       return { sent: false, status: "registration not found" };
     }
     const { reg, t, c } = loaded;
+
+    let others: TeamEntry[] = [];
+    if (row.approved_team_id) {
+      const { data } = await supabase.from("pending_registrations")
+        .select("player_email, partner_email, approval_email_status")
+        .eq("approved_team_id", row.approved_team_id).eq("status", "approved").neq("id", regId);
+      others = data ?? [];
+    }
+    const to = approvalRecipients(reg, others);
+    if (!to.player && !to.partner) {
+      await finish(supabase, regId, "approval", NOT_NEEDED);
+      return { sent: true, status: NOT_NEEDED };
+    }
+
     const ics = buildIcs(t, reg.id);
     const attachments = ics ? [{ filename: "event.ics", content: btoa(unescape(encodeURIComponent(ics))) }] : [];
     const base: Omit<EmailData, "role"> = { tournament: t, category: c, reg, assetBase: ASSET_BASE, privacyUrl: PRIVACY_URL };
 
-    const playerErr = await sendEmail({
-      to: reg.player_email, fromName: t.name, replyTo: t.reply_to_email, attachments,
-      ...registrationApproved({ ...base, role: "player" }),
-    });
-    const partnerErr = reg.partner_email
+    const playerErr = to.player
+      ? await sendEmail({
+        to: reg.player_email, fromName: t.name, replyTo: t.reply_to_email, attachments,
+        ...registrationApproved({ ...base, role: "player" }),
+      })
+      : null;
+    const partnerErr = to.partner && reg.partner_email
       ? await sendEmail({
         to: reg.partner_email, fromName: t.name, replyTo: t.reply_to_email, attachments,
         ...registrationApproved({ ...base, role: "partner" }),
