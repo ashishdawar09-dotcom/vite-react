@@ -909,12 +909,21 @@ export async function listWaiverConsents(tournament_id: string): Promise<WaiverC
   return (data ?? []) as WaiverConsent[];
 }
 
-export async function approveRegistration(
-  reg_id: string,
-): Promise<{ player_id: string; partner_id: string | null; team_id: string | null }> {
+export type ApproveRegistrationResult = {
+  player_id: string;
+  partner_id: string | null;
+  team_id: string | null;
+  team_name?: string | null;
+  // True when the entry completed a team the pair already had.
+  linked_existing_team?: boolean;
+  // Set when the director needs to act, e.g. refund a share paid twice.
+  warning?: string | null;
+};
+
+export async function approveRegistration(reg_id: string): Promise<ApproveRegistrationResult> {
   const { data, error } = await supabase.rpc("approve_registration", { p_reg_id: reg_id });
   if (error) throw error;
-  return data as { player_id: string; partner_id: string | null; team_id: string | null };
+  return data as ApproveRegistrationResult;
 }
 
 export async function rejectRegistration(reg_id: string, reason: string): Promise<void> {

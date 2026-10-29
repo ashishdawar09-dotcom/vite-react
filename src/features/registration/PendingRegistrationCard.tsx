@@ -7,6 +7,7 @@ import { sendApprovalEmail } from "../../lib/notifications";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, FeeType, PendingRegistration, WaiverConsent } from "../../types";
 import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
+import { approvalEmailOk, approvedMessage, errorMessage } from "./approvalMessages";
 
 type Props = {
   reg: PendingRegistration;
@@ -45,21 +46,6 @@ async function copy(text: string, onOk: () => void) {
   try { await navigator.clipboard.writeText(text); onOk(); } catch { /* ignore */ }
 }
 
-// Supabase error objects are NOT instances of Error. They look like
-// { message, details, hint, code }. This helper extracts a usable string
-// from any of: Error, PostgrestError, plain object with .message, or other.
-function errorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  if (e && typeof e === "object") {
-    const obj = e as Record<string, unknown>;
-    const parts = [obj.message, obj.details, obj.hint, obj.code]
-      .filter((v) => typeof v === "string" && v) as string[];
-    if (parts.length) return parts.join(" · ");
-    try { return JSON.stringify(e); } catch { /* fall through */ }
-  }
-  return String(e);
-}
-
 export function PendingRegistrationCard({ reg, category, onResolved, waiverRequired, playerConsent, partnerConsent }: Props) {
   const reduce = useReducedMotion();
   const toast = useToast();
@@ -82,14 +68,13 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
   const handleApprove = async () => {
     setBusy("approve");
     try {
-      await approveRegistration(reg.id);
+      const result = await approveRegistration(reg.id);
       // The database also sends this on approval; whichever call is first
       // sends, the other sees "already sent".
       const email = await sendApprovalEmail(reg.id);
-      const emailed = email.sent || email.status === "already sent";
-      toast.success(`Approved — ${reg.player_name}${reg.partner_name ? " & " + reg.partner_name : ""} added` +
-        (emailed ? " · “You're in” email sent" : ""));
-      if (!emailed) {
+      toast.success(approvedMessage(reg, result, email));
+      if (result?.warning) toast.error(result.warning);
+      if (!approvalEmailOk(email)) {
         toast.error(`The “You're in” email didn't send (${email.status}). Let them know directly.`);
       }
       if (!reduce) {
