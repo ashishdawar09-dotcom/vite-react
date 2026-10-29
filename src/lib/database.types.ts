@@ -825,6 +825,8 @@ export type Database = {
           waiver_text: string | null
           waiver_url: string | null
           waiver_version: string | null
+          whatsapp_enabled: boolean
+          whatsapp_number: string | null
           youth_price: number | null
         }
         Insert: {
@@ -855,6 +857,8 @@ export type Database = {
           waiver_text?: string | null
           waiver_url?: string | null
           waiver_version?: string | null
+          whatsapp_enabled?: boolean
+          whatsapp_number?: string | null
           youth_price?: number | null
         }
         Update: {
@@ -885,6 +889,8 @@ export type Database = {
           waiver_text?: string | null
           waiver_url?: string | null
           waiver_version?: string | null
+          whatsapp_enabled?: boolean
+          whatsapp_number?: string | null
           youth_price?: number | null
         }
         Relationships: []
