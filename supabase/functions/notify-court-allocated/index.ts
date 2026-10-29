@@ -12,10 +12,16 @@
 // `onboarding@resend.dev` can only send to the Resend account owner during
 // development. To deliver to real players, verify a domain in Resend and
 // switch RESEND_FROM_EMAIL to e.g. `notify@yourdomain.com`.
+//
+// WhatsApp is a third, optional channel, only for players who opted in by
+// messaging the club number (see _shared/whatsapp.ts). Messages are queued
+// and sent by whatsapp-send. Skipped when the tournament's whatsapp_enabled
+// is off or the EVOLUTION_* secrets aren't set; email + push carry on.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
 import { isUuid, json, serveWithCors } from "../_shared/http.ts";
+import { enqueue, joinNames, optedInChats, whatsappConfig } from "../_shared/whatsapp.ts";
 import webpush from "npm:web-push@3.6.7";
 
 
@@ -59,7 +65,7 @@ async function handle(req: Request): Promise<Response> {
     // 2. Tournament name
     const { data: tournament } = await supabase
       .from("tournaments")
-      .select("name")
+      .select("name, whatsapp_enabled")
       .eq("id", match.tournament_id)
       .single();
     const tournamentName: string = tournament?.name ?? "Tournament";
@@ -383,7 +389,53 @@ Good luck out there!
       }
     }
 
-    return json({ sent, skipped, failed, pushSent, pushFailed }, 200);
+    // ========================================================================
+    // WHATSAPP — queued for players who opted in; whatsapp-send delivers
+    // them a few seconds apart and logs the result to notification_log
+    // (channel='whatsapp'). One message per chat: a parent who opted in for
+    // two players on this match gets one. Players who haven't opted in are
+    // only counted, not logged (most players, on every match).
+    // ========================================================================
+    let waQueued = 0, waSkipped = 0;
+    if (whatsappConfig() && tournament?.whatsapp_enabled === true && recipients.length > 0) {
+      try {
+        const chats = await optedInChats(supabase, match.tournament_id);
+        const byChat = new Map<string, Recipient[]>();
+        for (const r of recipients) {
+          const jids = chats.get(r.player.id) ?? [];
+          if (jids.length === 0) waSkipped++;
+          for (const jid of jids) byChat.set(jid, [...(byChat.get(jid) ?? []), r]);
+        }
+        // Moved to another court: an unsent call for the old court is wrong.
+        await supabase.from("whatsapp_outbox")
+          .update({ status: "cancelled", error_message: "match reallocated" })
+          .eq("match_id", matchId).eq("kind", "court_call").eq("status", "queued");
+        const rows = [...byChat].map(([jid, group]) => {
+          // Players sharing a chat may be on opposite sides; name the
+          // opponent only when there's one.
+          const opponents = [...new Set(group.map((g) => g.opponentLabel))];
+          return {
+            jid,
+            kind: "court_call" as const,
+            priority: 0,
+            tournament_id: match.tournament_id,
+            match_id: matchId,
+            player_ids: group.map((g) => g.player.id),
+            body:
+`🏸 ${tournamentName}
+
+Hi ${joinNames(group.map((g) => g.player.name))}, you're up now on *Court ${courtNumber}*!
+${opponents.length === 1 ? `Opponent: ${opponents[0]}\n` : ""}
+Please head to Court ${courtNumber} and warm up. Good luck!`,
+          };
+        });
+        waQueued = await enqueue(supabase, rows);
+      } catch (e) {
+        console.error("whatsapp queue failed for match", matchId, e instanceof Error ? e.message : e);
+      }
+    }
+
+    return json({ sent, skipped, failed, pushSent, pushFailed, waQueued, waSkipped }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("notify-court-allocated error:", msg);
