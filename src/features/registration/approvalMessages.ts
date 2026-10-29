@@ -18,14 +18,24 @@ export function errorMessage(e: unknown): string {
   return String(e);
 }
 
+export type ApprovalEmail = { sent: boolean; status: string };
+
+// True when nobody is left without their "You're in" email. "already sent"
+// means the database trigger got there first.
+export function approvalEmailOk(email: ApprovalEmail): boolean {
+  return email.sent || email.status === "already sent";
+}
+
 // The success toast after Approve. Results from before linking existed have
 // no linked_existing_team, which reads as a new team.
 export function approvedMessage(
   reg: { player_name: string; partner_name: string | null },
   result: Partial<ApproveRegistrationResult> | null,
-  emailed: boolean,
+  emailResult: ApprovalEmail,
 ): string {
-  const email = emailed ? " · “You're in” email sent" : "";
+  const email = !approvalEmailOk(emailResult) ? ""
+    : emailResult.status.startsWith("not needed") ? " · both already had their “You're in” email"
+    : " · “You're in” email sent";
   if (result?.linked_existing_team) {
     const team = result.team_name || `${reg.player_name} & ${reg.partner_name ?? ""}`;
     return `Approved — ${reg.player_name} linked to existing team ${team}${email}`;

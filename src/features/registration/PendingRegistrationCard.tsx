@@ -7,7 +7,7 @@ import { sendApprovalEmail } from "../../lib/notifications";
 import { colors, easings, radii, shadows, spacing, typography } from "../../lib/theme";
 import type { Category, FeeType, PendingRegistration, WaiverConsent } from "../../types";
 import { computeFee, fmtMoney, priceBasis } from "../publicRegistration/computeFee";
-import { approvedMessage, errorMessage } from "./approvalMessages";
+import { approvalEmailOk, approvedMessage, errorMessage } from "./approvalMessages";
 
 type Props = {
   reg: PendingRegistration;
@@ -72,10 +72,9 @@ export function PendingRegistrationCard({ reg, category, onResolved, waiverRequi
       // The database also sends this on approval; whichever call is first
       // sends, the other sees "already sent".
       const email = await sendApprovalEmail(reg.id);
-      const emailed = email.sent || email.status === "already sent";
-      toast.success(approvedMessage(reg, result, emailed));
+      toast.success(approvedMessage(reg, result, email));
       if (result?.warning) toast.error(result.warning);
-      if (!emailed) {
+      if (!approvalEmailOk(email)) {
         toast.error(`The “You're in” email didn't send (${email.status}). Let them know directly.`);
       }
       if (!reduce) {
