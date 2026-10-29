@@ -10,8 +10,8 @@
 // A chat has two IDs: its phone number (…@s.whatsapp.net) and WhatsApp's
 // private "@lid" ID. Each message carries only one of them (the phone one
 // whenever Evolution knows it), and there's no reliable way to look up one
-// from the other. See linkOtherForm for how the two are tied together, and
-// stop() for what happens when that fails.
+// from the other. See linkOnJoin for how the two are tied together, and
+// unmatchedStop for a STOP under the form we don't have.
 // Everything else is left for a person to read on the phone: no automatic
 // reply, so ordinary questions never get a robot answer.
 // Deployed with JWT checks off (Evolution sends no JWT).
@@ -79,41 +79,26 @@ type Chat = { jid: string; alt: string | null; ids: string[]; pushName: string |
 
 const isLid = (j: string) => j.endsWith("@lid");
 
-// When a message arrives under one ID form and an opt-in is on file only
-// under the other, ties them together if the WhatsApp profile name is the
-// same and exactly one such chat fits: the rows get this ID as jid_alt and
-// the chat's IDs grow to include the stored one. Returns whether it linked.
-// (A parent and a player usually have different profile names, so this
-// doesn't merge two people; when it can't decide it does nothing.)
-async function linkOtherForm(
-  supabase: SupabaseClient, chat: Chat,
-  scope: { registrationId?: string; state: "active" | "stopped" | "any" },
-): Promise<boolean> {
-  if (chat.ids.length > 1 || !chat.pushName) return false;
-  let q = supabase.from("whatsapp_optins").select("jid")
+// On a join (the sender has the registration code): when the entry has an
+// opt-in only under the other ID form with the same WhatsApp profile name,
+// it's the same chat. Ties them together: the phone ID becomes the one we
+// send to, the @lid the alias, and the chat's IDs grow to include the
+// stored one. Never used on STOP/START, where the sender proves nothing
+// and a copied profile name must not redirect anyone's updates.
+async function linkOnJoin(supabase: SupabaseClient, chat: Chat, registrationId: string): Promise<void> {
+  if (chat.ids.length > 1 || !chat.pushName) return;
+  const { data, error } = await supabase.from("whatsapp_optins").select("jid")
+    .eq("registration_id", registrationId)
     .is("jid_alt", null).eq("push_name", chat.pushName)
     .like("jid", isLid(chat.jid) ? "%@s.whatsapp.net" : "%@lid");
-  if (scope.registrationId) q = q.eq("registration_id", scope.registrationId);
-  if (scope.state === "active") q = q.is("opted_out_at", null);
-  if (scope.state === "stopped") q = q.not("opted_out_at", "is", null);
-  const { data, error } = await q;
   if (error) throw new Error(`link: ${error.message}`);
   const candidates = [...new Set((data ?? []).map((r) => r.jid))];
-  if (candidates.length !== 1) return false;
-  // Now that the phone ID is known, send to it and keep the @lid as the alias.
-  const update = isLid(chat.jid)
-    ? { jid_alt: chat.jid }
-    : { jid: chat.jid, jid_alt: candidates[0] };
-  let { error: upErr } = await supabase.from("whatsapp_optins")
-    .update(update).eq("jid", candidates[0]).is("jid_alt", null);
-  if (upErr && !isLid(chat.jid)) {
-    // That entry already has a row under the phone ID: just record the alias.
-    ({ error: upErr } = await supabase.from("whatsapp_optins")
-      .update({ jid_alt: chat.jid }).eq("jid", candidates[0]).is("jid_alt", null));
-  }
+  if (candidates.length !== 1) return;
+  const { error: upErr } = await supabase.from("whatsapp_optins")
+    .update({ jid_alt: chat.jid })
+    .eq("registration_id", registrationId).eq("jid", candidates[0]).is("jid_alt", null);
   if (upErr) throw new Error(`link: ${upErr.message}`);
   chat.ids.push(candidates[0]);
-  return true;
 }
 
 // PostgREST in-list of chat IDs, quoted.
@@ -145,12 +130,20 @@ async function join(
   if (!t?.whatsapp_enabled) return { joined: false, reason: "WhatsApp off for this tournament" };
 
   // Already opted in from this chat (in either ID form)? Then it's a re-join.
-  await linkOtherForm(supabase, chat, { registrationId: reg.id, state: "any" });
+  await linkOnJoin(supabase, chat, reg.id);
   const { data: existing, error: exErr } = await supabase.from("whatsapp_optins")
     .select("id, jid, jid_alt")
     .eq("registration_id", reg.id).eq("role", "player");
   if (exErr) throw new Error(`opt-ins: ${exErr.message}`);
-  const mine = (existing ?? []).find((r) => chat.ids.includes(r.jid) || (r.jid_alt && chat.ids.includes(r.jid_alt)));
+  const matches = (existing ?? []).filter((r) => chat.ids.includes(r.jid) || (r.jid_alt && chat.ids.includes(r.jid_alt)));
+  // Two rows for this chat (one per ID form, from before they were tied
+  // together): keep one, preferring the phone ID, so nothing goes out twice.
+  const mine = matches.find((r) => r.jid.endsWith("@s.whatsapp.net")) ?? matches[0];
+  const extra = matches.filter((r) => r !== mine).map((r) => r.id);
+  if (extra.length) {
+    const { error: delErr } = await supabase.from("whatsapp_optins").delete().in("id", extra);
+    if (delErr) throw new Error(`merge: ${delErr.message}`);
+  }
   if (!mine && (existing ?? []).length >= MAX_CHATS_PER_ENTRY) {
     await enqueue(supabase, [{
       jid, kind: "reply", priority: 0, dedupe_key: replyKey, tournament_id: reg.tournament_id,
@@ -161,7 +154,8 @@ async function join(
 
   // A re-join may carry only one of the chat's two IDs: keep what we knew,
   // with the phone-number ID as the one we send to.
-  const known = [...new Set([...chat.ids, mine?.jid, mine?.jid_alt].filter((j): j is string => !!j))];
+  const known = [...new Set([...chat.ids, ...matches.flatMap((r) => [r.jid, r.jid_alt])]
+    .filter((j): j is string => !!j))];
   const sendTo = known.find((j) => j.endsWith("@s.whatsapp.net")) ?? known[0];
   const row = {
     jid: sendTo,
@@ -191,23 +185,13 @@ Reply STOP anytime to turn them off.`,
 
 async function stop(supabase: SupabaseClient, chat: Chat, replyKey: string | null) {
   const { jid, ids } = chat;
-  const optOut = () => supabase.from("whatsapp_optins")
+  const { data, error } = await supabase.from("whatsapp_optins")
     .update({ opted_out_at: new Date().toISOString() })
     .or(`jid.in.${inList(ids)},jid_alt.in.${inList(ids)}`).is("opted_out_at", null)
     .select("id, jid");
-  let { data, error } = await optOut();
   if (error) throw new Error(`stop: ${error.message}`);
-  if (!data?.length && await linkOtherForm(supabase, chat, { state: "active" })) {
-    ({ data, error } = await optOut());
-    if (error) throw new Error(`stop: ${error.message}`);
-  }
   if (!data?.length) return await unmatchedStop(supabase, chat, replyKey);
-  // Anything already queued for this chat goes too. Clearing dedupe_key
-  // lets it be queued again if they send START later the same evening.
-  const stored = [...new Set([...ids, ...data.map((r) => r.jid)])];
-  await supabase.from("whatsapp_outbox")
-    .update({ status: "cancelled", error_message: "player sent STOP", dedupe_key: null })
-    .in("jid", stored).eq("status", "queued");
+  await cancelQueued(supabase, [...new Set([...ids, ...data.map((r) => r.jid)])]);
   await enqueue(supabase, [{
     jid, kind: "reply", priority: 0, dedupe_key: replyKey,
     body: "You won't get any more updates here. Reply START if you change your mind.",
@@ -215,18 +199,23 @@ async function stop(supabase: SupabaseClient, chat: Chat, replyKey: string | nul
   return { stopped: data.length };
 }
 
+// Anything already queued for these chats goes too. Clearing dedupe_key
+// lets it be queued again if they send START later the same evening.
+async function cancelQueued(supabase: SupabaseClient, jids: string[]) {
+  await supabase.from("whatsapp_outbox")
+    .update({ status: "cancelled", error_message: "player sent STOP", dedupe_key: null })
+    .in("jid", jids).eq("status", "queued");
+}
+
+// Only an exact chat match turns updates back on: START from an unknown
+// chat can't be tied to anyone safely (the player can use the button again).
 async function restart(supabase: SupabaseClient, chat: Chat, replyKey: string | null) {
   const { jid, ids } = chat;
-  const optIn = () => supabase.from("whatsapp_optins")
+  const { data, error } = await supabase.from("whatsapp_optins")
     .update({ opted_out_at: null })
     .or(`jid.in.${inList(ids)},jid_alt.in.${inList(ids)}`).not("opted_out_at", "is", null)
     .select("id");
-  let { data, error } = await optIn();
   if (error) throw new Error(`start: ${error.message}`);
-  if (!data?.length && await linkOtherForm(supabase, chat, { state: "stopped" })) {
-    ({ data, error } = await optIn());
-    if (error) throw new Error(`start: ${error.message}`);
-  }
   if (!data?.length) return { restarted: 0 };
   await enqueue(supabase, [{
     jid, kind: "reply", priority: 0, dedupe_key: replyKey,
@@ -235,36 +224,54 @@ async function restart(supabase: SupabaseClient, chat: Chat, replyKey: string | 
   return { restarted: data.length };
 }
 
-// STOP from a chat with no opt-in on file. Usually a stranger, and nothing
-// is sent to them anyway. But if some active opt-in is stored only under
-// the other ID form (and the profile names didn't settle it), this may be
-// one of them, still getting updates. A person has to sort that out: the
-// organisers get an email, and the sender is told it's in hand.
+// STOP from a chat with no opt-in on file. Usually a stranger: nothing is
+// sent to them, so nothing happens and nobody is told. The exception is an
+// opt-in stored only under the other ID form whose WhatsApp profile name
+// matches the sender's: probably the same person, still getting updates.
+//   - one such chat: opt it out (erring toward fewer messages; nothing is
+//     redirected and no alias is recorded, so this can't be used to take
+//     over anyone's updates)
+//   - several: the organisers of those tournaments get an email to sort it
+//     out by hand (at most one per sender a day, ten a day overall)
 async function unmatchedStop(supabase: SupabaseClient, chat: Chat, replyKey: string | null) {
-  const { count, error } = await supabase.from("whatsapp_optins")
-    .select("id", { count: "exact", head: true })
-    .is("opted_out_at", null).is("jid_alt", null)
+  if (chat.ids.length > 1 || !chat.pushName) return { stopped: 0 };
+  const { data: rows, error } = await supabase.from("whatsapp_optins")
+    .select("id, jid, tournament_id")
+    .is("opted_out_at", null).is("jid_alt", null).eq("push_name", chat.pushName)
     .like("jid", isLid(chat.jid) ? "%@s.whatsapp.net" : "%@lid");
   if (error) throw new Error(`stop: ${error.message}`);
-  if (!count) return { stopped: 0 };
+  const jids = [...new Set((rows ?? []).map((r) => r.jid))];
+  if (jids.length === 0) return { stopped: 0 };
 
-  const { data: ts } = await supabase.from("tournaments").select("name, admin_notify_emails")
-    .eq("whatsapp_enabled", true);
+  if (jids.length === 1) {
+    const { error: upErr } = await supabase.from("whatsapp_optins")
+      .update({ opted_out_at: new Date().toISOString() })
+      .eq("jid", jids[0]).is("opted_out_at", null);
+    if (upErr) throw new Error(`stop: ${upErr.message}`);
+    await cancelQueued(supabase, jids);
+    await enqueue(supabase, [{
+      jid: chat.jid, kind: "reply", priority: 0, dedupe_key: replyKey,
+      body: "You won't get any more updates. To turn them back on, use the WhatsApp button on your registration page again.",
+    }]);
+    return { stopped: rows!.length, matchedBy: "name" };
+  }
+
+  if (!(await allow(supabase, "wa-stop-alert", chat.jid, 1, 86400)) ||
+      !(await allow(supabase, "wa-stop-alert", "all", 10, 86400))) {
+    return { stopped: 0, flagged: false, reason: "alert limit" };
+  }
+  const tournamentIds = [...new Set((rows ?? []).map((r) => r.tournament_id))];
+  const { data: ts } = await supabase.from("tournaments").select("admin_notify_emails").in("id", tournamentIds);
   const to = [...new Set((ts ?? []).flatMap((t) => (t.admin_notify_emails ?? []) as string[]))]
     .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-  const who = chat.pushName ?? "(no WhatsApp name)";
   const text =
-`Someone sent STOP to the club's WhatsApp number, but their chat didn't match an opt-in on file.
+`Someone sent STOP to the club's WhatsApp number from a chat (${maskNumber(chat.jid)}) we couldn't match to an opt-in, and ${jids.length} opted-in chats have the same WhatsApp name, which the sender sets themselves: "${chat.pushName}".
 
-WhatsApp name: ${who}
-Chat ID: ${chat.jid}
-
-WhatsApp gave us a different form of their ID than the one they opted in with, so they may still be getting updates. Please find them in whatsapp_optins (by name or entry) and set opted_out_at, or ask Claude to.`;
+WhatsApp sent a different form of their ID than the one on file, so one of those players may still be getting updates. Please check whatsapp_optins for that name and set opted_out_at on the right one, or ask Claude to.`;
   const err = to.length
-    ? await sendEmail({ to, subject: `WhatsApp STOP to check by hand: ${who}`, text, html: `<pre>${escapeHtml(text)}</pre>`, fromName: "Tournament Admin" })
+    ? await sendEmail({ to, subject: "WhatsApp STOP to check by hand", text, html: `<pre>${escapeHtml(text)}</pre>`, fromName: "Tournament Admin" })
     : "no admin_notify_emails";
   if (err) console.error("unmatched STOP alert not sent:", err, maskNumber(chat.jid));
-
   await enqueue(supabase, [{
     jid: chat.jid, kind: "reply", priority: 0, dedupe_key: replyKey,
     body: "Got it. We'll turn off your updates shortly.",
