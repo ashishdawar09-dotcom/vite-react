@@ -9,6 +9,7 @@ import {
   longDate,
   registrationApproved,
   registrationReceived,
+  shareConfirmed,
 } from "./emails.ts";
 
 const data = (over: Partial<EmailData> = {}): EmailData => ({
@@ -140,4 +141,71 @@ Deno.test("doubles entry without a partner is told about pairing", () => {
   const a = registrationApproved(solo);
   assertStringIncludes(a.text, "We'll pair you with another player if one is available; pairings are posted by Thursday, November 19.");
   assert(!registrationReceived(data()).html.includes("To be paired"));
+});
+
+// Sam paid their own share and named Ana, who hasn't paid hers yet.
+const ownShare = (over: Partial<EmailData> = {}) => data({
+  reg: { ...data().reg, amount_due_cents: 4000, payment_paid_full_for_partner: false },
+  role: "partner",
+  partnerShare: "due",
+  registerUrl: "https://badminton.adawar.org/register/t1?category=c1",
+  waiverLink: "https://badminton.adawar.org/waiver/abc",
+  ...over,
+});
+
+Deno.test("partner who still owes their share is told how to pay it, with no amount", () => {
+  const e = registrationReceived(ownShare());
+  assertStringIncludes(e.html, "They paid their own share; yours is still to pay.");
+  assertStringIncludes(e.html, "Pay your share");
+  assertStringIncludes(e.html, "name <strong style=\"color:#ECEEF2\">Sam Lee</strong> as your partner");
+  assertStringIncludes(e.html, "https://badminton.adawar.org/register/t1?category=c1");
+  assertStringIncludes(e.text, "Sam's share: $40.00 CAD · e-Transfer (ref SL-123)");
+  assertStringIncludes(e.text, "Your share: Not paid yet");
+  assertStringIncludes(e.text, "Status: Waiting for your share");
+  // The form they pay with has the waiver, so no separate waiver link.
+  assert(!e.html.includes("/waiver/abc"), "no partner waiver link");
+  assert(!e.text.includes("nothing else you need to do"), "doesn't say there's nothing to do");
+  assert(!/Your share: \$/.test(e.text), "no amount for their share");
+});
+
+Deno.test("partner who already entered themselves has nothing to pay", () => {
+  const e = registrationReceived(ownShare({ partnerShare: "entered", waiverLink: null }));
+  assertStringIncludes(e.html, "Your own entry is in too, so there's nothing else to pay.");
+  assertStringIncludes(e.text, "Your share: On your own entry");
+  assert(!e.html.includes("Pay your share"));
+});
+
+Deno.test("paid-for-both and per-team partner copies are unchanged", () => {
+  const e = registrationReceived(data({ role: "partner", waiverLink: null }));
+  assertStringIncludes(e.html, "Sam has submitted the entry for you both.");
+  assertStringIncludes(e.text, "Payment: $80.00 CAD · e-Transfer (ref SL-123)");
+  assert(!e.text.includes("Your share"));
+});
+
+Deno.test("approval tells a partner who owes their share that their place is held", () => {
+  const e = registrationApproved(ownShare());
+  assertEquals(e.subject, "One step left: pay your share for Mixed Doubles at Shuttle Storm Abbotsford 2026");
+  assertStringIncludes(e.html, "One step left, Ana.");
+  assertStringIncludes(e.html, "your place on the team is held. Your share isn't paid yet.");
+  assertStringIncludes(e.text, "Status: Place held · waiting for your share");
+  assertStringIncludes(e.text, "Pay your share: https://badminton.adawar.org/register/t1?category=c1");
+
+  const entered = registrationApproved(ownShare({ partnerShare: "entered" }));
+  assertEquals(entered.subject, "You're in! Mixed Doubles at Shuttle Storm Abbotsford 2026");
+  assertStringIncludes(entered.html, "Your own entry is in too; we'll email you when your share is confirmed.");
+
+  const player = registrationApproved(ownShare({ role: "player", partnerShare: null }));
+  assertStringIncludes(player.html, "You're in, Sam.");
+  assertStringIncludes(player.text, "Payment: $40.00 CAD");
+});
+
+Deno.test("second half of a pair gets a short share-paid email", () => {
+  const e = shareConfirmed(data({
+    reg: { ...data().reg, player_name: "Ana Diaz", partner_name: "Sam Lee", payment_method: "card", amount_due_cents: 4120, payment_paid_full_for_partner: false },
+  }));
+  assertEquals(e.subject, "Your share is paid: Mixed Doubles at Shuttle Storm Abbotsford 2026");
+  assertStringIncludes(e.html, "You're all set, Ana.");
+  assertStringIncludes(e.html, "You and Sam Lee are in, and there's nothing else to pay.");
+  assertStringIncludes(e.text, "Payment: $41.20 CAD · Paid by card");
+  assert(!/<[a-z]/i.test(e.text), "text part has no tags");
 });

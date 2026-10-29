@@ -33,8 +33,10 @@ export function approvedMessage(
   result: Partial<ApproveRegistrationResult> | null,
   emailResult: ApprovalEmail,
 ): string {
+  // A linked entry's player gets a short "your share is paid" email; both
+  // players already had "You're in" from the pair's first entry.
   const email = !approvalEmailOk(emailResult) ? ""
-    : emailResult.status.startsWith("not needed") ? " · both already had their “You're in” email"
+    : result?.linked_existing_team ? " · confirmation email sent"
     : " · “You're in” email sent";
   if (result?.linked_existing_team) {
     const team = result.team_name || `${reg.player_name} & ${reg.partner_name ?? ""}`;

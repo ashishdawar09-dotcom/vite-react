@@ -76,6 +76,14 @@ export function PublicRegistrationPage() {
   const reduce = useReducedMotion();
 
   const [form, setForm] = useState<FormState>(emptyFormState());
+  // ?category=<id> picks the event once categories load, e.g. from the "Pay
+  // your share" button in a partner's email. Set during render (not in an
+  // effect) so the form never shows without it.
+  const [wantedCategory, setWantedCategory] = useState(() => new URLSearchParams(window.location.search).get("category"));
+  if (wantedCategory && categories.some((c) => c.id === wantedCategory)) {
+    setWantedCategory(null);
+    setForm((f) => (f.category_id ? f : { ...f, category_id: wantedCategory }));
+  }
   const [touched, setTouched] = useState<Set<keyof FormState>>(new Set());
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);

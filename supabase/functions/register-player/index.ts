@@ -251,6 +251,29 @@ async function handle(req: Request): Promise<Response> {
       );
     }
 
+    // ---- Already paid for by the partner ----
+    // The partner's entry names this player and paid for both of them, and
+    // this entry names that partner back: it would pay the same share twice.
+    // Only an exact match is refused, and the message names nobody, so typing
+    // someone's email doesn't reveal who entered with them.
+    if (partnerEmail) {
+      const { data: covered } = await supabase
+        .from("pending_registrations")
+        .select("id")
+        .eq("category_id", body.category_id)
+        .in("status", ["pending", "approved"])
+        .eq("player_email", partnerEmail)
+        .eq("partner_email", playerEmail)
+        .eq("payment_paid_full_for_partner", true)
+        .limit(1);
+      if (covered?.length) {
+        return json(
+          { success: false, error: "You've already been entered and paid for in this event. You don't need to register again." },
+          409,
+        );
+      }
+    }
+
     // ---- Flood guard: cap total registrations per email per tournament ----
     // The per-category dedup above is trivially bypassed by varying the
     // category; this bounds how many rows one email can create overall.

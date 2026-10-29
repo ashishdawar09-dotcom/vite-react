@@ -39,6 +39,11 @@ export type EmailData = {
   waiverLink?: string | null;
   // Player in doubles: the partner still has to accept the waiver.
   partnerWaiverPending?: boolean;
+  // Partner only, when each partner pays their own share: "due" until they
+  // enter themselves (the only way to pay), "entered" once their entry is in.
+  partnerShare?: "due" | "entered" | null;
+  // The registration form for this event, where the partner pays that share.
+  registerUrl?: string | null;
   assetBase: string;                // e.g. https://shuttlestorm.adawar.org/email
   privacyUrl?: string | null;
 };
@@ -315,6 +320,30 @@ function paymentRow(reg: EmailRegistration): [string, string] {
   return ["Payment", `${amt ? `${amt} · ` : ""}e-Transfer${ref ? ` (ref ${esc(ref)})` : ""}`];
 }
 
+// The partner's copy when each pays their own share: the entry's payment is
+// the other player's, so say whose it is and where their own share stands.
+function paymentRows(d: EmailData): [string, string][] {
+  if (d.role !== "partner" || !d.partnerShare) return [paymentRow(d.reg)];
+  return [
+    [`${firstName(d.reg.player_name)}'s share`, paymentRow(d.reg)[1]],
+    ["Your share", d.partnerShare === "due" ? "Not paid yet" : "On your own entry"],
+  ];
+}
+
+function payShareStep(n: number, d: EmailData): Step {
+  const url = safeUrl(d.registerUrl);
+  return {
+    n,
+    gif: "step-received.gif",
+    alt: "Entry received checkmark",
+    title: "Pay your share",
+    html: `To pay it, register for <strong style="color:${C.bone}">${esc(d.category.name)}</strong> yourself and name ` +
+      `<strong style="color:${C.bone}">${esc(d.reg.player_name)}</strong> as your partner. ` +
+      "The same form has the waiver, so there's nothing else to sign. Your place is confirmed once both shares are in.",
+    cta: url ? [url, "Pay your share"] : undefined,
+  };
+}
+
 function drawStep(n: number, d: EmailData): Step {
   const t = d.tournament;
   const by = t.event_date ? longDate(addDays(t.event_date, -1), { year: false }) : null;
@@ -379,7 +408,9 @@ export function registrationReceived(d: EmailData): RenderedEmail {
   const isPartner = d.role === "partner";
   const name = firstName(isPartner ? d.reg.partner_name ?? "" : d.reg.player_name) || "there";
   const paidCard = d.reg.payment_method === "card";
-  const waiverLink = isPartner ? safeUrl(d.waiverLink) : null;
+  const shareDue = isPartner && d.partnerShare === "due";
+  // Paying their share means filling in the form, which has the waiver.
+  const waiverLink = isPartner && !shareDue ? safeUrl(d.waiverLink) : null;
 
   const subject = isPartner
     ? `${d.reg.player_name.trim()} entered you in ${d.category.name}: ${t.name}`
@@ -388,13 +419,16 @@ export function registrationReceived(d: EmailData): RenderedEmail {
   const intro = isPartner
     ? `<strong style="color:${C.bone}">${esc(d.reg.player_name)}</strong> has entered you as their partner in ` +
       `<strong style="color:${C.bone}">${esc(d.category.name)}</strong> at ${esc(t.name)}.` +
+      (shareDue ? " They paid their own share; yours is still to pay." : "") +
       (waiverLink ? " There's one thing only you can do before you play: accept the waiver." : "")
     : `Thanks for entering <strong style="color:${C.bone}">${esc(d.category.name)}</strong> at ${esc(t.name)}. ` +
       (paidCard
         ? "Your payment went through. A tournament director checks every entry and you'll get a “You're in” email once it's confirmed."
         : "A tournament director will match your e-Transfer and confirm your place. You'll get a “You're in” email when it's done.");
 
-  const step1: Step = isPartner && waiverLink
+  const step1: Step = shareDue
+    ? payShareStep(1, d)
+    : isPartner && waiverLink
     ? {
       n: 1,
       gif: "step-received.gif",
@@ -409,7 +443,9 @@ export function registrationReceived(d: EmailData): RenderedEmail {
       gif: "step-received.gif",
       alt: "Entry received checkmark",
       title: isPartner ? "Your entry is in" : "We've got your entry",
-      html: isPartner
+      html: isPartner && d.partnerShare === "entered"
+        ? `Your own entry is in too, so there's nothing else to pay. You'll get a “You're in” email once a director confirms it.`
+        : isPartner
         ? `${esc(firstName(d.reg.player_name))} has submitted the entry for you both. You'll get a “You're in” email once a director confirms it.`
         : paidCard
         ? "Your payment is received. There's nothing else you need to do: we'll email you as soon as your place is confirmed."
@@ -422,15 +458,16 @@ export function registrationReceived(d: EmailData): RenderedEmail {
   const details: [string, string][] = [
     ["Event", esc(d.category.name)],
     ...peopleRows(d),
-    paymentRow(d.reg),
-    ["Status", isPartner && waiverLink ? "Waiting for your waiver" : paidCard ? "Paid · awaiting confirmation" : "Awaiting confirmation"],
+    ...paymentRows(d),
+    ["Status", shareDue ? "Waiting for your share" : isPartner && waiverLink ? "Waiting for your waiver" : paidCard ? "Paid · awaiting confirmation" : "Awaiting confirmation"],
   ];
 
   const steps = [step1, drawStep(2, d), arriveStep(3, d)];
   const html = layout({
     title: subject,
     preheader: isPartner
-      ? `${firstName(d.reg.player_name)} entered you in ${d.category.name}.${waiverLink ? " Accept the waiver to play." : ""}`
+      ? `${firstName(d.reg.player_name)} entered you in ${d.category.name}.` +
+        (shareDue ? " Your share is still to pay." : waiverLink ? " Accept the waiver to play." : "")
       : `Entry received for ${d.category.name}. Here's what happens next.`,
     hero: { gif: "hero.gif", alt: `${t.name}. Registration received.` },
     kicker: isPartner ? "You've been entered" : paidCard ? "Payment received" : "Registration received",
@@ -464,28 +501,37 @@ export function registrationReceived(d: EmailData): RenderedEmail {
 export function registrationApproved(d: EmailData): RenderedEmail {
   const t = d.tournament;
   const isPartner = d.role === "partner";
+  const shareDue = isPartner && d.partnerShare === "due";
   const name = firstName(isPartner ? d.reg.partner_name ?? "" : d.reg.player_name) || "there";
-  const subject = `You're in! ${d.category.name} at ${t.name}`;
+  const subject = shareDue
+    ? `One step left: pay your share for ${d.category.name} at ${t.name}`
+    : `You're in! ${d.category.name} at ${t.name}`;
   const when = longDate(t.event_date);
-  const intro = `Your entry in <strong style="color:${C.bone}">${esc(d.category.name)}</strong> is confirmed` +
-    `${d.category.team_size === 2 && d.reg.partner_name ? ` with ${esc(isPartner ? d.reg.player_name : d.reg.partner_name)}` : ""}. ` +
-    (needsPartner(d)
-      ? `We'll pair you with another player if one is available; pairings are posted by ${esc(pairingDate(d) ?? "the draw")}. `
-      : "") +
-    `See you on court${when ? ` on ${esc(when)}` : ""}.`;
+  const intro = shareDue
+    ? `${esc(d.reg.player_name)}'s entry in <strong style="color:${C.bone}">${esc(d.category.name)}</strong> is confirmed ` +
+      "and your place on the team is held. Your share isn't paid yet."
+    : `Your entry in <strong style="color:${C.bone}">${esc(d.category.name)}</strong> is confirmed` +
+      `${d.category.team_size === 2 && d.reg.partner_name ? ` with ${esc(isPartner ? d.reg.player_name : d.reg.partner_name)}` : ""}. ` +
+      (needsPartner(d)
+        ? `We'll pair you with another player if one is available; pairings are posted by ${esc(pairingDate(d) ?? "the draw")}. `
+        : "") +
+      (isPartner && d.partnerShare === "entered" ? "Your own entry is in too; we'll email you when your share is confirmed. " : "") +
+      `See you on court${when ? ` on ${esc(when)}` : ""}.`;
   const details: [string, string][] = [
     ["Event", esc(d.category.name)],
     ...peopleRows(d),
-    paymentRow(d.reg),
-    ["Status", `<span style="color:${C.volt};font-weight:700">Confirmed</span>`],
+    ...paymentRows(d),
+    ["Status", shareDue ? "Place held · waiting for your share" : `<span style="color:${C.volt};font-weight:700">Confirmed</span>`],
   ];
-  const steps = [drawStep(1, d), arriveStep(2, d)];
+  const steps = shareDue ? [payShareStep(1, d), drawStep(2, d), arriveStep(3, d)] : [drawStep(1, d), arriveStep(2, d)];
   const html = layout({
     title: subject,
-    preheader: `Your place in ${d.category.name} is confirmed. Add it to your calendar.`,
+    preheader: shareDue
+      ? `Your place in ${d.category.name} is held. Pay your share to confirm it.`
+      : `Your place in ${d.category.name} is confirmed. Add it to your calendar.`,
     hero: { gif: "approved.gif", alt: `You're in. ${t.name}.` },
-    kicker: "Entry confirmed",
-    heading: `You're in, ${esc(name)}.`,
+    kicker: shareDue ? "Almost there" : "Entry confirmed",
+    heading: shareDue ? `One step left, ${esc(name)}.` : `You're in, ${esc(name)}.`,
     intro,
     details,
     stepsHeading: "Before the big day",
@@ -502,6 +548,50 @@ export function registrationApproved(d: EmailData): RenderedEmail {
     "BEFORE THE BIG DAY",
     ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
     calendarUrl(t) && `\nAdd to calendar: ${calendarUrl(t)}`,
+    textFooter(d),
+  ]);
+  return { subject, html, text };
+}
+
+// Approval of the second half of a pair who each paid their own share. Both
+// already had "You're in" from the first entry, so this only confirms the
+// player's own payment. No calendar invite: they have one.
+export function shareConfirmed(d: EmailData): RenderedEmail {
+  const t = d.tournament;
+  const name = firstName(d.reg.player_name) || "there";
+  const subject = `Your share is paid: ${d.category.name} at ${t.name}`;
+  const when = longDate(t.event_date);
+  const intro = `Your share for <strong style="color:${C.bone}">${esc(d.category.name)}</strong> is confirmed. ` +
+    `You${d.reg.partner_name ? ` and ${esc(d.reg.partner_name)}` : ""} are in, and there's nothing else to pay. ` +
+    `See you on court${when ? ` on ${esc(when)}` : ""}.`;
+  const details: [string, string][] = [
+    ["Event", esc(d.category.name)],
+    ...peopleRows(d),
+    paymentRow(d.reg),
+    ["Status", `<span style="color:${C.volt};font-weight:700">Confirmed</span>`],
+  ];
+  const steps = [drawStep(1, d), arriveStep(2, d)];
+  const html = layout({
+    title: subject,
+    preheader: `Your share for ${d.category.name} is confirmed. Nothing else to pay.`,
+    hero: { gif: "approved.gif", alt: `You're in. ${t.name}.` },
+    kicker: "Share confirmed",
+    heading: `You're all set, ${esc(name)}.`,
+    intro,
+    details,
+    stepsHeading: "Before the big day",
+    steps,
+    data: d,
+  });
+  const text = textBlock([
+    `Hi ${name},`,
+    "",
+    strip(intro),
+    "",
+    ...details.map(([k, v]) => `${k}: ${strip(v)}`),
+    "",
+    "BEFORE THE BIG DAY",
+    ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
     textFooter(d),
   ]);
   return { subject, html, text };

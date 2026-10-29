@@ -15,7 +15,7 @@ describe("approvedMessage", () => {
     expect(approvedMessage(pair, {
       player_id: "p", partner_id: "q", team_id: "t",
       linked_existing_team: true, team_name: "Duong Hoac & Ryan Joseph",
-    }, sent)).toBe("Approved — Ryan Joseph linked to existing team Duong Hoac & Ryan Joseph · “You're in” email sent");
+    }, sent)).toBe("Approved — Ryan Joseph linked to existing team Duong Hoac & Ryan Joseph · confirmation email sent");
   });
 
   it("treats a result without the new fields as a new team", () => {
@@ -29,13 +29,6 @@ describe("approvedMessage", () => {
 });
 
 describe("approval email", () => {
-  it("says nobody was emailed again when both already had their email", () => {
-    const notNeeded = { sent: true, status: "not needed: already emailed for this team" };
-    expect(approvalEmailOk(notNeeded)).toBe(true);
-    expect(approvedMessage(pair, { player_id: "p", partner_id: "q", team_id: "t", linked_existing_team: true, team_name: "Duong Hoac & Ryan Joseph" }, notNeeded))
-      .toBe("Approved — Ryan Joseph linked to existing team Duong Hoac & Ryan Joseph · both already had their “You're in” email");
-  });
-
   it("counts the database's own send as done, and a failure as not", () => {
     expect(approvalEmailOk({ sent: false, status: "already sent" })).toBe(true);
     expect(approvalEmailOk(failed)).toBe(false);

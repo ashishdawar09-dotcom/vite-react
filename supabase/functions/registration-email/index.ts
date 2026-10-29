@@ -13,7 +13,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
-import { isUuid, json, serveWithCors } from "../_shared/http.ts";
+import { appOrigin, isUuid, json, serveWithCors } from "../_shared/http.ts";
 import { sendRegistrationApproved } from "../_shared/registration_emails.ts";
 
 // True when the request carries the database's shared secret. Compares
@@ -42,6 +42,6 @@ async function handle(req: Request): Promise<Response> {
   if (!isUuid(regId)) return json({ error: "registration_id required" }, 400);
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const result = await sendRegistrationApproved(supabase, regId);
+  const result = await sendRegistrationApproved(supabase, regId, appOrigin(req));
   return json(result, 200);
 }
