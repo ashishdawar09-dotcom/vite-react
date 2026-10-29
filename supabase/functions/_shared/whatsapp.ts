@@ -95,28 +95,40 @@ export function optinCode(registrationId: string): string {
   return registrationId.replace(/-/g, "").slice(0, 8).toUpperCase();
 }
 
-export type Command = { kind: "stop" } | { kind: "start" } | { kind: "join"; code: string };
+// `labelled`: the message said "code" (the button's text), so an unknown
+// code is worth a "couldn't match that" reply. A bare 8-character message
+// might be anything (a reference number), so an unknown one gets silence.
+export type Command =
+  | { kind: "stop" }
+  | { kind: "start" }
+  | { kind: "join"; code: string; labelled: boolean };
 
 // What an incoming message asks for, or null for anything else (ordinary
 // chat gets no automatic reply).
 export function parseCommand(text: string): Command | null {
   const t = text.trim();
-  if (/^(stop|unsubscribe)\b/i.test(t)) return { kind: "stop" };
-  if (/^(start|resume)\b/i.test(t)) return { kind: "start" };
+  // START turns messages back on, so only the word itself counts ("Start
+  // time tomorrow?" is a question). STOP is read more loosely ("stop
+  // please", "STOP sending these"), but not as a question ("Stop by the
+  // desk?"): missing a real STOP is the worse mistake.
+  if (/^(stop|unsubscribe)\b/i.test(t) && !t.includes("?") && t.split(/\s+/).length <= 4) return { kind: "stop" };
+  if (/^(start|resume)[\s.!]*$/i.test(t)) return { kind: "start" };
   // "... My code: 1A2B3C4D" from the button, or the code on its own.
-  const code = t.match(/\bcode\W{0,3}([0-9a-f]{8})\b/i) ?? t.match(/^([0-9a-f]{8})$/i);
-  if (code) return { kind: "join", code: code[1].toUpperCase() };
+  const labelled = t.match(/\bcode\W{0,3}([0-9a-f]{8})\b/i);
+  if (labelled) return { kind: "join", code: labelled[1].toUpperCase(), labelled: true };
+  const bare = t.match(/^([0-9a-f]{8})$/i);
+  if (bare) return { kind: "join", code: bare[1].toUpperCase(), labelled: false };
   return null;
 }
 
 // ---- Who gets updates ----------------------------------------------------
 
-// player_id -> WhatsApp ID for players of the tournament who opted in (and
-// haven't sent STOP) on an approved entry.
+// player_id -> WhatsApp IDs of the chats that opted in for that player (and
+// haven't sent STOP), on approved entries of the tournament.
 export async function optedInChats(
   supabase: SupabaseClient,
   tournamentId: string,
-): Promise<Map<string, string>> {
+): Promise<Map<string, string[]>> {
   const { data, error } = await supabase
     .from("whatsapp_optins")
     .select("jid, role, opted_in_at, pending_registrations!inner(status, approved_player_id, approved_partner_id)")
@@ -124,14 +136,17 @@ export async function optedInChats(
     .is("opted_out_at", null)
     .order("opted_in_at", { ascending: true });
   if (error) throw new Error(`opt-ins: ${error.message}`);
-  const out = new Map<string, string>();
+  const out = new Map<string, string[]>();
   for (const row of data ?? []) {
     const reg = row.pending_registrations as unknown as {
       status: string; approved_player_id: string | null; approved_partner_id: string | null;
     };
     if (reg.status !== "approved") continue;
     const playerId = row.role === "partner" ? reg.approved_partner_id : reg.approved_player_id;
-    if (playerId) out.set(playerId, row.jid);
+    if (!playerId) continue;
+    const chats = out.get(playerId) ?? [];
+    if (!chats.includes(row.jid)) chats.push(row.jid);
+    out.set(playerId, chats);
   }
   return out;
 }

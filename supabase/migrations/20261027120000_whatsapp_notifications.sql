@@ -24,22 +24,26 @@ alter table public.notification_log drop constraint notification_log_channel_che
 alter table public.notification_log add constraint notification_log_channel_check
   check (channel = any (array['email'::text, 'push'::text, 'whatsapp'::text]));
 
--- 3. Opt-ins. One row per registration; the code a player sends is the first
--- 8 characters of their registration id. jid is the sender's WhatsApp ID as
--- Evolution reports it (usually <number>@s.whatsapp.net), and is where
--- updates go.
+-- 3. Opt-ins. The code a player sends is the first 8 characters of their
+-- registration id. One row per chat that sent it (a player and a parent can
+-- both opt in; whatsapp-inbound allows up to 3). jid is where updates go:
+-- the phone-number ID (<number>@s.whatsapp.net) when Evolution knows it.
+-- WhatsApp also has private "@lid" IDs for the same chat; the other form,
+-- when sent, is kept in jid_alt so STOP matches whichever one arrives.
 create table public.whatsapp_optins (
   id bigint generated always as identity primary key,
   registration_id uuid not null references public.pending_registrations(id) on delete cascade,
   tournament_id uuid not null references public.tournaments(id) on delete cascade,
   role text not null default 'player' check (role = any (array['player', 'partner'])),
   jid text not null,
+  jid_alt text,
   push_name text,
   opted_in_at timestamptz not null default now(),
   opted_out_at timestamptz,
-  unique (registration_id, role)
+  unique (registration_id, role, jid)
 );
 create index whatsapp_optins_jid on public.whatsapp_optins (jid);
+create index whatsapp_optins_jid_alt on public.whatsapp_optins (jid_alt) where jid_alt is not null;
 
 -- The registration a code belongs to. Null when no live entry matches, or
 -- (vanishingly unlikely) more than one does.
@@ -99,55 +103,85 @@ grant all on public.whatsapp_optins, public.whatsapp_outbox to service_role;
 -- 5. One sender at a time: whoever holds the lease drains the queue.
 create table public.whatsapp_sender_lease (
   id boolean primary key default true check (id),
+  holder uuid,
   leased_until timestamptz not null default '-infinity'
 );
 insert into public.whatsapp_sender_lease default values;
 alter table public.whatsapp_sender_lease enable row level security;
 revoke all on public.whatsapp_sender_lease from anon, authenticated;
 
--- Takes the lease for p_seconds if nobody holds it. A row still marked
--- 'sending' at that point belongs to a sender that died mid-send; it goes
--- back in the queue (it may go out twice, which beats never).
+-- Takes the lease for p_seconds if nobody holds it, and returns a token
+-- that the holder passes back (null when someone else holds it). A row
+-- still marked 'sending' at that point belongs to a sender whose lease ran
+-- out mid-send; it goes back in the queue (it may go out twice, which
+-- beats never).
 create function public.take_whatsapp_lease(p_seconds integer)
-returns boolean
+returns uuid
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  token uuid := gen_random_uuid();
 begin
   update public.whatsapp_sender_lease
-    set leased_until = now() + make_interval(secs => p_seconds)
-    where leased_until < now();
+    set holder = token, leased_until = now() + make_interval(secs => p_seconds)
+    where id and leased_until < now();
   if not found then
-    return false;
+    return null;
   end if;
   update public.whatsapp_outbox set status = 'queued' where status = 'sending';
-  return true;
+  return token;
 end;
 $$;
 
-create function public.release_whatsapp_lease()
+-- Only the current holder can release it.
+create function public.release_whatsapp_lease(p_holder uuid)
 returns void
 language sql
 security definer
 set search_path = ''
 as $$
-  -- "where id": API calls refuse an UPDATE without a WHERE clause.
-  update public.whatsapp_sender_lease set leased_until = '-infinity' where id;
+  update public.whatsapp_sender_lease set holder = null, leased_until = '-infinity'
+    where id and holder = p_holder;
 $$;
 
--- Next message to send, marked 'sending'. Court calls that waited more than
--- 20 minutes are dropped first: "you're up now" would be wrong by then.
-create function public.next_whatsapp_message()
+-- Next message to send, marked 'sending'; nothing if p_holder no longer
+-- holds the lease (a sender that overran stops instead of overlapping the
+-- next one). Messages that would be wrong or unwanted by now are dropped
+-- first:
+--   - court calls older than 20 minutes ("you're up now" no longer true)
+--   - day-before messages once the tournament day has started (Pacific)
+--   - replies older than a day
+--   - anything for a tournament whose WhatsApp switch is now off
+create function public.next_whatsapp_message(p_holder uuid)
 returns setof public.whatsapp_outbox
 language plpgsql
 security definer
 set search_path = ''
 as $$
 begin
+  if not exists (
+    select 1 from public.whatsapp_sender_lease
+    where holder = p_holder and leased_until > now()
+  ) then
+    return;
+  end if;
   update public.whatsapp_outbox
     set status = 'cancelled', error_message = 'too late to send'
     where status = 'queued' and kind = 'court_call' and created_at < now() - interval '20 minutes';
+  update public.whatsapp_outbox o
+    set status = 'cancelled', error_message = 'too late to send'
+    from public.tournaments t
+    where o.status = 'queued' and o.kind = 'day_before' and t.id = o.tournament_id
+      and t.event_date <= (now() at time zone 'America/Vancouver')::date;
+  update public.whatsapp_outbox
+    set status = 'cancelled', error_message = 'too late to send'
+    where status = 'queued' and kind = 'reply' and created_at < now() - interval '1 day';
+  update public.whatsapp_outbox o
+    set status = 'cancelled', error_message = 'WhatsApp switched off for the tournament'
+    from public.tournaments t
+    where o.status = 'queued' and t.id = o.tournament_id and not t.whatsapp_enabled;
   return query
     update public.whatsapp_outbox o
       set status = 'sending', attempts = o.attempts + 1
@@ -162,10 +196,10 @@ begin
 end;
 $$;
 
-revoke all on function public.take_whatsapp_lease(integer), public.release_whatsapp_lease(),
-  public.next_whatsapp_message() from public, anon, authenticated;
-grant execute on function public.take_whatsapp_lease(integer), public.release_whatsapp_lease(),
-  public.next_whatsapp_message() to service_role;
+revoke all on function public.take_whatsapp_lease(integer), public.release_whatsapp_lease(uuid),
+  public.next_whatsapp_message(uuid) from public, anon, authenticated;
+grant execute on function public.take_whatsapp_lease(integer), public.release_whatsapp_lease(uuid),
+  public.next_whatsapp_message(uuid) to service_role;
 
 -- 6. Shared secret for database/functions -> whatsapp-send and
 -- whatsapp-reminders, generated here so it never appears in the repository.

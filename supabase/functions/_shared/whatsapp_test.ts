@@ -43,18 +43,27 @@ Deno.test("the opt-in code is the start of the registration id", () => {
 });
 
 Deno.test("the button's message is read as a join", () => {
-  const msg = "Hi Shuttle Storm! Please send me WhatsApp updates for Shuttle Storm Abbotsford 2026. My code: 1A2B3C4D";
-  assertEquals(parseCommand(msg), { kind: "join", code: "1A2B3C4D" });
-  assertEquals(parseCommand("code 1a2b3c4d"), { kind: "join", code: "1A2B3C4D" });
-  assertEquals(parseCommand(" 1a2b3c4d "), { kind: "join", code: "1A2B3C4D" });
+  const msg = "Hi! Please send me WhatsApp updates for Shuttle Storm Abbotsford 2026. My code: 1A2B3C4D";
+  assertEquals(parseCommand(msg), { kind: "join", code: "1A2B3C4D", labelled: true });
+  assertEquals(parseCommand("code 1a2b3c4d"), { kind: "join", code: "1A2B3C4D", labelled: true });
+  assertEquals(parseCommand(" 1a2b3c4d "), { kind: "join", code: "1A2B3C4D", labelled: false });
 });
 
 Deno.test("STOP and START, and nothing else, are commands", () => {
   assertEquals(parseCommand("STOP"), { kind: "stop" });
   assertEquals(parseCommand("stop please"), { kind: "stop" });
+  assertEquals(parseCommand("STOP sending these"), { kind: "stop" });
   assertEquals(parseCommand("Unsubscribe"), { kind: "stop" });
   assertEquals(parseCommand("start"), { kind: "start" });
+  assertEquals(parseCommand("START!"), { kind: "start" });
   assertEquals(parseCommand("Can I cancel my entry?"), null);
   assertEquals(parseCommand("Where do I park? It's deadbeef late"), null);
   assertEquals(parseCommand("Thanks!"), null);
+});
+
+Deno.test("questions that start with start or stop are just questions", () => {
+  assertEquals(parseCommand("Start time tomorrow?"), null);
+  assertEquals(parseCommand("Start time is 9:30 right"), null);
+  assertEquals(parseCommand("Stop by the desk?"), null);
+  assertEquals(parseCommand("Stopping by the desk at 9 to pick up my shirt"), null);
 });

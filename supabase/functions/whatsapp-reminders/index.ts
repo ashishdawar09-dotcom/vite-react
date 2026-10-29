@@ -88,7 +88,15 @@ async function handle(req: Request): Promise<Response> {
     let queued = 0;
     for (const t of (due ?? []) as Tournament[]) {
       const { chats } = await audience(supabase, t);
-      queued += await enqueue(supabase, [...chats].map(([jid, g]) => ({
+      // A message that failed 3 times frees its slot so a later run can try
+      // again (the phone may have been offline for a few minutes); after 2
+      // such rounds, leave that chat alone for the evening.
+      const { data: failedRows } = await supabase.from("whatsapp_outbox").select("jid")
+        .eq("tournament_id", t.id).eq("kind", "day_before").eq("status", "failed");
+      const failures = new Map<string, number>();
+      for (const f of failedRows ?? []) failures.set(f.jid, (failures.get(f.jid) ?? 0) + 1);
+      const todo = [...chats].filter(([jid]) => (failures.get(jid) ?? 0) < 2);
+      queued += await enqueue(supabase, todo.map(([jid, g]) => ({
         jid,
         kind: "day_before" as const,
         priority: 1,
@@ -106,8 +114,8 @@ async function handle(req: Request): Promise<Response> {
   }
 }
 
-// Active players of the tournament, grouped by the chat they opted in from,
-// and the names of those who haven't opted in.
+// Active players of the tournament, grouped by the chats that opted in for
+// them, and the names of those who haven't opted in.
 async function audience(supabase: SupabaseClient, t: Tournament) {
   const optedIn = await optedInChats(supabase, t.id);
   const { data: players, error } = await supabase.from("players").select("id, name")
@@ -116,15 +124,14 @@ async function audience(supabase: SupabaseClient, t: Tournament) {
   const chats = new Map<string, { names: string[]; playerIds: string[] }>();
   const notOptedIn: string[] = [];
   for (const p of players ?? []) {
-    const jid = optedIn.get(p.id);
-    if (!jid) {
-      notOptedIn.push(p.name);
-      continue;
+    const jids = optedIn.get(p.id) ?? [];
+    if (jids.length === 0) notOptedIn.push(p.name);
+    for (const jid of jids) {
+      const g = chats.get(jid) ?? { names: [], playerIds: [] };
+      g.names.push(p.name);
+      g.playerIds.push(p.id);
+      chats.set(jid, g);
     }
-    const g = chats.get(jid) ?? { names: [], playerIds: [] };
-    g.names.push(p.name);
-    g.playerIds.push(p.id);
-    chats.set(jid, g);
   }
   return { chats, notOptedIn };
 }

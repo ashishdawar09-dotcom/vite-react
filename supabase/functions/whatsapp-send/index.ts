@@ -3,8 +3,9 @@
 // Sends what's waiting in whatsapp_outbox, one message at a time with a
 // random gap, so a burst of court calls goes out as a steady trickle.
 // Woken by the functions that queue messages, and every minute by pg_cron
-// while anything is due. Only one copy sends at a time (a lease row); a
-// second wake-up while it's busy just returns.
+// while anything is due. Only one copy sends at a time (a lease row with a
+// holder token); a second wake-up while it's busy just returns, and a copy
+// whose lease ran out stops instead of overlapping the next one.
 //
 // Answers straight away and sends in the background for up to ~100 s;
 // whatever's left is picked up by the next wake-up.
@@ -39,25 +40,26 @@ async function handle(req: Request): Promise<Response> {
   if (!cfg) return json({ skipped: "WhatsApp server not configured" }, 200);
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: took, error } = await supabase.rpc("take_whatsapp_lease", { p_seconds: LEASE_SECONDS });
+  const { data: holder, error } = await supabase.rpc("take_whatsapp_lease", { p_seconds: LEASE_SECONDS });
   if (error) return json({ error: error.message }, 500);
-  if (took !== true) return json({ busy: true }, 200);
+  if (typeof holder !== "string") return json({ busy: true }, 200);
 
-  const work = drain(supabase, cfg).catch((e) =>
+  const work = drain(supabase, cfg, holder).catch((e) =>
     console.error("whatsapp-send drain failed:", e instanceof Error ? e.message : e)
   );
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(work);
   return json({ started: true }, 202);
 }
 
-async function drain(supabase: SupabaseClient, cfg: WhatsAppConfig): Promise<void> {
+async function drain(supabase: SupabaseClient, cfg: WhatsAppConfig, firstHolder: string): Promise<void> {
   const started = Date.now();
   const inBudget = () => Date.now() - started < BUDGET_MS;
+  let holder: string | null = firstHolder;
   let sent = 0, failed = 0, holding = true;
   try {
     while (holding) {
       while (inBudget()) {
-        const { data, error } = await supabase.rpc("next_whatsapp_message");
+        const { data, error } = await supabase.rpc("next_whatsapp_message", { p_holder: holder });
         if (error) throw new Error(`next: ${error.message}`);
         const row = (data ?? [])[0] as Row | undefined;
         if (!row) break;
@@ -69,7 +71,7 @@ async function drain(supabase: SupabaseClient, cfg: WhatsAppConfig): Promise<voi
         if (row.kind === "day_before") await pause(5000, 9000);
         else await pause(2000, 4000);
       }
-      await release(supabase);
+      await release(supabase, holder!);
       holding = false;
       // A message queued while this pass was finishing found us busy and
       // was told so; pick it up now rather than at the next minute.
@@ -78,17 +80,18 @@ async function drain(supabase: SupabaseClient, cfg: WhatsAppConfig): Promise<voi
         .eq("status", "queued").lte("not_before", new Date().toISOString());
       if (!count) break;
       const { data: again } = await supabase.rpc("take_whatsapp_lease", { p_seconds: LEASE_SECONDS });
-      holding = again === true;
+      holder = typeof again === "string" ? again : null;
+      holding = holder !== null;
     }
   } finally {
-    if (holding) await release(supabase);
+    if (holding && holder) await release(supabase, holder);
     console.log(`whatsapp-send: ${sent} sent, ${failed} failed in ${Math.round((Date.now() - started) / 1000)} s`);
   }
 }
 
 // If this fails the lease simply runs out after LEASE_SECONDS.
-async function release(supabase: SupabaseClient): Promise<void> {
-  const { error } = await supabase.rpc("release_whatsapp_lease");
+async function release(supabase: SupabaseClient, holder: string): Promise<void> {
+  const { error } = await supabase.rpc("release_whatsapp_lease", { p_holder: holder });
   if (error) console.error("whatsapp-send couldn't release its lease:", error.message);
 }
 
@@ -105,7 +108,10 @@ async function deliver(supabase: SupabaseClient, cfg: WhatsAppConfig, row: Row):
     console.error("whatsapp failed for", maskNumber(row.jid), msg);
     const final = row.attempts >= 3;
     await supabase.from("whatsapp_outbox").update(final
-      ? { status: "failed", error_message: msg }
+      // A day-before message that gave up (phone offline for a few
+      // minutes, say) frees its dedupe key, so the next 5-minute run that
+      // evening queues it again.
+      ? { status: "failed", error_message: msg, ...(row.kind === "day_before" ? { dedupe_key: null } : {}) }
       : { status: "queued", error_message: msg, not_before: new Date(Date.now() + 60_000).toISOString() })
       .eq("id", row.id);
     if (final) await logCourtCall(supabase, row, "failed", msg);

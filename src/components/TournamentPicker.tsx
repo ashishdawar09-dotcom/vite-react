@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { Tournament } from "../types";
 import * as db from "../lib/db";
 import { toast } from "./Toast";
+import { formatClubNumber } from "../lib/whatsapp";
 
 type EditState = {
   name: string;
@@ -33,11 +34,17 @@ function emptyEditState(): EditState {
   };
 }
 
-// "+1 (778) 555-0123" -> "17785550123"; 10 digits get the North American 1.
-// Empty when it can't be a full international number.
+// "+1 (778) 555-0123" -> "17785550123". Ten digits that form a North
+// American number get the 1; anything else must already start with its
+// country code. A 10-digit number from elsewhere (an Indian mobile typed
+// without 91) looks North American, so the form shows the result under
+// the field for the admin to check. Empty when it can't be a full number.
 function whatsappDigits(raw: string): string {
   let d = raw.replace(/\D/g, "");
-  if (d.length === 10) d = "1" + d;
+  if (d.length === 10) {
+    if (raw.trim().startsWith("+") || !/^[2-9]\d{2}[2-9]\d{6}$/.test(d)) return "";
+    d = "1" + d;
+  }
   return /^[1-9]\d{7,14}$/.test(d) ? d : "";
 }
 
@@ -289,6 +296,13 @@ export function TournamentPicker({
             </label>
             <label style={labelStyle}>Club WhatsApp number (players message this to opt in)</label>
             <input type="tel" value={form.whatsapp_number} onChange={e => setField("whatsapp_number", e.target.value)} placeholder="+1 778 555 0123" style={lightInputStyle} />
+            {form.whatsapp_number.trim() && (
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: -8, marginBottom: 12 }}>
+                {whatsappDigits(form.whatsapp_number)
+                  ? <>Players will message <strong>{formatClubNumber(whatsappDigits(form.whatsapp_number))}</strong></>
+                  : "Include the country code, e.g. +1 778 555 0123"}
+              </div>
+            )}
 
             <SectionHeader>Terms & rules (shown on the form)</SectionHeader>
             <textarea value={form.terms_text} onChange={e => setField("terms_text", e.target.value)} placeholder="Type each paragraph separated by a blank line…" rows={6} style={{ ...lightInputStyle, resize: "vertical", fontFamily: "inherit" }} />

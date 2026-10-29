@@ -393,7 +393,8 @@ Good luck out there!
     // WHATSAPP — queued for players who opted in; whatsapp-send delivers
     // them a few seconds apart and logs the result to notification_log
     // (channel='whatsapp'). One message per chat: a parent who opted in for
-    // two players on this match gets one.
+    // two players on this match gets one. Players who haven't opted in are
+    // only counted, not logged (most players, on every match).
     // ========================================================================
     let waQueued = 0, waSkipped = 0;
     if (whatsappConfig() && tournament?.whatsapp_enabled === true && recipients.length > 0) {
@@ -401,19 +402,9 @@ Good luck out there!
         const chats = await optedInChats(supabase, match.tournament_id);
         const byChat = new Map<string, Recipient[]>();
         for (const r of recipients) {
-          const jid = chats.get(r.player.id);
-          if (!jid) {
-            await supabase.from("notification_log").insert({
-              match_id: matchId,
-              player_id: r.player.id,
-              channel: "whatsapp",
-              status: "skipped",
-              error_message: "not opted in to WhatsApp",
-            });
-            waSkipped++;
-            continue;
-          }
-          byChat.set(jid, [...(byChat.get(jid) ?? []), r]);
+          const jids = chats.get(r.player.id) ?? [];
+          if (jids.length === 0) waSkipped++;
+          for (const jid of jids) byChat.set(jid, [...(byChat.get(jid) ?? []), r]);
         }
         // Moved to another court: an unsent call for the old court is wrong.
         await supabase.from("whatsapp_outbox")

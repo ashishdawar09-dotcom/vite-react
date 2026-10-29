@@ -105,10 +105,26 @@ Every request needs the API key (password 2), so the address being public is fin
 
 ## 5. Supabase: deploy and secrets
 
-From the `vite-react` repo, the migration first:
+**Release order matters.** The new frontend reads the two new tournament columns. If it goes live (Vercel deploys on merge) before the migration, every tournament page breaks. The migration on its own changes nothing visible, so always do it in this order:
+
+1. migration (`supabase db push`),
+2. functions,
+3. merge the pull request.
+
+From the `vite-react` repo, check that only this branch's migration is pending, then push it:
+
+```bash
+supabase db push --dry-run
+```
 
 ```bash
 supabase db push
+```
+
+Check that the new columns are readable before going on:
+
+```bash
+supabase db query --linked "select whatsapp_enabled, whatsapp_number from tournaments limit 1"
 ```
 
 ```bash
@@ -124,8 +140,20 @@ supabase secrets set EVOLUTION_API_URL=https://wa.adawar.org EVOLUTION_API_KEY=<
 The migration created the secret the database uses to wake the functions. Copy it into the functions' secrets without printing it:
 
 ```bash
-supabase secrets set WHATSAPP_INTERNAL_SECRET="$(supabase db query --linked -o csv "select decrypted_secret from vault.decrypted_secrets where name = 'whatsapp_internal_secret'" 2>/dev/null | tail -1)"
+WA_SECRET="$(supabase db query --linked --output-format json "select decrypted_secret as s from vault.decrypted_secrets where name = 'whatsapp_internal_secret'" | jq -r '.rows[0].s')"
 ```
+
+It must be exactly 64 characters. If this prints anything else, stop and look:
+
+```bash
+echo -n "$WA_SECRET" | wc -c
+```
+
+```bash
+supabase secrets set WHATSAPP_INTERNAL_SECRET="$WA_SECRET"
+```
+
+Then merge the pull request.
 
 ## 6. Point Evolution's webhook at us
 
@@ -155,12 +183,19 @@ curl -s -X POST https://wdqooznwzesmjdvlcrxw.supabase.co/functions/v1/whatsapp-r
 
 ## How it works
 
-- **Opt-in** (`whatsapp-inbound`): the code is the first 8 characters of the registration ID. The opt-in is stored in `whatsapp_optins` with the chat it came from, and updates go to that chat. A player can opt in before their entry is approved; they get updates once it is. STOP sets `opted_out_at` for every entry on that chat and cancels anything queued for it. START clears it.
-- **Queue** (`whatsapp_outbox`, `whatsapp-send`): every message is queued, then sent one at a time by a single sender, 2–4 s apart (5–9 s for day-before messages). Replies and court calls go first. A failed message is retried a minute later, 3 tries in total. A court call still unsent after 20 minutes is dropped, since "you're up now" would be wrong by then. Moving a match to another court cancels its unsent call. The functions wake the sender when they queue something, and pg_cron checks every minute as a backstop.
-- **Day before**: between 6 and 9 pm Pacific on the day before a tournament with WhatsApp on, pg_cron calls `whatsapp-reminders` every 5 minutes. Each chat is queued once, so people who opt in that evening still get it.
-- **Court calls**: `notify-court-allocated` queues one message per chat on the match. Results are in `notification_log` with `channel = 'whatsapp'`. Players who haven't opted in are logged as skipped.
+- **Opt-in** (`whatsapp-inbound`): the code is the first 8 characters of the registration ID. The opt-in is stored in `whatsapp_optins` with the chat it came from, and updates go to that chat. Up to 3 chats can opt in for one entry, e.g. a player and a parent. A player can opt in before their entry is approved; they get updates once it is.
+- **STOP / START**: STOP sets `opted_out_at` for every entry on that chat and cancels anything queued for it. START clears it. START only counts when it's the whole message, so a question like "Start time tomorrow?" doesn't turn updates back on. A message that's only an 8-character code we don't recognise gets no reply.
+- **Queue** (`whatsapp_outbox`, `whatsapp-send`): every message is queued, then sent one at a time by a single sender, 2–4 s apart (5–9 s for day-before messages). Replies and court calls go first. A failed message is retried a minute later, 3 tries in total. The functions wake the sender when they queue something, and pg_cron checks every minute as a backstop.
+- **Dropped instead of sent late**:
+  - a court call still unsent after 20 minutes ("you're up now" would be wrong by then),
+  - a court call for a match moved to another court,
+  - a day-before message once the tournament day has started,
+  - a reply more than a day old,
+  - anything for a tournament whose switch has been turned off.
+- **Day before**: between 6 and 9 pm Pacific on the day before a tournament with WhatsApp on, pg_cron calls `whatsapp-reminders` every 5 minutes. Each chat is queued once, so people who opt in that evening still get it. If a message fails 3 times (the phone was offline, say), a later run that evening queues it again, up to 2 rounds per chat.
+- **Court calls**: `notify-court-allocated` queues one message per chat on the match. Results are in `notification_log` with `channel = 'whatsapp'`. Players who haven't opted in are counted in the function's response, not logged.
 - **Doubles partners** can't opt in yet: the button is only on the confirmation screen of the person who registered.
-- **To stop everything**: untick the setting, or `supabase secrets unset EVOLUTION_API_URL`.
+- **To stop everything**: untick the setting. Anything already queued for that tournament is dropped. Or run `supabase secrets unset EVOLUTION_API_URL`.
 
 ## Tournament day
 
