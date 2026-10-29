@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { submitPublicRegistration } from "../../lib/db";
 import { pushSupportStatus, subscribeToPush } from "../../lib/push";
+import { formatClubNumber, optinCode, optinLink } from "../../lib/whatsapp";
 import {
   GA_MEASUREMENT_ID,
   PRIVACY_URL,
@@ -395,6 +396,13 @@ export function PublicRegistrationPage() {
               : <>Thanks, {form.player_name}! An admin will verify your e-transfer reference and
                   confirm your spot shortly. You'll be visible in the player roster once approved.</>}
           </p>
+          {tournament?.whatsapp_enabled && tournament.whatsapp_number && submittedRegistrationId && (
+            <WhatsAppOptIn
+              clubNumber={tournament.whatsapp_number}
+              tournamentName={tournament.name}
+              registrationId={submittedRegistrationId}
+            />
+          )}
           {/* Push opt-in surface — always renders something so users on
               cached pages or with malformed responses still see status */}
           {tournament && (
@@ -1027,6 +1035,58 @@ function CategoryPicker({ categories, value, onChange, isMobile }: CategoryPicke
         );
       })}
     </select>
+  );
+}
+
+// ---------- WhatsAppOptIn ---------------------------------------------------
+
+// Opt-in is the player's own message: the button opens WhatsApp with their
+// code typed in, and nothing is sent to them until they send it. Shown only
+// while the tournament has WhatsApp on and a club number set.
+function WhatsAppOptIn({
+  clubNumber,
+  tournamentName,
+  registrationId,
+}: { clubNumber: string; tournamentName: string; registrationId: string }) {
+  const [opened, setOpened] = useState(false);
+  const link = optinLink(clubNumber, tournamentName, registrationId);
+  if (!link) return null;
+  return (
+    <div style={{
+      marginTop: spacing.lg, padding: spacing.md,
+      border: "1px solid #25D366", borderRadius: radii.md,
+      background: "rgba(37, 211, 102, 0.06)", textAlign: "left",
+    }}>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: colors.text.primaryLight, lineHeight: 1.4 }}>
+        Want updates on WhatsApp?
+      </p>
+      <p style={{ marginTop: 4, marginBottom: 0, fontSize: 12, color: colors.text.mutedLight, lineHeight: 1.45 }}>
+        A reminder the evening before, and a message when your court is ready. Only if you
+        ask: tap the button, then press Send in WhatsApp. Reply STOP anytime.
+      </p>
+      <a
+        href={link}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => setOpened(true)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          marginTop: spacing.md, padding: "14px 20px",
+          borderRadius: radii.md, background: "#25D366", color: "#073b1f",
+          fontSize: 15, fontWeight: 800, textDecoration: "none",
+          minHeight: 48, boxSizing: "border-box",
+        }}
+      >
+        💬 Get updates on WhatsApp
+      </a>
+      {opened && (
+        <p style={{ marginTop: spacing.sm, marginBottom: 0, fontSize: 12, color: colors.text.mutedLight, lineHeight: 1.45 }}>
+          Once you press Send, you'll get a reply confirming it. If WhatsApp didn't open,
+          message <strong>{formatClubNumber(clubNumber)}</strong> on WhatsApp with:{" "}
+          <strong>My code: {optinCode(registrationId)}</strong>
+        </p>
+      )}
+    </div>
   );
 }
 

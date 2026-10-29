@@ -422,3 +422,17 @@ verify_jwt = false
 # the function checks both itself.
 [functions.registration-email]
 verify_jwt = false
+
+# Called by pg_cron (pg_net) with a shared secret, or by an admin;
+# the function checks both itself.
+[functions.whatsapp-reminders]
+verify_jwt = false
+
+# Evolution API's webhook for incoming WhatsApp messages; checks its own
+# x-webhook-secret header.
+[functions.whatsapp-inbound]
+verify_jwt = false
+
+# Woken by pg_cron and the other functions with the internal secret.
+[functions.whatsapp-send]
+verify_jwt = false
