@@ -7,6 +7,8 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { IosInstallHint } from './components/IosInstallHint'
 import { LottieLoader } from './components/ui/lottie-loader'
 import { ToastProvider, ToastBridge } from './components/Toast'
+import { Analytics } from '@vercel/analytics/react'
+import { webAnalyticsBeforeSend } from './lib/webAnalytics'
 import { clearChunkReloadGuard, lazyWithReload } from './lib/lazyWithReload'
 
 // Reset scroll to top whenever the URL changes. Without this, navigating
@@ -129,6 +131,7 @@ createRoot(document.getElementById('root')!).render(
             </Routes>
           </Suspense>
         </BrowserRouter>
+        <Analytics beforeSend={webAnalyticsBeforeSend} />
       </ToastProvider>
     </ErrorBoundary>
   </StrictMode>,
