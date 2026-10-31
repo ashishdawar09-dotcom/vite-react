@@ -1,5 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { joinNames, maskNumber, optinCode, parseCommand, toWhatsAppNumber } from "./whatsapp.ts";
+import {
+  formatClubNumber, joinNames, maskNumber, optinCode, optinLink, optinMessage, parseCommand, toWhatsAppNumber,
+} from "./whatsapp.ts";
 
 Deno.test("10-digit Canadian numbers get the country code", () => {
   assertEquals(toWhatsAppNumber("7789646999"), "17789646999");
@@ -38,8 +40,26 @@ Deno.test("names are joined by first name, without repeats", () => {
   assertEquals(joinNames([]), "there");
 });
 
-Deno.test("the opt-in code is the start of the registration id", () => {
-  assertEquals(optinCode("1a2b3c4d-0000-4000-8000-000000000000"), "1A2B3C4D");
+Deno.test("the opt-in code is the start of the registration id, the partner's the end", () => {
+  assertEquals(optinCode("1a2b3c4d-0000-4000-8000-0000ab12cd34"), "1A2B3C4D");
+  assertEquals(optinCode("1a2b3c4d-0000-4000-8000-0000ab12cd34", "player"), "1A2B3C4D");
+  assertEquals(optinCode("1a2b3c4d-0000-4000-8000-0000ab12cd34", "partner"), "AB12CD34");
+});
+
+Deno.test("the opt-in link opens WhatsApp with the code typed in", () => {
+  const link = optinLink("919818338393", "Shuttle Storm Abbotsford 2026", "E9794751")!;
+  assertEquals(link.startsWith("https://wa.me/919818338393?text="), true);
+  const msg = decodeURIComponent(link.split("text=")[1]);
+  assertEquals(msg, optinMessage("Shuttle Storm Abbotsford 2026", "E9794751"));
+  assertEquals(parseCommand(msg), { kind: "join", code: "E9794751", labelled: true });
+  assertEquals(optinLink(null, "x", "E9794751"), null);
+  assertEquals(optinLink("12345", "x", "E9794751"), null);
+});
+
+Deno.test("club numbers are written the way people read them", () => {
+  assertEquals(formatClubNumber("919818338393"), "+91 98183 38393");
+  assertEquals(formatClubNumber("17789646999"), "+1 778 964 6999");
+  assertEquals(formatClubNumber("447946095800"), "+447946095800");
 });
 
 Deno.test("the button's message is read as a join", () => {

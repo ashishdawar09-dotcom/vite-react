@@ -9,6 +9,8 @@ import {
   longDate,
   registrationApproved,
   registrationReceived,
+  whatsappInvite,
+  type WhatsAppInviteData,
   adminRefusedRepeat,
   deadlineText,
   maskEmail,
@@ -144,6 +146,62 @@ Deno.test("doubles entry without a partner is told about pairing", () => {
   const a = registrationApproved(solo);
   assertStringIncludes(a.text, "We'll pair you with another player if one is available; pairings are posted by Thursday, November 19.");
   assert(!registrationReceived(data()).html.includes("To be paired"));
+});
+
+const invite = (who: Partial<WhatsAppInviteData["invitee"]> = {}, over: Partial<WhatsAppInviteData> = {}): WhatsAppInviteData => {
+  const code = who.code ?? "E9794751";
+  const message = `Hi! Please send me WhatsApp updates for Shuttle Storm Abbotsford 2026. My code: ${code}`;
+  return {
+    tournament: data().tournament,
+    invitee: { name: "Sam Lee", role: "player", categories: ["Mixed Doubles"], other: "Ana Diaz", otherInvited: true, code, ...who },
+    message,
+    link: `https://wa.me/919818338393?text=${encodeURIComponent(message)}`,
+    clubName: "Shuttle Storm",
+    clubNumber: "+91 98183 38393",
+    signoff: "Ashish & Rakesh",
+    sender: "Shuttle Storm Badminton Club · 2669 Langdon St, Abbotsford, BC V2T 1S8",
+    assetBase: "https://shuttlestorm.adawar.org/email",
+    privacyUrl: "https://shuttlestorm.adawar.org/privacy",
+    ...over,
+  };
+};
+
+Deno.test("WhatsApp invitation: the reader's own code, link and schedule", () => {
+  const d = invite();
+  const e = whatsappInvite(d);
+  assertEquals(e.subject, "Sam, get your court calls on WhatsApp: Shuttle Storm Abbotsford 2026");
+  assertStringIncludes(e.html, "Want WhatsApp<br>updates, Sam?");
+  assertEquals(e.html.split(`href="${d.link}"`).length - 1, 4, "both buttons, the typed message and the send arrow");
+  assertStringIncludes(e.html, ">E9794751</span></td>");
+  assertStringIncludes(e.html, "Fri Nov 20");
+  assertStringIncludes(e.html, "Sat Nov 21");
+  assertStringIncludes(e.html, "Ana Diaz gets their own invitation and code.");
+  assertStringIncludes(e.html, "https://shuttlestorm.adawar.org/email/whatsapp-hero.gif");
+  assertStringIncludes(e.html, "2669 Langdon St");
+  assert(!/<[a-z]/i.test(e.text), "text part has no tags");
+  assert(!/&[a-z0-9#]+;/i.test(e.text), "text part has no entities");
+  assertStringIncludes(e.text, d.link);
+  assertStringIncludes(e.text, d.message);
+  assertStringIncludes(e.text, "Friday, November 20: a reminder the evening before.");
+  assertStringIncludes(e.text, "My code: E9794751");
+  assert(!whatsappInvite(invite({ otherInvited: false })).html.includes("gets their own invitation"));
+});
+
+Deno.test("WhatsApp invitation for a partner says who entered them", () => {
+  const e = whatsappInvite(invite({ name: "Ana Diaz", role: "partner", other: "Sam Lee", otherInvited: false, code: "8A61C2F0" }));
+  assertEquals(e.subject, "Ana, get your own court calls on WhatsApp: Shuttle Storm Abbotsford 2026");
+  assertStringIncludes(e.html, `<strong style="color:#ECEEF2">Sam Lee</strong> entered you as their partner in ` +
+    `<strong style="color:#ECEEF2">Mixed Doubles</strong>`);
+  assertStringIncludes(e.text, "so you can sign up whether or not Sam does.");
+  assertStringIncludes(e.text, "My code: 8A61C2F0");
+});
+
+Deno.test("WhatsApp invitation escapes names and keeps long ones on the heading's second line", () => {
+  const e = whatsappInvite(invite({ name: `<img src=x onerror=alert(1)> Bo`, other: `"Ana" & <b>Co</b>` }));
+  assert(!e.html.includes("<img src=x"), "name is escaped");
+  assert(!e.html.includes("<b>Co</b>"), "partner name is escaped");
+  assertStringIncludes(whatsappInvite(invite({ name: "Sukhwinder Sandhu" })).html, "Sukhwinder, want<br>WhatsApp updates?");
+  assertStringIncludes(whatsappInvite(invite({ name: "Harjinder Sandhu" })).html, `<h1 class="h30"`);
 });
 
 // Sam paid their own share and named Ana, who hasn't paid hers yet.

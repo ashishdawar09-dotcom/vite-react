@@ -20,9 +20,12 @@ export function optinLink(clubNumber: string | null, tournamentName: string, reg
   return `https://wa.me/${digits}?text=${encodeURIComponent(optinMessage(tournamentName, registrationId))}`;
 }
 
-// "+1 778 964 6999" for 1XXXXXXXXXX numbers, "+<digits>" otherwise.
+// "+1 778 964 6999" for North American numbers, "+91 98183 38393" for
+// Indian mobiles, "+<digits>" otherwise. Same as formatClubNumber in
+// supabase/functions/_shared/whatsapp.ts.
 export function formatClubNumber(clubNumber: string): string {
   const d = clubNumber.replace(/\D/g, "");
   if (d.length === 11 && d.startsWith("1")) return `+1 ${d.slice(1, 4)} ${d.slice(4, 7)} ${d.slice(7)}`;
+  if (d.length === 12 && d.startsWith("91")) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
   return `+${d}`;
 }

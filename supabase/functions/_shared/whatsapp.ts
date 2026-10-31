@@ -89,10 +89,35 @@ export function joinNames(names: string[]): string {
 
 // ---- Opt-in codes and commands -------------------------------------------
 
-// The code a player sends: the first 8 characters of their registration id.
-// The success screen builds the same thing (src/lib/whatsapp.ts).
-export function optinCode(registrationId: string): string {
-  return registrationId.replace(/-/g, "").slice(0, 8).toUpperCase();
+// The code a person sends: the first 8 characters of the registration id
+// for the registrant, the last 8 for their doubles partner (see
+// resolve_whatsapp_code). The success screen builds the registrant's code
+// the same way (src/lib/whatsapp.ts).
+export function optinCode(registrationId: string, role: "player" | "partner" = "player"): string {
+  const hex = registrationId.replace(/-/g, "");
+  return (role === "partner" ? hex.slice(-8) : hex.slice(0, 8)).toUpperCase();
+}
+
+// The message WhatsApp opens with, and the wa.me link that types it in.
+// Same wording as the success screen (src/lib/whatsapp.ts), which
+// parseCommand reads back.
+export function optinMessage(tournamentName: string, code: string): string {
+  return `Hi! Please send me WhatsApp updates for ${tournamentName}. My code: ${code}`;
+}
+
+export function optinLink(clubNumber: string | null, tournamentName: string, code: string): string | null {
+  const digits = (clubNumber ?? "").replace(/\D/g, "");
+  if (!/^[1-9]\d{7,14}$/.test(digits)) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(optinMessage(tournamentName, code))}`;
+}
+
+// "+1 778 964 6999" for North American numbers, "+91 98183 38393" for
+// Indian mobiles, "+<digits>" otherwise.
+export function formatClubNumber(clubNumber: string): string {
+  const d = clubNumber.replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("1")) return `+1 ${d.slice(1, 4)} ${d.slice(4, 7)} ${d.slice(7)}`;
+  if (d.length === 12 && d.startsWith("91")) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
+  return `+${d}`;
 }
 
 // `labelled`: the message said "code" (the button's text), so an unknown

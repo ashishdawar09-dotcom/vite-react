@@ -3,8 +3,10 @@
 // Webhook for messages people send to the club's WhatsApp number. The
 // Evolution API server calls it for every incoming message (event
 // MESSAGES_UPSERT) with an x-webhook-secret header. Handles three things:
-//   "... My code: 1A2B3C4D"  -> opts this chat in for that registration
-//                              (up to 3 chats per entry), replies once
+//   "... My code: 1A2B3C4D"  -> opts this chat in for that registration's
+//                              player (first 8 characters of its id) or
+//                              doubles partner (last 8), up to 3 chats per
+//                              person, and replies once
 //   STOP                     -> no more updates to this chat
 //   START                    -> updates back on
 // A chat has two IDs: its phone number (…@s.whatsapp.net) and WhatsApp's
@@ -85,10 +87,10 @@ const isLid = (j: string) => j.endsWith("@lid");
 // send to, the @lid the alias, and the chat's IDs grow to include the
 // stored one. Never used on STOP/START, where the sender proves nothing
 // and a copied profile name must not redirect anyone's updates.
-async function linkOnJoin(supabase: SupabaseClient, chat: Chat, registrationId: string): Promise<void> {
+async function linkOnJoin(supabase: SupabaseClient, chat: Chat, owner: Owner): Promise<void> {
   if (chat.ids.length > 1 || !chat.pushName) return;
   const { data, error } = await supabase.from("whatsapp_optins").select("jid")
-    .eq("registration_id", registrationId)
+    .eq("registration_id", owner.registration_id).eq("role", owner.role)
     .is("jid_alt", null).eq("push_name", chat.pushName)
     .like("jid", isLid(chat.jid) ? "%@s.whatsapp.net" : "%@lid");
   if (error) throw new Error(`link: ${error.message}`);
@@ -96,44 +98,49 @@ async function linkOnJoin(supabase: SupabaseClient, chat: Chat, registrationId: 
   if (candidates.length !== 1) return;
   const { error: upErr } = await supabase.from("whatsapp_optins")
     .update({ jid_alt: chat.jid })
-    .eq("registration_id", registrationId).eq("jid", candidates[0]).is("jid_alt", null);
+    .eq("registration_id", owner.registration_id).eq("role", owner.role)
+    .eq("jid", candidates[0]).is("jid_alt", null);
   if (upErr) throw new Error(`link: ${upErr.message}`);
   chat.ids.push(candidates[0]);
 }
 
+// Whose code it is: the registrant ("player") or their doubles partner.
+type Owner = { registration_id: string; tournament_id: string; role: "player" | "partner"; person_name: string };
+
 // PostgREST in-list of chat IDs, quoted.
 const inList = (ids: string[]) => `(${ids.map((i) => `"${i}"`).join(",")})`;
 
-// At most this many chats can opt in for one entry (a player and a parent,
-// say); a code that's been passed around further gets a polite no.
+// At most this many chats can opt in for one person on an entry (a player
+// and a parent, say); a code that's been passed around further gets a
+// polite no.
 const MAX_CHATS_PER_ENTRY = 3;
 
 async function join(
   supabase: SupabaseClient, chat: Chat, code: string, labelled: boolean, replyKey: string | null,
 ) {
   const { jid } = chat;
-  const { data: regs, error } = await supabase.rpc("registration_for_whatsapp_code", { p_code: code });
+  const { data: owners, error } = await supabase.rpc("resolve_whatsapp_code", { p_code: code });
   if (error) throw new Error(`code lookup: ${error.message}`);
-  const reg = (regs ?? [])[0] as { id: string; tournament_id: string; player_name: string } | undefined;
-  if (!reg) {
+  const owner = (owners ?? [])[0] as Owner | undefined;
+  if (!owner) {
     if (!labelled) return { joined: false, reason: "not a code" };
     await enqueue(supabase, [{
       jid, kind: "reply", priority: 0, dedupe_key: replyKey,
-      body: "Sorry, we couldn't match that code to a registration. Please use the WhatsApp button on your registration confirmation page.",
+      body: "Sorry, we couldn't match that code to a registration. Please check it (8 letters and numbers, from your confirmation screen or our email) and send it again, or reply to any of our emails and we'll sort it out.",
     }]);
     return { joined: false, reason: "unknown code" };
   }
 
   const { data: t } = await supabase.from("tournaments").select("name, whatsapp_enabled")
-    .eq("id", reg.tournament_id).single();
+    .eq("id", owner.tournament_id).single();
   // The button only shows while WhatsApp is on; anything else is stale.
   if (!t?.whatsapp_enabled) return { joined: false, reason: "WhatsApp off for this tournament" };
 
   // Already opted in from this chat (in either ID form)? Then it's a re-join.
-  await linkOnJoin(supabase, chat, reg.id);
+  await linkOnJoin(supabase, chat, owner);
   const { data: existing, error: exErr } = await supabase.from("whatsapp_optins")
     .select("id, jid, jid_alt")
-    .eq("registration_id", reg.id).eq("role", "player");
+    .eq("registration_id", owner.registration_id).eq("role", owner.role);
   if (exErr) throw new Error(`opt-ins: ${exErr.message}`);
   const matches = (existing ?? []).filter((r) => chat.ids.includes(r.jid) || (r.jid_alt && chat.ids.includes(r.jid_alt)));
   // Two rows for this chat (one per ID form, from before they were tied
@@ -146,7 +153,7 @@ async function join(
   }
   if (!mine && (existing ?? []).length >= MAX_CHATS_PER_ENTRY) {
     await enqueue(supabase, [{
-      jid, kind: "reply", priority: 0, dedupe_key: replyKey, tournament_id: reg.tournament_id,
+      jid, kind: "reply", priority: 0, dedupe_key: replyKey, tournament_id: owner.tournament_id,
       body: `Sorry, ${MAX_CHATS_PER_ENTRY} phones already get updates for that entry. Please ask the organisers if you need this one added.`,
     }]);
     return { joined: false, reason: "too many chats" };
@@ -167,14 +174,14 @@ async function join(
   const { error: upErr } = mine
     ? await supabase.from("whatsapp_optins").update(row).eq("id", mine.id)
     : await supabase.from("whatsapp_optins").insert({
-      ...row, registration_id: reg.id, tournament_id: reg.tournament_id, role: "player",
+      ...row, registration_id: owner.registration_id, tournament_id: owner.tournament_id, role: owner.role,
     });
   if (upErr) throw new Error(`opt-in: ${upErr.message}`);
 
   await enqueue(supabase, [{
-    jid: sendTo, kind: "reply", priority: 0, tournament_id: reg.tournament_id, dedupe_key: replyKey,
+    jid: sendTo, kind: "reply", priority: 0, tournament_id: owner.tournament_id, dedupe_key: replyKey,
     body:
-`✅ Thanks ${joinNames([reg.player_name])}! You'll get WhatsApp updates for *${t.name}* here:
+`✅ Thanks ${joinNames([owner.person_name])}! You'll get WhatsApp updates for *${t.name}* here:
 • a reminder the evening before
 • a message when your court is ready
 
@@ -208,7 +215,7 @@ async function cancelQueued(supabase: SupabaseClient, jids: string[]) {
 }
 
 // Only an exact chat match turns updates back on: START from an unknown
-// chat can't be tied to anyone safely (the player can use the button again).
+// chat can't be tied to anyone safely (the player can send their code again).
 async function restart(supabase: SupabaseClient, chat: Chat, replyKey: string | null) {
   const { jid, ids } = chat;
   const { data, error } = await supabase.from("whatsapp_optins")
@@ -251,7 +258,7 @@ async function unmatchedStop(supabase: SupabaseClient, chat: Chat, replyKey: str
     await cancelQueued(supabase, jids);
     await enqueue(supabase, [{
       jid: chat.jid, kind: "reply", priority: 0, dedupe_key: replyKey,
-      body: "You won't get any more updates. To turn them back on, use the WhatsApp button on your registration page again.",
+      body: "You won't get any more updates. To turn them back on, send your code again.",
     }]);
     return { stopped: rows!.length, matchedBy: "name" };
   }

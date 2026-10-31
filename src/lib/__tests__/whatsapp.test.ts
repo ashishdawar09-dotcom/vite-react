@@ -23,6 +23,7 @@ describe("WhatsApp opt-in link", () => {
 
   it("formats the club number for people to read", () => {
     expect(formatClubNumber("17789646999")).toBe("+1 778 964 6999");
-    expect(formatClubNumber("919812345678")).toBe("+919812345678");
+    expect(formatClubNumber("919812345678")).toBe("+91 98123 45678");
+    expect(formatClubNumber("447946095800")).toBe("+447946095800");
   });
 });
