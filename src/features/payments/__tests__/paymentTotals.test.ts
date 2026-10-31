@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { paymentNotes, paymentTotals } from "../paymentTotals";
 
-type R = Parameters<typeof paymentTotals>[0][number];
+type R = Parameters<typeof paymentTotals>[0][number] & { player_name: string };
 const row = (o: Partial<R> & { id: string; player_email: string }): R => ({
   category_id: "mixed", status: "approved", approved_team_id: null, partner_name: null, partner_email: null,
-  payment_method: "etransfer", amount_due_cents: 4000, payment_paid_full_for_partner: false, ...o,
+  payment_method: "etransfer", amount_due_cents: 4000, payment_paid_full_for_partner: false,
+  player_name: o.player_email.split("@")[0], ...o,
 });
 
 // Ana and Ben each paid their own share: two payments, one team.
@@ -97,5 +98,34 @@ describe("paymentNotes", () => {
   it("only counts the partner's entry in the same event", () => {
     const benMens = row({ id: "m", category_id: "mens", player_email: "ben@x.com" });
     expect(notesFor([ana, benMens])).toEqual({ a: "partner's share not paid yet" });
+  });
+});
+
+describe("partners named without an email", () => {
+  // Salil named Sagar but gave no email for him.
+  const salil = row({ id: "n1", player_email: "salil@x.com", partner_name: "Sagar Arora" });
+
+  it("flags the entry, since we can't tell whether the partner has paid", () => {
+    expect(Object.fromEntries(paymentNotes([salil], [salil], categories))).toEqual({ n1: "partner has no email: check their share" });
+  });
+
+  it("doesn't flag it once someone with the partner's name has entered the event", () => {
+    const sagar = row({ id: "n2", status: "pending", player_email: "sagar@x.com", player_name: " sagar arora " });
+    expect(Object.fromEntries(paymentNotes([salil], [salil, sagar], categories))).toEqual({});
+    const elsewhere = { ...sagar, category_id: "mens" };
+    expect(Object.fromEntries(paymentNotes([salil], [salil, elsewhere], categories))).toEqual({ n1: "partner has no email: check their share" });
+  });
+
+  it("counts it as paid separately when the partner's entry names this player", () => {
+    const sagarNamingSalil = row({ id: "n3", player_email: "sagar@x.com", partner_name: "Salil", partner_email: "salil@x.com" });
+    expect(paymentTotals([salil, sagarNamingSalil])).toMatchObject({ entries: 1, payments: 2 });
+    expect(Object.fromEntries(paymentNotes([salil, sagarNamingSalil], [salil, sagarNamingSalil], categories)))
+      .toEqual({ n1: "paid separately", n3: "paid separately" });
+  });
+
+  it("leaves paid-for-both and per-team entries alone", () => {
+    const lee = row({ id: "n4", player_email: "lee@x.com", partner_name: "Mana", payment_paid_full_for_partner: true, amount_due_cents: 8000 });
+    const perTeam = row({ id: "n5", category_id: "team-priced", player_email: "jo@x.com", partner_name: "Kim" });
+    expect(Object.fromEntries(paymentNotes([lee, perTeam], [lee, perTeam], categories))).toEqual({ n4: "paid for both" });
   });
 });

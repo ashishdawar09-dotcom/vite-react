@@ -150,6 +150,7 @@ export function PaymentsPage() {
   const totals = useMemo(() => paymentTotals(approved), [approved]);
   const notes = useMemo(() => paymentNotes(approved, rows, categories), [approved, rows, categories]);
   const sharesDue = [...notes.values()].filter(n => n === "partner's share not paid yet").length;
+  const noEmail = [...notes.values()].filter(n => n === "partner has no email: check their share").length;
   const paidTwice = useMemo(() => {
     const groups = entryGroups(approved);
     return new Set(approved.filter(r => notes.get(r.id) === "share paid twice").map(r => groups.get(r.id))).size;
@@ -224,6 +225,7 @@ export function PaymentsPage() {
         note={[
           sharesDue ? `${sharesDue} partner${sharesDue === 1 ? " hasn't" : "s haven't"} paid their share yet (they pay by registering themselves).` : "",
           paidTwice ? `${paidTwice} entr${paidTwice === 1 ? "y has" : "ies have"} a share paid twice: refund one share.` : "",
+          noEmail ? `${noEmail} entr${noEmail === 1 ? "y names a partner" : "ies name partners"} without an email, so we can't tell if they've paid: check with them.` : "",
         ].filter(Boolean).join(" ") || undefined}
       >
         {approved.length === 0

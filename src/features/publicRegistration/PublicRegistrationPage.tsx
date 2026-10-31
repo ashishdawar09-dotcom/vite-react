@@ -129,9 +129,23 @@ export function PublicRegistrationPage() {
   const partnerAge = parseAge(form.partner_age);
   const partner = { age: partnerAge, student: offerStudent(partnerAge) && form.partner_student };
 
+  // "Pay for both" only applies to doubles priced per player, once a partner
+  // is named. Per-team prices already cover both players.
+  const baseFee = computeFee(selectedCategory, "separate");
+  const showPaymentSplit =
+    selectedCategory?.team_size === 2 &&
+    priceBasis(selectedCategory) === "per_player" &&
+    baseFee !== null &&
+    !!form.partner_name.trim();
+  const paymentSplit: PaymentSplit = showPaymentSplit ? form.payment_split : "separate";
+  // Paying for both puts the partner on this entry, so their details are
+  // required as in events without solo entries: the email is how the entry is
+  // matched to them and how they get the waiver. Without it the server can't
+  // record the second share.
+  const payingForBoth = paymentSplit === "full";
+
   // Prices are per category and per player's age/student status; membership
-  // no longer affects the fee. requirePartnerAge is set below once the split
-  // is known.
+  // no longer affects the fee.
   const partnerAgeNeeded =
     ageRequired && selectedCategory?.team_size === 2 && priceBasis(selectedCategory) === "per_player" &&
     !!form.partner_name.trim() && form.payment_split === "full";
@@ -144,9 +158,9 @@ export function PublicRegistrationPage() {
       requireAge: ageRequired,
       requireWaiver: waiverRequired,
       requirePartnerAge: partnerAgeNeeded,
-      requirePartner: payingShare,
+      requirePartner: payingShare || payingForBoth,
     }),
-    [form, payMethod, selectedCategory, ageRequired, waiverRequired, partnerAgeNeeded, payingShare],
+    [form, payMethod, selectedCategory, ageRequired, waiverRequired, partnerAgeNeeded, payingShare, payingForBoth],
   );
   const visibleErrors: FormErrors = useMemo(() => {
     const out: FormErrors = {};
@@ -156,15 +170,6 @@ export function PublicRegistrationPage() {
     return out;
   }, [errors, touched, submitStatus]);
 
-  // "Pay for both" only applies to doubles priced per player, once a partner
-  // is named. Per-team prices already cover both players.
-  const baseFee = computeFee(selectedCategory, "separate");
-  const showPaymentSplit =
-    selectedCategory?.team_size === 2 &&
-    priceBasis(selectedCategory) === "per_player" &&
-    baseFee !== null &&
-    !!form.partner_name.trim();
-  const paymentSplit: PaymentSplit = showPaymentSplit ? form.payment_split : "separate";
   const etransferDue = computeFee(selectedCategory, paymentSplit, player, partner, concessions);
   const ownShare = computeFee(selectedCategory, "separate", player, partner, concessions);
   const cardDue = etransferDue === null ? null : cardAmount(etransferDue);
@@ -703,19 +708,19 @@ export function PublicRegistrationPage() {
                       : selectedCategory.allow_solo_signup ? undefined : "Paying for both of you? Then only one of you needs to submit this form."}
                   />
                   {selectedCategory.allow_solo_signup && !payingShare && <PartnerPromise compact />}
-                  <Field label="Partner Name" required={!selectedCategory.allow_solo_signup || payingShare} error={visibleErrors.partner_name}>
+                  <Field label="Partner Name" required={!selectedCategory.allow_solo_signup || payingShare || payingForBoth} error={visibleErrors.partner_name}>
                     <input type="text" style={inputStyle}
                       value={form.partner_name}
                       onChange={(e) => set("partner_name", e.target.value)}
                       onBlur={() => markTouched("partner_name")} />
                   </Field>
-                  <Field label="Partner Contact" required={!selectedCategory.allow_solo_signup || payingShare} hint="Numbers only" error={visibleErrors.partner_phone}>
+                  <Field label="Partner Contact" required={!selectedCategory.allow_solo_signup || payingShare || payingForBoth} hint="Numbers only" error={visibleErrors.partner_phone}>
                     <input type="tel" inputMode="numeric" style={inputStyle}
                       value={form.partner_phone}
                       onChange={(e) => set("partner_phone", phoneInput(e.target.value))}
                       onBlur={() => markTouched("partner_phone")} />
                   </Field>
-                  <Field label="Partner Email" required={!selectedCategory.allow_solo_signup || payingShare} error={visibleErrors.partner_email}>
+                  <Field label="Partner Email" required={!selectedCategory.allow_solo_signup || payingShare || payingForBoth} error={visibleErrors.partner_email}>
                     <input type="email" inputMode="email" style={inputStyle}
                       value={form.partner_email}
                       onChange={(e) => set("partner_email", e.target.value)}
@@ -800,7 +805,8 @@ export function PublicRegistrationPage() {
           <Card>
             <SectionHeader step={stepOf("payment")} title="Payment" />
             {showPaymentSplit && baseFee !== null && (
-              <Field label="Payment split for this team">
+              <Field label="Payment split for this team"
+                hint={payingForBoth ? "Paying for both? Add your partner's email and contact number above, so we can confirm their place and send them the waiver." : undefined}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: spacing.sm }}>
                   {([
                     { v: "separate" as PaymentSplit, label: `Partner pays their own share (you pay ${fmtMoney(ownShare ?? baseFee)})` },
