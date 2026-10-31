@@ -49,7 +49,9 @@ export function paymentTotals(approved: Row[]) {
   };
 }
 
-export type PaymentNote = "paid for both" | "paid separately" | "share paid twice" | "partner's share not paid yet";
+export type PaymentNote =
+  | "paid for both" | "paid separately" | "share paid twice" | "partner's share not paid yet"
+  | "partner has no email: check their share";
 
 // What each approved row needs a director to know about its partner's share:
 // - "paid separately": each partner paid their own share.
@@ -58,16 +60,20 @@ export type PaymentNote = "paid for both" | "paid separately" | "share paid twic
 // - "partner's share not paid yet": an own-share doubles entry whose partner
 //   hasn't registered (registering is how they pay). `rows` holds every
 //   pending and approved row, so a partner's entry awaiting approval counts.
+// - "partner has no email: check their share": the same, but the partner was
+//   named without an email, so only a registration under the same name in the
+//   event can be matched; otherwise a director has to check.
 export function paymentNotes(
   approved: Row[],
-  rows: Pick<Row, "category_id" | "status" | "player_email">[],
+  rows: (Pick<Row, "category_id" | "status" | "player_email"> & { player_name: string })[],
   categories: Pick<Category, "id" | "team_size" | "price_basis">[],
 ): Map<string, PaymentNote> {
   const groups = entryGroups(approved);
   const byEntry = new Map<string, Row[]>();
   for (const r of approved) byEntry.set(groups.get(r.id)!, [...(byEntry.get(groups.get(r.id)!) ?? []), r]);
-  const entered = new Set(rows.filter(r => r.status === "pending" || r.status === "approved")
-    .map(r => `${r.category_id}|${norm(r.player_email)}`));
+  const live = rows.filter(r => r.status === "pending" || r.status === "approved");
+  const entered = new Set(live.map(r => `${r.category_id}|${norm(r.player_email)}`));
+  const enteredByName = new Set(live.map(r => `${r.category_id}|${norm(r.player_name)}`));
   const ownShareDoubles = new Set(categories
     .filter(c => c.team_size === 2 && c.price_basis === "per_player").map(c => c.id));
 
@@ -78,9 +84,12 @@ export function paymentNotes(
       notes.set(r.id, group.some(g => g.payment_paid_full_for_partner) ? "share paid twice" : "paid separately");
     } else if (r.payment_paid_full_for_partner) {
       if (r.partner_name) notes.set(r.id, "paid for both");
-    } else if (r.partner_email && ownShareDoubles.has(r.category_id) &&
-      !entered.has(`${r.category_id}|${norm(r.partner_email)}`)) {
-      notes.set(r.id, "partner's share not paid yet");
+    } else if (!ownShareDoubles.has(r.category_id)) {
+      continue;
+    } else if (r.partner_email) {
+      if (!entered.has(`${r.category_id}|${norm(r.partner_email)}`)) notes.set(r.id, "partner's share not paid yet");
+    } else if (r.partner_name?.trim() && !enteredByName.has(`${r.category_id}|${norm(r.partner_name)}`)) {
+      notes.set(r.id, "partner has no email: check their share");
     }
   }
   return notes;

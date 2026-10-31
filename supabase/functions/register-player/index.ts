@@ -169,9 +169,11 @@ async function handle(req: Request): Promise<Response> {
     }
 
     // ---- Validation: partner required for doubles unless solo allowed ----
+    // A partner counts as provided with a name and an email; events that allow
+    // solo entries also accept just a name (they pay their own share).
     const isDoubles = c.team_size === 2;
-    const partnerProvided =
-      !!body.partner_name?.trim() && !!body.partner_email?.trim();
+    const partnerNamed = !!body.partner_name?.trim();
+    const partnerProvided = partnerNamed && !!body.partner_email?.trim();
     if (isDoubles && !c.allow_solo_signup && !partnerProvided) {
       return json(
         { success: false, error: "Partner name and email are required for this category" },
@@ -191,6 +193,18 @@ async function handle(req: Request): Promise<Response> {
         );
       }
     }
+    // Paying for both needs the partner's email: it's how the entry is matched
+    // to them, how approval adds them to the team and how they get the waiver.
+    // Without it the second share used to be dropped silently. Per-team prices
+    // always cover both players (the form sends this flag for any named
+    // partner there), so only per-player doubles are checked.
+    if (isDoubles && c.price_basis === "per_player" && !!body.payment_paid_full_for_partner && !partnerProvided) {
+      return json({
+        success: false,
+        error: "To pay for your partner too, enter their name and email address. " +
+          "If they'll pay their own share, choose that option instead.",
+      }, 400);
+    }
 
     // ---- Age, fee type and waiver consent ----
     const waiverRequired = !!t.waiver_text;
@@ -203,8 +217,9 @@ async function handle(req: Request): Promise<Response> {
     const ageErr = ageProblem(c, playerAge);
     if (ageErr) return json({ success: false, error: ageErr }, 400);
     // Age-banded doubles (e.g. 35+): both partners must meet the minimum, so a
-    // named partner's age is required and checked too.
-    if (isDoubles && c.min_age != null && partnerProvided) {
+    // named partner's age is required and checked too, with or without their
+    // email.
+    if (isDoubles && c.min_age != null && partnerNamed) {
       const namedPartnerAge = parseAge(body.partner_age);
       if (namedPartnerAge === null) {
         return json({ success: false, error: "Please enter your partner's age on tournament day." }, 400);
@@ -361,7 +376,7 @@ async function handle(req: Request): Promise<Response> {
         comments: body.comments?.trim() || null,
         group_choice: body.group_choice ?? null,
         player_age: playerAge,
-        partner_age: partnerProvided ? partnerAge : null,
+        partner_age: partnerNamed ? partnerAge : null,
         player_fee_type: playerFeeType,
         partner_fee_type: partnerFeeType,
         partner_consent_token: waiverRequired && partnerProvided ? crypto.randomUUID() : null,
