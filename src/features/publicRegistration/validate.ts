@@ -82,9 +82,12 @@ export function validate(
     requireAge?: boolean;         // tournament has a waiver or a youth fee
     requireWaiver?: boolean;      // tournament has a waiver
     requirePartnerAge?: boolean;  // paying for both, and shares are priced by age
+    requirePartner?: boolean;     // paying their share of an entry that named them
   } = {},
 ): FormErrors {
-  const { requireMembership = true, requireAge = false, requireWaiver = false, requirePartnerAge = false } = options;
+  const {
+    requireMembership = true, requireAge = false, requireWaiver = false, requirePartnerAge = false, requirePartner = false,
+  } = options;
   const errs: FormErrors = {};
 
   if (!form.player_email.trim()) errs.player_email = "Required";
@@ -105,7 +108,7 @@ export function validate(
   if (form.payment_method === "etransfer" && !form.payment_reference.trim()) errs.payment_reference = "Required";
 
   if (selectedCategory && selectedCategory.team_size === 2) {
-    const partnerRequired = !selectedCategory.allow_solo_signup;
+    const partnerRequired = !selectedCategory.allow_solo_signup || requirePartner;
     const partnerProvided =
       !!form.partner_name.trim() ||
       !!form.partner_email.trim() ||

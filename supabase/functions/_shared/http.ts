@@ -31,6 +31,10 @@ export function serveWithCors(handler: (req: Request) => Promise<Response>) {
   });
 }
 
+// The public site that links in emails point to. Never taken from a request:
+// an approval from a preview or local dev must still email working links.
+export const SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? DEFAULT_ORIGIN;
+
 // Site to send the browser back to (e.g. after Stripe Checkout): the caller's
 // origin when it's one of ours, otherwise production.
 export function appOrigin(req: Request): string {

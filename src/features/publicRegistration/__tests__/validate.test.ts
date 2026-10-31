@@ -33,6 +33,14 @@ describe("validate", () => {
     expect(errs.payment_reference).toBeDefined();
   });
 
+  it("requires the partner when paying a share, even where solo entries are allowed", () => {
+    const solo = { ...happyPath(), category_id: "ds" };
+    expect(validate(solo, doublesSolo).partner_name).toBeUndefined();
+    const errs = validate(solo, doublesSolo, { requirePartner: true });
+    expect(errs.partner_name).toBe("Required");
+    expect(errs.partner_email).toBe("Required");
+  });
+
   it("rejects invalid email format", () => {
     const f = { ...happyPath(), player_email: "not-an-email" };
     expect(validate(f, singles).player_email).toBe("Invalid email");
