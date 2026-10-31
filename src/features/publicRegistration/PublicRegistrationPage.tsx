@@ -707,7 +707,7 @@ export function PublicRegistrationPage() {
                       ? "Paying your share? Enter the partner who entered you, with the email address they registered with."
                       : selectedCategory.allow_solo_signup ? undefined : "Paying for both of you? Then only one of you needs to submit this form."}
                   />
-                  {selectedCategory.allow_solo_signup && !payingShare && <PartnerPromise compact />}
+                  {selectedCategory.allow_solo_signup && !payingShare && !payingForBoth && <PartnerPromise compact />}
                   <Field label="Partner Name" required={!selectedCategory.allow_solo_signup || payingShare || payingForBoth} error={visibleErrors.partner_name}>
                     <input type="text" style={inputStyle}
                       value={form.partner_name}
