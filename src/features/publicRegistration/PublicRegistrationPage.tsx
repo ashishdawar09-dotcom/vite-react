@@ -27,7 +27,8 @@ import { flowLead } from "./registrationLead";
 import { Hero, StepEvents, StepPartners, StepPay, StepWaiver, StepYou, WelcomeBack, type Highlight, type StepProps } from "./steps";
 import { Success } from "./Success";
 import { usePublicTournament } from "./usePublicTournament";
-import { ActionBar, Arrow, Button, Note, Progress, Shell, TopBar } from "./ss/parts";
+import { ActionBar, ActionButtons, Arrow, Button, Note, Progress, Shell, TopBar } from "./ss/parts";
+import { isTextField, useKeepFieldInView, useTypingOnTouch } from "./ss/keyboard";
 import { money, monoLabel, ss } from "./ss/theme";
 
 // Event highlights under the title, per tournament.
@@ -41,6 +42,14 @@ const TOURNAMENT_HIGHLIGHTS: Record<string, Highlight[]> = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The fields the keyboard's Next key moves through, in page order (not the
+// hidden honeypot, nor textareas, where Enter is a new line).
+function textFields(form: HTMLFormElement): HTMLInputElement[] {
+  return [...form.querySelectorAll<HTMLInputElement>("input")].filter(
+    (f) => isTextField(f) && f.name !== "website" && !f.disabled && f.getClientRects().length > 0,
+  );
+}
 
 export function PublicRegistrationPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
@@ -70,6 +79,14 @@ export function PublicRegistrationPage() {
   const [website, setWebsite] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
   const pushed = useRef(0);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Once the old step has faded out: the top of the new step, or its first
+  // problem (when submitting finds an earlier step incomplete).
+  const afterStep = useRef<"top" | "error">("top");
+  // Typing on a phone: the bottom bar steps aside, the field stays clear of
+  // the keyboard (see ss/keyboard.ts).
+  const typing = useTypingOnTouch();
+  useKeepFieldInView();
 
   useEffect(() => { captureAttribution(); void initAnalytics(); }, []);
 
@@ -167,6 +184,30 @@ export function PublicRegistrationPage() {
     return () => clearTimeout(id);
   }, [typedLead, typedKey, leadOpen]);
 
+  // Computer keyboards: a field that gets focus is kept clear of the bar
+  // pinned to the bottom of the screen.
+  useEffect(() => {
+    const root = document.documentElement;
+    const prev = root.style.scrollPaddingBottom;
+    root.style.scrollPaddingBottom = "190px";
+    return () => { root.style.scrollPaddingBottom = prev; };
+  }, []);
+
+  // The keyboard's action key reads "Next" between fields, and "Go" on a
+  // step's last field ("Done" on the payment step, where it never submits).
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement) || !isTextField(t)) return;
+      const fields = textFields(form);
+      t.enterKeyHint = fields[fields.length - 1] === t ? (step === "pay" ? "done" : "go") : "next";
+    };
+    form.addEventListener("focusin", onFocus);
+    return () => form.removeEventListener("focusin", onFocus);
+  }, [step, ready, status]);
+
   const set = useCallback(<K extends keyof FlowState>(key: K, value: FlowState[K]) => {
     setFlow((f) => ({ ...f, [key]: value }));
     setSubmitError(null);
@@ -190,11 +231,10 @@ export function PublicRegistrationPage() {
   const payMethod = cardAvailable ? flow.payment_method : "etransfer";
   const picked = ctx ? selectedCategories(flow, ctx) : [];
 
-  const show = (s: StepKey) => {
-    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
-    setStep(s);
-    requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
-  };
+  // Changing step: the old one fades out, then the page jumps to the top of
+  // the new one while nothing is on screen (see onExitComplete below). No
+  // smooth scroll racing the swap.
+  const show = (s: StepKey) => setStep(s);
 
   const goNext = () => {
     if (!ctx || !tournament) return;
@@ -248,8 +288,12 @@ export function PublicRegistrationPage() {
     if (bad) {
       setShown(new Set(steps.slice(0, steps.indexOf(bad) + 1)));
       captureWarning("Registration blocked by form validation", { first_step: bad, payment_method: payMethod, events: String(flow.category_ids.length) });
-      if (bad !== step) show(bad);
-      setErrorTick((n) => n + 1);
+      if (bad !== step) {
+        afterStep.current = "error";
+        show(bad);
+      } else {
+        setErrorTick((n) => n + 1);
+      }
       return;
     }
     setStatus("submitting");
@@ -312,6 +356,7 @@ export function PublicRegistrationPage() {
     setCardReturn(null);
     setDone(null);
     setShown(new Set());
+    window.scrollTo(0, 0);
     show(flow.player_email ? "events" : "you");
   };
 
@@ -372,6 +417,17 @@ export function PublicRegistrationPage() {
     </div>
   ) : null;
 
+  const primary = isPay ? (
+    <Button onClick={() => { submit().catch((err: unknown) => { setStatus("idle"); setSubmitError("Something went wrong. Please try again."); captureError(err, { where: "registration submit" }); }); }}
+      disabled={status === "submitting"} style={{ flex: 1 }}>
+      {status === "submitting"
+        ? (payMethod === "card" ? "Opening secure checkout…" : "Submitting…")
+        : payMethod === "card" && total !== null ? <>Pay {money(total)} securely <Arrow /></> : <>Submit entry{total !== null ? ` · ${money(total)}` : ""} <Arrow /></>}
+    </Button>
+  ) : (
+    <Button onClick={goNext} style={{ flex: 1 }}>Continue <Arrow /></Button>
+  );
+
   const payNotice = (
     <>
       {cardReturn === "cancelled" && !submitError && (
@@ -395,10 +451,23 @@ export function PublicRegistrationPage() {
       {welcomeBack && <WelcomeBack onStartOver={startOver} />}
 
       <form
+        ref={formRef}
         noValidate
+        onKeyDown={(e) => {
+          // The keyboard's Next/Go key: on to the next field, and from a
+          // step's last field on to the next step. Never submits the entry.
+          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+          const t = e.target;
+          if (!(t instanceof HTMLInputElement) || !isTextField(t)) return;
+          e.preventDefault();
+          const fields = textFields(e.currentTarget);
+          const next = fields[fields.indexOf(t) + 1];
+          if (next) next.focus();
+          else if (isPay) t.blur();
+          else goNext();
+        }}
         onSubmit={(e) => {
           e.preventDefault();
-          // Enter moves on; it never submits the entry by itself.
           if (!isPay) goNext();
         }}
       >
@@ -409,7 +478,20 @@ export function PublicRegistrationPage() {
             <input type="text" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
           </label>
         </div>
-        <AnimatePresence mode="wait" initial={false}>
+        <AnimatePresence
+          mode="wait"
+          initial={false}
+          onExitComplete={() => {
+            const toError = afterStep.current === "error";
+            afterStep.current = "top";
+            if (toError) {
+              setErrorTick((n) => n + 1);
+              return;
+            }
+            window.scrollTo(0, 0);
+            requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
+          }}
+        >
           <motion.div
             key={step}
             initial={reduce ? false : { opacity: 0, x: 18 }}
@@ -426,9 +508,16 @@ export function PublicRegistrationPage() {
             )}
           </motion.div>
         </AnimatePresence>
-        {/* Lets Enter submit the step form from a text field. */}
         <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
       </form>
+
+      {/* While typing on a phone the bottom bar is away: the step's buttons
+          sit right under the form, where they can't cover a field. */}
+      {typing && (
+        <div style={{ marginTop: 26 }}>
+          <ActionButtons keepFocus onBack={index > 0 ? goBack : undefined}>{primary}</ActionButtons>
+        </div>
+      )}
 
       {isPay && (
         <p style={{ margin: "26px 0 0", fontSize: 13.5, color: ss.mute, lineHeight: 1.6 }}>
@@ -445,18 +534,7 @@ export function PublicRegistrationPage() {
         </p>
       )}
 
-      <ActionBar summary={summary} onBack={index > 0 ? goBack : undefined}>
-        {isPay ? (
-          <Button onClick={() => { submit().catch((err: unknown) => { setStatus("idle"); setSubmitError("Something went wrong. Please try again."); captureError(err, { where: "registration submit" }); }); }}
-            disabled={status === "submitting"} style={{ flex: 1 }}>
-            {status === "submitting"
-              ? (payMethod === "card" ? "Opening secure checkout…" : "Submitting…")
-              : payMethod === "card" && total !== null ? <>Pay {money(total)} securely <Arrow /></> : <>Submit entry{total !== null ? ` · ${money(total)}` : ""} <Arrow /></>}
-          </Button>
-        ) : (
-          <Button onClick={goNext} style={{ flex: 1 }}>Continue <Arrow /></Button>
-        )}
-      </ActionBar>
+      <ActionBar hidden={typing} summary={summary} onBack={index > 0 ? goBack : undefined}>{primary}</ActionBar>
     </Shell>
   );
 }

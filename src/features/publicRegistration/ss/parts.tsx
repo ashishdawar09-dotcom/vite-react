@@ -140,7 +140,7 @@ export function Field({ label, hint, error, required, optional, children, id }: 
   const controlId = id ?? auto;
   const msgId = `${controlId}-msg`;
   return (
-    <div data-field-error={error ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+    <div data-field="" data-field-error={error ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
       <label htmlFor={controlId} style={{ ...monoLabel, display: "flex", gap: 8, alignItems: "baseline" }}>
         <span>{label}</span>
         {required && <span aria-hidden="true" style={{ color: ss.volt }}>*</span>}
@@ -172,6 +172,9 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement> & {
   const { mono, style, ...rest } = props;
   return (
     <input
+      // The keyboard's action key moves to the next field; the page sets "go"
+      // or "done" on a step's last field.
+      enterKeyHint="next"
       {...rest}
       className="ss-input"
       style={{ ...inputStyle, ...(mono ? { fontFamily: ss.mono, fontSize: 16, letterSpacing: ".04em" } : {}), ...style }}
@@ -212,28 +215,52 @@ export const Arrow = () => (
   </svg>
 );
 
+// Back (arrow) and the way on, side by side.
+export function ActionButtons({ onBack, backLabel = "Back", children, keepFocus = false }: {
+  onBack?: () => void; backLabel?: string; children: React.ReactNode;
+  // Under the form while typing: tapping must not blur the field first (that
+  // would close the keyboard and move the button out from under the finger).
+  keepFocus?: boolean;
+}) {
+  const hold = keepFocus ? (e: React.PointerEvent | React.MouseEvent) => e.preventDefault() : undefined;
+  return (
+    <div style={{ display: "flex", gap: 10 }} onPointerDown={hold} onMouseDown={hold}>
+      {onBack && (
+        <Button variant="ghost" onClick={onBack} aria-label={backLabel} style={{ padding: "0 20px", flex: "0 0 auto" }}>
+          <svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true">
+            <path d="M17 6H2M6.5 1.5L2 6l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Button>
+      )}
+      {children}
+    </div>
+  );
+}
+
 // The bar fixed to the bottom of the screen: running total and the way on.
-export function ActionBar({ summary, onBack, backLabel = "Back", children }: {
-  summary?: React.ReactNode; onBack?: () => void; backLabel?: string; children: React.ReactNode;
+// `hidden` slides it away while someone types on a phone (see keyboard.ts).
+export function ActionBar({ summary, onBack, backLabel = "Back", children, hidden = false }: {
+  summary?: React.ReactNode; onBack?: () => void; backLabel?: string; children: React.ReactNode; hidden?: boolean;
 }) {
   return (
-    <div style={{
-      position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 20,
-      background: "linear-gradient(to top, rgba(6,8,13,.98) 70%, rgba(6,8,13,.0))",
-      paddingBottom: "env(safe-area-inset-bottom, 0px)",
-    }}>
+    <div
+      aria-hidden={hidden || undefined}
+      inert={hidden || undefined}
+      style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 20,
+        background: "linear-gradient(to top, rgba(6,8,13,.98) 70%, rgba(6,8,13,.0))",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        // Its own compositing layer, so scrolling never repaints it.
+        transform: hidden ? "translate3d(0, calc(100% + 24px), 0)" : "translate3d(0, 0, 0)",
+        opacity: hidden ? 0 : 1,
+        transition: "transform .24s cubic-bezier(.2,.7,.2,1), opacity .18s ease",
+        willChange: "transform",
+        pointerEvents: hidden ? "none" : "auto",
+      }}
+    >
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "26px 20px 16px" }}>
         {summary && <div style={{ marginBottom: 12 }}>{summary}</div>}
-        <div style={{ display: "flex", gap: 10 }}>
-          {onBack && (
-            <Button variant="ghost" onClick={onBack} aria-label={backLabel} style={{ padding: "0 20px", flex: "0 0 auto" }}>
-              <svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true">
-                <path d="M17 6H2M6.5 1.5L2 6l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </Button>
-          )}
-          {children}
-        </div>
+        <ActionButtons onBack={onBack} backLabel={backLabel}>{children}</ActionButtons>
       </div>
     </div>
   );
