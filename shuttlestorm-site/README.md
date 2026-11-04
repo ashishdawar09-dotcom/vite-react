@@ -17,6 +17,14 @@ step. Registration itself lives in the main app (badminton.adawar.org).
   opens and chats in Google Analytics only (no Meta event, as the privacy
   page promises). The registration app shows the same button on its success
   screen (`src/features/publicRegistration/ChatWithUs.tsx`).
+- Cloudflare Web Analytics: one `<script type='module' …beacon.min.js>` line,
+  with the site's public token, right after the `chat.js` line on every page
+  (a new page needs it too). It sets no cookies and only counts browsers that
+  run the page, so bots mostly drop out. The CSP allows it
+  (`https://static.cloudflareinsights.com` in `script-src`,
+  `https://cloudflareinsights.com` in `connect-src`), and the privacy page
+  lists it. The numbers are in the Cloudflare dashboard under Analytics → Web
+  analytics.
 - Security headers and CSP: `public/_headers`. `connect-src` must list bare
   `https://analytics.google.com` or GA4 hits are blocked.
 - Sitemap: `public/sitemap.xml`. Add new pages there.
@@ -52,4 +60,4 @@ npx -y wrangler@4 dev --port 8788
 
 Built outside git in `~/Developer/shuttlestorm-site` and copied here on
 2026-10-17, matching Cloudflare version `3552e5b7`. Last synced with
-Cloudflare version `d65ebb4b` (phone/tablet menu).
+Cloudflare version `b2bd5338` (Cloudflare Web Analytics, 2026-11-04).
