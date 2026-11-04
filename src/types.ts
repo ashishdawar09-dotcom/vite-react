@@ -233,9 +233,23 @@ export type ConsentPayload = {
 // Payload accepted by the register-player Edge Function
 export type PaymentMethod = "etransfer" | "card";
 
+// One event in a multi-event submission, with that event's partner.
+export type RegistrationEntryPayload = {
+  category_id: string;
+  partner_name?: string;
+  partner_email?: string;
+  partner_phone?: string;
+  partner_age?: number;
+  partner_student?: boolean;
+  payment_paid_full_for_partner?: boolean;
+};
+
 export type PublicRegistrationPayload = {
   tournament_id: string;
-  category_id: string;
+  // Either one event (category_id + partner_* below, the older form) or
+  // several (entries, each with its own partner).
+  category_id?: string;
+  entries?: RegistrationEntryPayload[];
   player_name: string;
   player_email: string;
   player_phone?: string;

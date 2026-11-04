@@ -14,10 +14,11 @@ Deno.test("e-transfer amount follows the category price and basis", () => {
   assertEquals(etransferCents(cat(1, null), false), null);
 });
 
-Deno.test("card amount is e-transfer + 3%, rounded to the cent", () => {
-  assertEquals(cardCents(4000), 4120);
-  assertEquals(cardCents(2500), 2575);
-  assertEquals(cardCents(1250), 1288); // 1287.5 rounds up
+Deno.test("card amount equals the e-transfer amount (no surcharge)", () => {
+  // No card surcharge since Nov 4, 2026: card costs the same as e-Transfer.
+  assertEquals(cardCents(4000), 4000);
+  assertEquals(cardCents(2500), 2500);
+  assertEquals(cardCents(1250), 1250);
   assertEquals(cardCents(0), 0);
 });
 

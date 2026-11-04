@@ -1,0 +1,68 @@
+/* Shuttle Storm look for the public registration form, matching shuttlestorm.adawar.org.
+   Fonts: self-hosted Archivo + JetBrains Mono (SIL Open Font License), same files as the site. */
+@font-face{font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-normal-latin-ext-v25.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family: 'Archivo'; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-italic-latin-ext-v25.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family: 'Archivo'; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-normal-latin-v25.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family: 'Archivo'; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url(/fonts/archivo-italic-latin-v25.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/jetbrains-mono-latin-ext-v24.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/jetbrains-mono-latin-v24.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/jetbrains-mono-latin-ext-v24.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/jetbrains-mono-latin-v24.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
+.ss-root {
+  --ss-ink: #06080D; --ss-ink-2: #0C1018; --ss-bone: #ECEEF2; --ss-body: #C4CAD6; --ss-mute: #8F97A8;
+  --ss-line: rgba(236, 238, 242, .13); --ss-volt: #D4FF3A; --ss-danger: #FF8A8A;
+  color-scheme: dark;
+  background: var(--ss-ink);
+  color: var(--ss-bone);
+  font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-root *, .ss-root *::before, .ss-root *::after { box-sizing: border-box; }
+.ss-root ::selection { background: rgba(212, 255, 58, .35); color: #fff; }
+.ss-root :focus-visible { outline: 2px solid var(--ss-volt); outline-offset: 3px; }
+.ss-root a { color: inherit; }
+
+.ss-input { transition: border-color .16s ease, box-shadow .16s ease, background .16s ease; }
+.ss-input::placeholder { color: rgba(143, 151, 168, .65); }
+.ss-input:hover { border-color: rgba(236, 238, 242, .24); }
+.ss-input:focus { outline: none; border-color: var(--ss-volt); box-shadow: 0 0 0 3px rgba(212, 255, 58, .16); background: #0E131C; }
+.ss-input[aria-invalid="true"] { border-color: var(--ss-danger); }
+.ss-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(255, 138, 138, .16); }
+select.ss-input { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238F97A8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 42px; }
+select.ss-input option { background: #0C1018; color: #ECEEF2; }
+
+.ss-btn { transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease, opacity .18s ease; }
+.ss-btn:active:not(:disabled) { transform: scale(.985); }
+.ss-btn-primary:hover:not(:disabled), .ss-btn-primary:focus-visible { background: var(--ss-volt); }
+.ss-btn-ghost:hover:not(:disabled) { border-color: rgba(236, 238, 242, .42); background: rgba(236, 238, 242, .04); }
+.ss-btn:disabled { cursor: not-allowed; }
+
+.ss-choice { transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .12s ease; }
+.ss-choice:not([aria-disabled="true"]):hover { border-color: rgba(236, 238, 242, .34); }
+.ss-choice[aria-checked="true"]:hover { border-color: var(--ss-volt); }
+.ss-choice:not([aria-disabled="true"]):active { transform: scale(.992); }
+
+.ss-link { text-decoration: underline; text-decoration-color: rgba(236, 238, 242, .35); text-underline-offset: 3px; }
+.ss-link:hover { text-decoration-color: var(--ss-volt); }
+
+.ss-scroll { scrollbar-width: thin; scrollbar-color: rgba(236, 238, 242, .25) transparent; }
+
+@keyframes ss-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.ss-pulse { animation: ss-pulse 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-root *, .ss-root *::before, .ss-root *::after { transition: none !important; animation: none !important; }
+}
+
+/* Narrow phones: the wordmark and countdown share one row. */
+.ss-brand-word { font-size: 12.5px; letter-spacing: .14em; }
+@media (max-width: 420px) {
+  .ss-brand-word { font-size: 11px; letter-spacing: .08em; }
+  .ss-countdown-long { display: none; }
+}
+@media (min-width: 421px) {
+  .ss-countdown-short { display: none; }
+}

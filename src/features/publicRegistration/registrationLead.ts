@@ -10,6 +10,9 @@ export type RegistrationLead = {
   name: string;
   phone?: string;
   category_id?: string;
+  // Step-by-step form: the step reached and what's been picked so far.
+  step?: "you" | "events" | "partners" | "waiver" | "pay";
+  selections?: { category_ids: string[]; payment_method?: "etransfer" | "card" };
 };
 
 // Same rule the server applies.
@@ -29,5 +32,24 @@ export function registrationLead(
     name,
     ...(phone.length >= 10 && phone.length <= 30 ? { phone } : {}),
     ...(form.category_id ? { category_id: form.category_id } : {}),
+  };
+}
+
+// The same, from the step-by-step form: saved each time the player moves to a
+// new step, with the events picked so far.
+export function flowLead(
+  tournamentId: string | undefined,
+  state: { player_email: string; player_name: string; player_phone: string; category_ids: string[]; payment_method: "etransfer" | "card" },
+  step: NonNullable<RegistrationLead["step"]>,
+): RegistrationLead | null {
+  const base = registrationLead(tournamentId, { ...state, category_id: state.category_ids[0] ?? null });
+  if (!base) return null;
+  return {
+    ...base,
+    step,
+    selections: {
+      category_ids: state.category_ids.slice(0, 10),
+      ...(step === "pay" ? { payment_method: state.payment_method } : {}),
+    },
   };
 }

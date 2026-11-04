@@ -44,7 +44,9 @@ export default defineConfig({
         // are loaded directly by Safari at standalone-launch via the <link>
         // tag in index.html — the SW never needs to serve them. Excluding
         // saves ~2 MB of first-install precache bandwidth.
-        globIgnores: ['**/apple-splash-*.png'],
+        // The Shuttle Storm fonts in /fonts (~400 KB) are only used by the
+        // public registration form, which loads them on demand.
+        globIgnores: ['**/apple-splash-*.png', 'fonts/**'],
       },
     }),
   ],
