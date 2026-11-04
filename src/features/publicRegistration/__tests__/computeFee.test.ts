@@ -74,11 +74,12 @@ describe("price labels", () => {
 });
 
 describe("cardAmount", () => {
-  it("adds 3% and rounds to the cent, matching the server", () => {
-    expect(cardAmount(40)).toBe(41.2);
-    expect(cardAmount(25)).toBe(25.75);
-    expect(cardAmount(12.5)).toBe(12.88); // 1287.5 cents rounds up
-    expect(cardAmount(20 * 2)).toBe(41.2); // pay for both, per player
+  it("charges the same as e-Transfer (no card surcharge), matching the server", () => {
+    // No card surcharge since Nov 4, 2026: card costs the same as e-Transfer.
+    expect(cardAmount(40)).toBe(40);
+    expect(cardAmount(25)).toBe(25);
+    expect(cardAmount(12.5)).toBe(12.5);
+    expect(cardAmount(20 * 2)).toBe(40);
     expect(cardAmount(0)).toBe(0);
   });
 });

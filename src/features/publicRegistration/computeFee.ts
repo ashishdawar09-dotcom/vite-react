@@ -2,10 +2,10 @@ import type { Category, PriceBasis } from "../../types";
 
 export type PaymentSplit = "full" | "separate";
 
-// Card payments cost 3% more than Interac e-Transfer. Presented as an
-// e-Transfer discount, not a card surcharge. Must match
-// supabase/functions/_shared/pricing.ts, which computes the actual charge.
-export const CARD_MARKUP = 0.03;
+// Card and Interac e-Transfer cost the same (the 3% card surcharge was dropped
+// on Nov 4, 2026). Must match supabase/functions/_shared/pricing.ts, which
+// computes the actual charge.
+export const CARD_MARKUP = 0;
 
 export function cardAmount(etransfer: number): number {
   return Math.round(Math.round(etransfer * 100) * (1 + CARD_MARKUP)) / 100;

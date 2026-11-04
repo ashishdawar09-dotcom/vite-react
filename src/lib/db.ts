@@ -959,11 +959,13 @@ export async function saveRegistrationLead(lead: RegistrationLead): Promise<bool
 // gateway returns 401 even though the function itself accepts anonymous input.
 export async function submitPublicRegistration(
   payload: PublicRegistrationPayload,
-): Promise<{ success: boolean; registrationId?: string; checkoutUrl?: string; error?: string; status?: number }> {
+): Promise<{ success: boolean; registrationId?: string; registrationIds?: string[]; checkoutUrl?: string; error?: string; status?: number }> {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-player`;
   const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   const ctrl = new AbortController();
-  const timeoutId = setTimeout(() => ctrl.abort(), 10_000);
+  // Several events send a confirmation each (spaced out), so allow longer.
+  const events = payload.entries?.length ?? 1;
+  const timeoutId = setTimeout(() => ctrl.abort(), 10_000 + Math.max(0, events - 1) * 6_000);
   try {
     const resp = await fetch(url, {
       method: "POST",
@@ -972,12 +974,15 @@ export async function submitPublicRegistration(
       signal: ctrl.signal,
     });
     const body = (await resp.json().catch(() => ({}))) as {
-      success?: boolean; registrationId?: string; checkoutUrl?: string; error?: string;
+      success?: boolean; registrationId?: string; registrationIds?: string[]; checkoutUrl?: string; error?: string;
     };
     if (!resp.ok) {
       return { success: false, error: body.error ?? `HTTP ${resp.status}`, status: resp.status };
     }
-    return { success: !!body.success, registrationId: body.registrationId, checkoutUrl: body.checkoutUrl, error: body.error, status: resp.status };
+    return {
+      success: !!body.success, registrationId: body.registrationId, registrationIds: body.registrationIds,
+      checkoutUrl: body.checkoutUrl, error: body.error, status: resp.status,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };

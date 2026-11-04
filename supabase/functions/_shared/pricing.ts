@@ -2,9 +2,10 @@
 // computeFee.ts; the amount charged by card is always computed here from the
 // category and tournament rows, never taken from the request.
 
-// Card payments cost 3% more than Interac e-Transfer (presented to players as
-// an e-Transfer discount, not a card surcharge).
-export const CARD_MARKUP = 0.03;
+// Card and Interac e-Transfer cost the same. Cards used to cost 3% more; the
+// surcharge was dropped on Nov 4, 2026. Kept as a constant (0) so the amount
+// charged by card still goes through one place.
+export const CARD_MARKUP = 0;
 
 // What card payments show on bank statements. "ADAWAR" is the Stripe account's
 // shortened descriptor (Dashboard → Settings → Business details); the suffix is

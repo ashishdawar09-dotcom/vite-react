@@ -1,7 +1,7 @@
 // Where a registration came from, recorded in our own database so ad
 // platform numbers can be checked against real entries.
 //
-// First touch per browser tab: the campaign tags (utm_*) on the URL that
+// First touch per device, kept for 7 days: the campaign tags (utm_*) on the URL that
 // brought the visitor in, whether the click came from a Google or Meta ad
 // (we keep only which one, never the click ID itself), and the referring
 // site's host. The Shuttle Storm site passes its own landing tags along on
@@ -75,22 +75,53 @@ function hasSignal(a: Attribution): boolean {
 export function captureAttribution(): void {
   if (typeof window === "undefined") return;
   const now = parseAttribution(window.location.href, document.referrer);
-  try {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const prev = JSON.parse(stored) as Attribution;
-      if (hasSignal(prev) || !hasSignal(now)) return;
-    }
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(now));
-  } catch { /* storage off: getAttribution falls back to the current URL */ }
+  const prev = readStored();
+  if (prev && (hasSignal(prev) || !hasSignal(now))) return;
+  writeStored(now);
 }
 
 export function getAttribution(): Attribution | undefined {
   if (typeof window === "undefined") return undefined;
-  try {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as Attribution;
-  } catch { /* storage off */ }
+  const stored = readStored();
+  if (stored) return stored;
   const now = parseAttribution(window.location.href, document.referrer);
   return hasSignal(now) ? now : undefined;
+}
+
+// Kept for 7 days on this device (Meta's click window), so someone who taps an
+// ad and comes back to register a few days later still counts for that ad.
+// Falls back to this tab only when local storage is off.
+export const ATTRIBUTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function storages(): Storage[] {
+  const out: Storage[] = [];
+  try { out.push(window.localStorage); } catch { /* blocked */ }
+  try { out.push(window.sessionStorage); } catch { /* blocked */ }
+  return out;
+}
+
+function readStored(now = Date.now()): Attribution | null {
+  for (const store of storages()) {
+    try {
+      const raw = store.getItem(STORAGE_KEY);
+      if (!raw) continue;
+      const { stored_at, ...attr } = JSON.parse(raw) as Attribution & { stored_at?: number };
+      if (typeof stored_at === "number" && now - stored_at > ATTRIBUTION_TTL_MS) {
+        store.removeItem(STORAGE_KEY);
+        continue;
+      }
+      return attr;
+    } catch { /* unreadable: ignore */ }
+  }
+  return null;
+}
+
+function writeStored(a: Attribution): void {
+  const value = JSON.stringify({ ...a, stored_at: Date.now() });
+  for (const store of storages()) {
+    try {
+      store.setItem(STORAGE_KEY, value);
+      return;
+    } catch { /* full or blocked: try the next */ }
+  }
 }

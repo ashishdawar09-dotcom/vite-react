@@ -21,8 +21,32 @@ declare global {
 
 let loading: Promise<void> | null = null;
 
+// Test visits are kept out of GA4 and the Meta pixel, so ad results count
+// only real players: automated browsers, any host but the live one (local
+// dev, previews), and devices marked with ?test=1 (undo with ?test=0), e.g.
+// the directors' own phones when they try the form.
+export const LIVE_HOST = "badminton.adawar.org";
+const TEST_FLAG = "ss-test-traffic";
+
+export function isTestTraffic(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const q = new URLSearchParams(window.location.search).get("test");
+    if (q === "1") localStorage.setItem(TEST_FLAG, "1");
+    if (q === "0") localStorage.removeItem(TEST_FLAG);
+    if (localStorage.getItem(TEST_FLAG) === "1") return true;
+  } catch { /* storage off */ }
+  if (typeof navigator !== "undefined" && navigator.webdriver) return true;
+  return window.location.hostname !== LIVE_HOST;
+}
+
+// Addresses we use when testing never count as registrations.
+export function isTestEmail(email: string): boolean {
+  return /@(example\.(com|org|net)|resend\.dev|[^@]*\.test|[^@]*\.invalid)$/i.test(email.trim());
+}
+
 export function initAnalytics(): Promise<void> {
-  if (!GA_MEASUREMENT_ID) return Promise.resolve();
+  if (!GA_MEASUREMENT_ID || isTestTraffic()) return Promise.resolve();
   if (loading) return loading;
   loading = new Promise<void>((resolve) => {
     const s = document.createElement("script");
@@ -62,11 +86,25 @@ export function takePendingCardRegistration(): number | undefined {
   }
 }
 
+// Progress through the step-by-step form. GA4 gets every step; the Meta
+// pixel gets standard events for the two that matter for ads: Lead once the
+// contact details are in (reachable by a reminder), InitiateCheckout on the
+// payment step. They also feed a "started but didn't finish" audience.
+export function trackRegistrationStep(step: string, stepNumber: number, extra: { events?: number; value?: number } = {}): void {
+  trackEvent("registration_step", { step, step_number: stepNumber, events: extra.events, value: extra.value });
+  if (step === "events") void initAnalytics().then(() => window.fbq?.("track", "Lead", { content_name: "registration" }));
+  if (step === "pay") {
+    void initAnalytics().then(() =>
+      window.fbq?.("track", "InitiateCheckout", { value: extra.value, currency: "CAD", num_items: extra.events }),
+    );
+  }
+}
+
 // One registration_complete per registration, even if the success page is
 // reloaded.
 export function trackRegistrationComplete(
   registrationId: string | null,
-  params: { payment_method: "etransfer" | "card"; value?: number; tournament_id?: string },
+  params: { payment_method: "etransfer" | "card"; value?: number; tournament_id?: string; events?: number },
 ): void {
   if (registrationId) {
     const key = `ga-reg-${registrationId}`;
