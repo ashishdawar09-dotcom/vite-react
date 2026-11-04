@@ -2,6 +2,17 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   formatClubNumber, joinNames, maskNumber, optinCode, optinLink, optinMessage, parseCommand, toWhatsAppNumber,
 } from "./whatsapp.ts";
+import { chatMessage } from "../../../src/lib/whatsapp.ts";
+
+// "Chat with us" (registration success screen, and chat.js on the Shuttle
+// Storm site) starts an ordinary question: the bot must leave it for a person.
+Deno.test("chat-with-us messages are never read as commands", () => {
+  assertEquals(parseCommand(chatMessage("Shuttle Storm Abbotsford 2026", ["Men's Singles", "Mixed Doubles 35+"])), null);
+  assertEquals(parseCommand(chatMessage("Shuttle Storm", [])), null);
+  assertEquals(parseCommand("Hi Shuttle Storm! I have a question about Shuttle Storm '26: "), null);
+  // Typed on after the prefill, still a question.
+  assertEquals(parseCommand(chatMessage("Shuttle Storm", []) + "stop by the desk?"), null);
+});
 
 Deno.test("10-digit Canadian numbers get the country code", () => {
   assertEquals(toWhatsAppNumber("7789646999"), "17789646999");

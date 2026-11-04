@@ -10,6 +10,13 @@ step. Registration itself lives in the main app (badminton.adawar.org).
 - Phone/tablet menu: `public/menu.js` builds the full-screen menu from its own
   link list, opened by the `data-menu-toggle` button in each header. Add new
   pages to that list too.
+- WhatsApp chat button: `public/chat.js`, loaded on every page right after
+  `menu.js` (a new page needs that `<script>` line too). The round button
+  opens a small card, and the card opens WhatsApp to the club number with a
+  question started; the directors answer from the club's WhatsApp. It counts
+  opens and chats in Google Analytics only (no Meta event, as the privacy
+  page promises). The registration app shows the same button on its success
+  screen (`src/features/publicRegistration/ChatWithUs.tsx`).
 - Security headers and CSP: `public/_headers`. `connect-src` must list bare
   `https://analytics.google.com` or GA4 hits are blocked.
 - Sitemap: `public/sitemap.xml`. Add new pages there.

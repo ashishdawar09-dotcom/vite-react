@@ -77,6 +77,8 @@ export function Success({ tournament, events, playerName, paidByCard, registrati
         <Button variant="ghost" onClick={onAnother}>Enter another event</Button>
         <a className="ss-link" href="https://shuttlestorm.adawar.org/" style={{ color: ss.body, fontSize: 15 }}>Back to Shuttle Storm</a>
       </div>
+      {/* Room for the chat button (ChatWithUs), so the last line scrolls clear of it. */}
+      {tournament.whatsapp_number && <div aria-hidden="true" style={{ height: "calc(48px + env(safe-area-inset-bottom, 0px))" }} />}
     </motion.div>
   );
 }
