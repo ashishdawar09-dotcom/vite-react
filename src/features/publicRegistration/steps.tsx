@@ -1,7 +1,7 @@
 // The five steps of the registration form: You, Events, Partners, Waiver,
 // Payment. Presentational: the page owns the state and moves between steps.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Category, Tournament } from "../../types";
 import { HEARD_FROM_OPTIONS } from "../../lib/attribution";
 import { ageProblem } from "./ageEligibility";
@@ -259,8 +259,7 @@ export function StepPartners({ flow, set, ctx, tournament, errors, headingRef }:
         const split = splitOf(flow, c);
         const fullRequired = !c.allow_solo_signup || sharing || split === "full";
         const showAge = partnerAgeForBand(flow, c) || (partnerAgeForPrice(flow, c, ctx) && split === "full");
-        const source = doubles.slice(0, i).find((o) => partnerMode(flow, o) === "named" && partnerOf(flow, o).name.trim());
-        const own = entryFee({ ...flow, partners: { ...flow.partners, [c.id]: { ...p, split: "separate" } } }, c, ctx);
+        const own =entryFee({ ...flow, partners: { ...flow.partners, [c.id]: { ...p, split: "separate" } } }, c, ctx);
         const both = entryFee({ ...flow, partners: { ...flow.partners, [c.id]: { ...p, split: "full" } } }, c, ctx);
         const partnerAge = parseAge(p.age);
         return (
@@ -290,18 +289,6 @@ export function StepPartners({ flow, set, ctx, tournament, errors, headingRef }:
             )}
             {(mode === "named" || sharing) && (
               <>
-                {source && !p.name.trim() && (
-                  <button
-                    type="button" className="ss-btn ss-btn-ghost"
-                    onClick={() => { const s = partnerOf(flow, source); update(c, { mode: "named", name: s.name, email: s.email, phone: s.phone, age: s.age }); }}
-                    style={{
-                      marginBottom: 16, minHeight: 40, padding: "0 14px", borderRadius: 999, cursor: "pointer",
-                      border: `1px dashed ${ss.lineStrong}`, background: "transparent", color: ss.bone, fontFamily: ss.display, fontSize: 13.5,
-                    }}
-                  >
-                    + Same partner as {source.name}
-                  </button>
-                )}
                 <Field label="Partner's name" required error={pe.partner_name}>
                   {(f) => <TextInput {...f} type="text" autoComplete="off" value={p.name} onChange={(ev) => update(c, { name: ev.target.value })} />}
                 </Field>
@@ -357,6 +344,47 @@ export function StepPartners({ flow, set, ctx, tournament, errors, headingRef }:
 
 // ---------- 4. Waiver ------------------------------------------------------
 
+// The waiver in the page itself, not in a box of its own that scrolls: on a
+// phone, a scrolling box inside a scrolling page traps the finger (the page
+// stops moving while it's on the box). Shows the start, and the rest on tap.
+function WaiverText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div ref={boxRef} style={{ position: "relative", borderRadius: 16, border: `1px solid ${ss.line}`, background: ss.ink2, overflow: "hidden" }}>
+        <div
+          id="waiver-text" role="region" aria-label="Waiver text"
+          style={{
+            padding: "16px 18px", color: ss.body, fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap",
+            maxHeight: open ? "none" : 230, overflow: "hidden",
+          }}
+        >
+          {text}
+        </div>
+        {!open && (
+          <div aria-hidden="true" style={{
+            position: "absolute", left: 0, right: 0, bottom: 0, height: 96, pointerEvents: "none",
+            background: `linear-gradient(to bottom, rgba(12,16,24,0), ${ss.ink2} 82%)`,
+          }} />
+        )}
+      </div>
+      <button
+        type="button" aria-expanded={open} aria-controls="waiver-text" className="ss-link"
+        onClick={() => {
+          setOpen((o) => !o);
+          // Folding a long text back up: keep the box in view rather than
+          // leaving the reader far below it.
+          if (open) requestAnimationFrame(() => boxRef.current?.scrollIntoView({ block: "nearest" }));
+        }}
+        style={{ font: "inherit", fontSize: 15, color: ss.bone, background: "none", border: 0, padding: "12px 0 4px", cursor: "pointer", minHeight: 44 }}
+      >
+        {open ? "Show less" : "Read the full waiver"}
+      </button>
+    </div>
+  );
+}
+
 export function StepWaiver({ flow, set, tournament, errors, headingRef, ctx }: StepProps) {
   const e = errors?.fields ?? {};
   const minor = isMinor(flow);
@@ -378,16 +406,7 @@ export function StepWaiver({ flow, set, tournament, errors, headingRef, ctx }: S
           {waiverUrl && <a className="ss-link" href={waiverUrl} target="_blank" rel="noopener" style={{ color: ss.bone, fontSize: 15 }}>Waiver in a new tab ↗</a>}
         </div>
       )}
-      <div
-        role="region" aria-label="Waiver text" tabIndex={0} className="ss-scroll"
-        style={{
-          maxHeight: 260, overflowY: "auto", padding: "16px 18px", borderRadius: 16,
-          border: `1px solid ${ss.line}`, background: ss.ink2, color: ss.body,
-          fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap", marginBottom: 8,
-        }}
-      >
-        {tournament.waiver_text}
-      </div>
+      <WaiverText text={tournament.waiver_text ?? ""} />
       <div style={{ marginBottom: 18 }}>
         <CheckRow checked={flow.accepted_rules} onChange={(v) => set("accepted_rules", v)} error={e.accepted_rules}>
           I have read the competition regulations.

@@ -35,7 +35,6 @@ select.ss-input { appearance: none; -webkit-appearance: none; background-image: 
 select.ss-input option { background: #0C1018; color: #ECEEF2; }
 
 .ss-btn { transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease, opacity .18s ease; }
-.ss-btn:active:not(:disabled) { transform: scale(.985); }
 .ss-btn-primary:hover:not(:disabled), .ss-btn-primary:focus-visible { background: var(--ss-volt); }
 .ss-btn-ghost:hover:not(:disabled) { border-color: rgba(236, 238, 242, .42); background: rgba(236, 238, 242, .04); }
 .ss-btn:disabled { cursor: not-allowed; }
@@ -43,12 +42,20 @@ select.ss-input option { background: #0C1018; color: #ECEEF2; }
 .ss-choice { transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .12s ease; }
 .ss-choice:not([aria-disabled="true"]):hover { border-color: rgba(236, 238, 242, .34); }
 .ss-choice[aria-checked="true"]:hover { border-color: var(--ss-volt); }
-.ss-choice:not([aria-disabled="true"]):active { transform: scale(.992); }
 
 .ss-link { text-decoration: underline; text-decoration-color: rgba(236, 238, 242, .35); text-underline-offset: 3px; }
 .ss-link:hover { text-decoration-color: var(--ss-volt); }
 
 .ss-scroll { scrollbar-width: thin; scrollbar-color: rgba(236, 238, 242, .25) transparent; }
+
+/* Press feedback only where there's a mouse: on a phone, a swipe that starts on a
+   card or button would flicker it while the page scrolls. */
+@media (hover: hover) and (pointer: fine) {
+  .ss-btn:active:not(:disabled) { transform: scale(.985); }
+  .ss-choice:not([aria-disabled="true"]):active { transform: scale(.992); }
+}
+/* No double-tap zoom delay on the form's controls. */
+.ss-btn, .ss-choice, .ss-input, .ss-root label { touch-action: manipulation; }
 
 @keyframes ss-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .ss-pulse { animation: ss-pulse 1.6s ease-in-out infinite; }
