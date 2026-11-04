@@ -2,7 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useIsMobile } from "../../hooks/useIsMobile";
-import { submitPublicRegistration } from "../../lib/db";
+import { saveRegistrationLead, submitPublicRegistration } from "../../lib/db";
 import { pushSupportStatus, subscribeToPush } from "../../lib/push";
 import { formatClubNumber, optinCode, optinLink } from "../../lib/whatsapp";
 import {
@@ -21,6 +21,7 @@ import type { AgeBand, Category, PublicRegistrationPayload, Tournament } from ".
 import { Countdown } from "./Countdown";
 import { cardAmount, computeFee, fmtMoney, priceBasis, priceDescription, priceLabel, type Concessions, type PaymentSplit } from "./computeFee";
 import { CYAN, CYAN_DARK, Card, CheckRow, Field, type Highlight, Highlights, PageShell, PartnerPromise, SectionHeader, inputStyle, safeHttpUrl } from "./formParts";
+import { registrationLead } from "./registrationLead";
 import { usePublicTournament } from "./usePublicTournament";
 import { AGE_OF_MAJORITY, emptyFormState, type FormErrors, type FormState, isValid, parseAge, partnerAgeRequired, validate } from "./validate";
 
@@ -100,6 +101,25 @@ export function PublicRegistrationPage() {
   const [website, setWebsite] = useState("");
 
   useEffect(() => { captureAttribution(); void initAnalytics(); }, []);
+
+  // Once there's a name and email, save them (after a pause in typing) so we
+  // can remind them if they leave without submitting. Each change is saved
+  // once; nothing is saved after a submit or while the form is closed.
+  const lead = registrationLead(tournamentId, form);
+  const leadKey = lead ? JSON.stringify(lead) : null;
+  const savedLeadKey = useRef<string | null>(null);
+  const leadOpen = !!tournament?.registration_open;
+  const leadDeadline = tournament?.registration_deadline ?? null;
+  useEffect(() => {
+    if (!leadKey || !leadOpen || submitStatus === "submitting" || submitStatus === "success") return;
+    if (leadDeadline && new Date(leadDeadline).getTime() < Date.now()) return;
+    if (leadKey === savedLeadKey.current) return;
+    const id = setTimeout(() => {
+      savedLeadKey.current = leadKey;
+      void saveRegistrationLead(JSON.parse(leadKey));
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [leadKey, leadOpen, leadDeadline, submitStatus]);
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === form.category_id) ?? null,
@@ -613,7 +633,7 @@ export function PublicRegistrationPage() {
           </div>
           <Card>
             <SectionHeader step={stepOf("details")} title="Your details" />
-            <Field label="Email" required hint="We'll contact you here about your entry" error={visibleErrors.player_email}>
+            <Field label="Email" required hint="We'll contact you here about your entry, and remind you if you don't finish" error={visibleErrors.player_email}>
               <input
                 type="email" inputMode="email" autoComplete="email" style={inputStyle}
                 value={form.player_email}

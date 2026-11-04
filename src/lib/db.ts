@@ -11,6 +11,7 @@ import {
   type SnapshotSourceState,
 } from "./snapshotSource";
 import type { Database } from "./database.types";
+import type { RegistrationLead } from "../features/publicRegistration/registrationLead";
 import type { Category, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
 
 // Bridge alias: the generated Insert type the typed Supabase client expects
@@ -932,6 +933,25 @@ export async function rejectRegistration(reg_id: string, reason: string): Promis
     p_reason: reason,
   });
   if (error) throw error;
+}
+
+// Saves someone who has started the public form (name + email) so a director
+// can remind them if they never finish. Best effort: never throws, and the
+// form works the same whether or not it lands.
+export async function saveRegistrationLead(lead: RegistrationLead): Promise<boolean> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-registration-lead`;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify(lead),
+      keepalive: true,
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
 }
 
 // Posts to the register-player Edge Function. Used by the public form page —
