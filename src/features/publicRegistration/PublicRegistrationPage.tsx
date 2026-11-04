@@ -26,6 +26,7 @@ import {
 import { flowLead } from "./registrationLead";
 import { Hero, StepEvents, StepPartners, StepPay, StepWaiver, StepYou, WelcomeBack, type Highlight, type StepProps } from "./steps";
 import { Success } from "./Success";
+import { ChatWithUs } from "./ChatWithUs";
 import { usePublicTournament } from "./usePublicTournament";
 import { ActionBar, ActionButtons, Arrow, Button, Note, Progress, Shell, TopBar } from "./ss/parts";
 import { isTextField, useKeepFieldInView, useTypingOnTouch } from "./ss/keyboard";
@@ -392,6 +393,11 @@ export function PublicRegistrationPage() {
           namedPartners={done?.namedPartners ?? 0}
           onAnother={enterAnother}
         />
+        {/* Beside Success, not in it: its entrance animation transforms it, and
+            a transformed parent would pin the button to it, not the screen. */}
+        {tournament.whatsapp_number && (
+          <ChatWithUs clubNumber={tournament.whatsapp_number} tournamentName={tournament.name} events={done?.events ?? []} />
+        )}
       </Shell>
     );
   }

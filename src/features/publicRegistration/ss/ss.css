@@ -73,3 +73,54 @@ select.ss-input option { background: #0C1018; color: #ECEEF2; }
 @media (min-width: 421px) {
   .ss-countdown-short { display: none; }
 }
+
+/* "Chat with us" on the success screen (ChatWithUs.tsx): the same button and
+   card as chat.js on shuttlestorm.adawar.org. */
+.ss-chat { position: fixed; z-index: 40; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); }
+html:has(body > .consent) .ss-chat { display: none; }
+@media print { .ss-chat { display: none; } }
+.ss-chat-launch {
+  width: 58px; height: 58px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center;
+  background: #25D366; color: #fff; box-shadow: 0 10px 30px -8px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .08) inset;
+  transition: transform .2s ease, box-shadow .2s ease; touch-action: manipulation;
+  animation: ss-chat-in .4s cubic-bezier(.2, .7, .2, 1) .5s both;
+}
+.ss-chat .ss-chat-launch:focus-visible { outline: 2px solid var(--ss-volt); outline-offset: 4px; border-radius: 50%; }
+@media (hover: hover) and (pointer: fine) {
+  .ss-chat-launch:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -8px rgba(0, 0, 0, .65); }
+}
+.ss-chat-x { font-size: 26px; line-height: 1; font-weight: 300; }
+.ss-chat-panel {
+  position: absolute; right: 0; bottom: 72px; width: min(340px, calc(100vw - 32px));
+  background: var(--ss-ink-2); border: 1px solid var(--ss-line); border-radius: 22px; overflow: hidden;
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, .75); transform-origin: 100% 100%;
+  animation: ss-chat-pop .28s cubic-bezier(.2, .7, .2, 1);
+}
+.ss-chat-panel[hidden] { display: none; }
+.ss-chat-head {
+  display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--ss-line);
+  background: radial-gradient(120% 140% at 100% 0, rgba(212, 255, 58, .10), transparent 60%);
+}
+.ss-chat-mark { width: 40px; height: 40px; border-radius: 11px; background: var(--ss-ink); display: grid; place-items: center; flex: 0 0 auto; }
+.ss-chat-name { font-weight: 600; font-size: 16px; letter-spacing: .01em; color: var(--ss-bone); }
+.ss-chat-status {
+  display: flex; align-items: center; gap: 7px; margin-top: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ss-mute);
+}
+.ss-chat-status i { width: 7px; height: 7px; border-radius: 50%; background: #25D366; box-shadow: 0 0 0 3px rgba(37, 211, 102, .18); }
+.ss-chat-body { padding: 18px; }
+.ss-chat-bubble {
+  background: rgba(236, 238, 242, .06); border: 1px solid var(--ss-line); border-radius: 4px 16px 16px 16px;
+  padding: 12px 14px; font-size: 15px; line-height: 1.5; color: var(--ss-body);
+}
+.ss-chat-bubble strong { color: var(--ss-bone); font-weight: 600; }
+.ss-chat .ss-chat-cta {
+  margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; border-radius: 999px;
+  background: #25D366; color: #05210f; font-weight: 700; font-size: 15px; letter-spacing: .02em; text-decoration: none;
+  transition: filter .2s ease; touch-action: manipulation;
+}
+.ss-chat .ss-chat-cta:focus-visible { border-radius: 999px; }
+@media (hover: hover) { .ss-chat .ss-chat-cta:hover { filter: brightness(1.06); } }
+.ss-chat-foot { margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: var(--ss-mute); text-align: center; }
+@keyframes ss-chat-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes ss-chat-in { from { opacity: 0; transform: translateY(12px) scale(.9); } to { opacity: 1; transform: none; } }

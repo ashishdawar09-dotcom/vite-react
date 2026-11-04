@@ -14,10 +14,23 @@ export function optinMessage(tournamentName: string, registrationId: string): st
 
 // https://wa.me/<digits>?text=… opens WhatsApp (app or web) with the
 // message typed in, ready to send. Null if the club number isn't usable.
-export function optinLink(clubNumber: string | null, tournamentName: string, registrationId: string): string | null {
+export function waLink(clubNumber: string | null, message: string): string | null {
   const digits = (clubNumber ?? "").replace(/\D/g, "");
   if (!/^[1-9]\d{7,14}$/.test(digits)) return null;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(optinMessage(tournamentName, registrationId))}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
+export function optinLink(clubNumber: string | null, tournamentName: string, registrationId: string): string | null {
+  return waLink(clubNumber, optinMessage(tournamentName, registrationId));
+}
+
+// "Chat with us" after an entry is in: an ordinary question to the club
+// number, answered by a director. Never a code or STOP/START, so
+// whatsapp-inbound leaves it for a person. No name or email in it: the link
+// is a URL, and analytics may record outbound links.
+export function chatMessage(tournamentName: string, events: string[]): string {
+  const which = events.length > 0 ? ` (${events.join(", ")})` : "";
+  return `Hi! I've just entered ${tournamentName}${which} and have a question: `;
 }
 
 // "+1 778 964 6999" for North American numbers, "+91 98183 38393" for
