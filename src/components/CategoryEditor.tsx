@@ -3,6 +3,7 @@ import * as db from "../lib/db";
 import { toast } from "./Toast";
 import { Modal } from "./ui/Modal";
 import { recommendFormats, describeFormat, type FormatPlan } from "../lib/formatPlanner";
+import { categoryStarted, categoryUpdatePatch, savedFormatText } from "../lib/categoryEdit";
 import type { AgeBand, Category, Player, PlayerCategory, PriceBasis } from "../types";
 
 export function CategoryEditor({
@@ -31,6 +32,11 @@ export function CategoryEditor({
   const [price, setPrice] = useState<string>(category?.price != null ? String(category.price) : "");
   const [priceBasis, setPriceBasis] = useState<PriceBasis>(category?.price_basis ?? "per_player");
   const [busy, setBusy] = useState(false);
+  // Once the draw exists the format and singles/doubles are part of it: shown,
+  // not editable, and never written by Save (lib/categoryEdit.ts).
+  const started = categoryStarted(category);
+  // The format is only saved when the admin picks a card in this edit.
+  const [formatTouched, setFormatTouched] = useState(false);
 
   // Estimated number of teams in this category — drives the format recommender.
   // Doubles → floor(activePlayers / 2). Singles → activePlayers.
@@ -93,7 +99,7 @@ export function CategoryEditor({
       const startsIso = startsAt ? new Date(startsAt).toISOString() : null;
       const selectedPlan = formatOptions.find(o => o.label === selectedLabel);
       if (category) {
-        const patch: Partial<Category> = {
+        const patch = categoryUpdatePatch(category, {
           name: name.trim(),
           team_size: teamSize,
           match_minutes: matchMin,
@@ -104,12 +110,7 @@ export function CategoryEditor({
           has_bronze_match: hasBronze,
           price: priceNum,
           price_basis: basis,
-        };
-        if (selectedPlan) {
-          patch.groups_count = selectedPlan.groupsCount;
-          patch.top_n_advance = selectedPlan.topNAdvance;
-          patch.rounds_per_pair = selectedPlan.roundsPerPair;
-        }
+        }, formatTouched ? selectedPlan ?? null : null);
         await db.updateCategory(category.id, patch);
       } else {
         const created = await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
@@ -137,10 +138,16 @@ export function CategoryEditor({
         </Field>
 
         <Field label="Format">
-          <div style={{ display: "flex", gap: 8 }}>
-            <FormatBtn active={teamSize === 1} onClick={() => setTeamSize(1)}>👤 SINGLES</FormatBtn>
-            <FormatBtn active={teamSize === 2} onClick={() => setTeamSize(2)}>👥 DOUBLES</FormatBtn>
-          </div>
+          {started ? (
+            <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+              {teamSize === 1 ? "👤 Singles" : "👥 Doubles"} <span style={{ color: "#64748b" }}>· locked, this event has started</span>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 8 }}>
+              <FormatBtn active={teamSize === 1} onClick={() => setTeamSize(1)}>👤 SINGLES</FormatBtn>
+              <FormatBtn active={teamSize === 2} onClick={() => setTeamSize(2)}>👥 DOUBLES</FormatBtn>
+            </div>
+          )}
         </Field>
 
         <Field label="Match duration (default minutes)">
@@ -225,7 +232,17 @@ export function CategoryEditor({
         {/* Tournament format recommender — appears once the category has assigned
             players (so the team count is known). Picking an option saves
             groups_count + top_n_advance + rounds_per_pair on Save. */}
-        {category && formatOptions.length > 0 && (
+        {category && started && (
+          <Field label="Tournament format">
+            <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.5 }}>
+              {savedFormatText(category)}
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                Locked: this event has started, so Save never changes its groups or who goes through.
+              </div>
+            </div>
+          </Field>
+        )}
+        {category && !started && formatOptions.length > 0 && (
           <Field label={`Tournament format · ${estimatedTeamCount} team${estimatedTeamCount === 1 ? "" : "s"} estimated`}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
               {formatOptions.map(opt => {
@@ -238,7 +255,7 @@ export function CategoryEditor({
                   <button
                     key={opt.label}
                     type="button"
-                    onClick={() => setSelectedLabel(opt.label)}
+                    onClick={() => { setSelectedLabel(opt.label); setFormatTouched(true); }}
                     style={{
                       padding: "10px 12px",
                       borderRadius: 8,
