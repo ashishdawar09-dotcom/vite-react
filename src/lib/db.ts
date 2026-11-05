@@ -188,6 +188,18 @@ export async function updateCategory(id: string, patch: Partial<Category>) {
   if (error) throw error;
 }
 
+// For the Admin panel's delete summary: registrations (each with its payment
+// details) that deleting the category, or the whole tournament, erases.
+// Both deletes cascade to pending_registrations.
+export async function countRegistrations(tournament_id: string, category_id?: string): Promise<{ total: number; approved: number }> {
+  let q = supabase.from("pending_registrations").select("status").eq("tournament_id", tournament_id);
+  if (category_id) q = q.eq("category_id", category_id);
+  const { data, error } = await q;
+  if (error) throw error;
+  const rows = data ?? [];
+  return { total: rows.length, approved: rows.filter(r => r.status === "approved").length };
+}
+
 export async function deleteCategory(id: string) {
   const { error } = await supabase.from("categories").delete().eq("id", id);
   if (error) throw error;
@@ -639,11 +651,16 @@ export async function cancelMatch(id: string) {
   if (error) throw error;
 }
 
-export async function markWalkover(id: string, winner_id: string) {
+// freeCourt: the match was warming up on a court (Sit Out); clear it, or the
+// admin screens keep showing that court as busy.
+export async function markWalkover(id: string, winner_id: string, opts: { freeCourt?: boolean } = {}) {
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("matches")
-    .update({ winner_id, confirmed: true, status: "completed", is_walkover: true, confirmed_at: now })
+    .update({
+      winner_id, confirmed: true, status: "completed", is_walkover: true, confirmed_at: now,
+      ...(opts.freeCourt ? { court_number: null, court_allocated_at: null } : {}),
+    })
     .eq("id", id);
   if (error) throw error;
 }

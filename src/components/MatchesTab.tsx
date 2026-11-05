@@ -28,6 +28,7 @@ import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { courtTakenMessage, isCourtTaken } from "../lib/courts";
+import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { resultLabel } from "../lib/matchOutcome";
 import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
 
@@ -328,6 +329,23 @@ export function MatchesTab({
     }
   };
 
+  // One team is sitting out (Sit Out on their profile): the other team wins
+  // without the match going on a court. Replaces ▶ START on that row.
+  const recordSitOutWalkover = async (m: ProjectedMatch) => {
+    const winnerId = sitOutWalkoverWinner(m, teamById);
+    if (!winnerId) return;
+    const loser = teamById[winnerId === m.team_a_id ? m.team_b_id! : m.team_a_id!];
+    if (!confirm(`${tName(loser)} is sitting out.\n\nRecord this match as a walkover: ${tName(teamById[winnerId])} wins?`)) return;
+    const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
+    try {
+      await db.markWalkover(m.id, winnerId, { freeCourt: !!m.court_allocated_at || m.court_number != null });
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    }
+    await applyBracket(plan);
+  };
+
   const markWalkover = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
@@ -423,6 +441,7 @@ export function MatchesTab({
     const deltaColor = isCompleted ? (m.delta_min != null && m.delta_min > 1 ? "#fbbf24" : m.delta_min != null && m.delta_min < -1 ? "#22c55e" : "#94a3b8") : isLive ? (m.delta_min != null && m.delta_min > 1 ? "#ef4444" : "#00d4ff") : "#94a3b8";
     const timeOver = isTimeOver(m);
     const pickingTeamForThis = timeOverPicking && timeOverPicking.matchId === m.id;
+    const sitOutWinnerId = sitOutWalkoverWinner(m, teamById);
 
     const bg = isLive
       ? (timeOver ? "linear-gradient(90deg,#2a0f0f 0%,#0f1e36 30%)" : "linear-gradient(90deg,#1a0f0f 0%,#0f1e36 30%)")
@@ -460,6 +479,7 @@ export function MatchesTab({
         <div style={{ flex: 1, minWidth: isMobile ? 160 : 220 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winA ? 800 : 600, color: winA ? "#22c55e" : "#fff" }}>
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(ta)}</span>
+            {!isCompleted && !isLive && teamSittingOut(ta) && <SittingOutTag />}
             {(isLive || isCompleted) && (
               isAdmin && isLive ? <ScoreStepper value={m.score_a ?? 0} onPlus={() => inlineScore(m, "a", 1)} onMinus={() => inlineScore(m, "a", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winA ? "#22c55e" : "#fff" }}>{m.score_a ?? 0}</span>
             )}
@@ -467,6 +487,7 @@ export function MatchesTab({
           <div style={{ height: 1, background: "#1a3050", margin: "4px 0" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: winB ? 800 : 600, color: winB ? "#22c55e" : "#fff" }}>
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(tb)}</span>
+            {!isCompleted && !isLive && teamSittingOut(tb) && <SittingOutTag />}
             {(isLive || isCompleted) && (
               isAdmin && isLive ? <ScoreStepper value={m.score_b ?? 0} onPlus={() => inlineScore(m, "b", 1)} onMinus={() => inlineScore(m, "b", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winB ? "#22c55e" : "#fff" }}>{m.score_b ?? 0}</span>
             )}
@@ -497,7 +518,13 @@ export function MatchesTab({
             {/* Plain pending (no court allocated yet): show ▶ START to allocate a court. */}
             {/* MAKEOVER: shared layoutId across the 3 advance buttons so the morph
                 from START -> BEGIN SCORING -> CONFIRM feels like one element. */}
-            {m.status === "pending" && !m.is_bye && !isWarming && m.team_a_id && m.team_b_id && (
+            {sitOutWinnerId && (
+              <button onClick={() => void recordSitOutWalkover(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#d97706", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>W/O: {tName(teamById[sitOutWinnerId])} WINS</button>
+            )}
+            {!isCompleted && !isLive && teamSittingOut(ta) && teamSittingOut(tb) && (
+              <span style={{ fontSize: 11, color: "#fbbf24", fontWeight: 600, alignSelf: "center" }}>Both teams are sitting out. Bring one back on their profile, then record the walkover.</span>
+            )}
+            {m.status === "pending" && !m.is_bye && !isWarming && m.team_a_id && m.team_b_id && !teamSittingOut(ta) && !teamSittingOut(tb) && (
               <motion.button layoutId={`match-${m.id}-action`} onClick={() => setPickingCourtFor(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: busyCourts.size >= tournament.num_courts ? "#475569" : "#dc2626", color: "#fff", fontSize: 11, fontWeight: 700, cursor: busyCourts.size >= tournament.num_courts ? "not-allowed" : "pointer", letterSpacing: 1, opacity: busyCourts.size >= tournament.num_courts ? 0.5 : 1 }} disabled={busyCourts.size >= tournament.num_courts} title={busyCourts.size >= tournament.num_courts ? "All courts in use" : ""}>▶ START</motion.button>
             )}
             {/* Warming up: ▶ Begin Scoring starts the 12-min play clock. ↩ Cancel frees the court. */}
@@ -739,5 +766,13 @@ function ScoreStepper({ value, onPlus, onMinus }: { value: number; onPlus: () =>
       <span className="font-display" style={{ minWidth: 32, textAlign: "center", fontSize: 18, fontWeight: 800, color: "#fff" }}>{value}</span>
       <button onClick={onPlus} style={{ width: 28, height: 28, borderRadius: 5, border: "1px solid #00d4ff", background: "rgba(0,184,255,0.15)", color: "#00d4ff", fontSize: 16, fontWeight: 800, cursor: "pointer", padding: 0 }}>+</button>
     </div>
+  );
+}
+
+function SittingOutTag() {
+  return (
+    <span className="font-display" style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: 1, padding: "2px 6px", borderRadius: 4, color: "#fbbf24", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)" }}>
+      SITTING OUT
+    </span>
   );
 }

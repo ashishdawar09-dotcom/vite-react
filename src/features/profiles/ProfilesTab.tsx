@@ -16,7 +16,8 @@ import type { GroupStanding } from "../groupstage/GroupsTab";
  *      profileViewPlayerId is non-null.
  *
  * Admins can click the photo to upload, click the name to edit
- * inline; everyone can use the View Profile button.
+ * inline; everyone can use the View Profile button. Sit Out (and Delete)
+ * are on the single-player view, admin only.
  */
 export function ProfilesTab({
   categories,
@@ -41,6 +42,8 @@ export function ProfilesTab({
   saveEdit,
   fileRefs,
   handlePhoto,
+  onSitOut,
+  onBringBack,
 }: {
   categories: Category[];
   currentCategoryId: string | null;
@@ -64,6 +67,8 @@ export function ProfilesTab({
   saveEdit: (id: string) => Promise<void>;
   fileRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
   handlePhoto: (id: string, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  onSitOut: (playerId: string) => Promise<void>;
+  onBringBack: (playerId: string) => Promise<void>;
 }) {
   const [search, setSearch] = useState("");
   // Single-player profile view takes precedence over the grid.
@@ -86,6 +91,8 @@ export function ProfilesTab({
         onBack={() => setProfileViewPlayerId(null)}
         onShowProfile={(pid) => setProfileViewPlayerId(pid)}
         isAdmin={isAdmin}
+        onSitOut={onSitOut}
+        onBringBack={onBringBack}
       />
     );
   }
@@ -148,7 +155,7 @@ export function ProfilesTab({
                   </div>
                 ) : null;
               })()}
-              <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>{p.active ? (paired.has(p.id) ? "✓ On a team" : "Available") : "Inactive"}</div>
+              <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>{p.active ? (paired.has(p.id) ? "✓ On a team" : "Available") : <span style={{ color: "#b45309", fontWeight: 700 }}>Sitting out</span>}</div>
               <button
                 onClick={() => setProfileViewPlayerId(p.id)}
                 style={{ marginTop: 14, width: "100%", padding: "9px 14px", borderRadius: 10, border: "1px solid #3A86FF", background: "transparent", color: "#3A86FF", fontSize: 11, fontWeight: 800, letterSpacing: 1.5, cursor: "pointer", textTransform: "uppercase", transition: "all .15s" }}

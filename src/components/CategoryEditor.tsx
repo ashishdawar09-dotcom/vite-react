@@ -125,14 +125,8 @@ export function CategoryEditor({
     finally { setBusy(false); }
   };
 
-  const remove = async () => {
-    if (!category) return;
-    if (!confirm(`Delete "${category.name}" — all teams + matches in this category will be removed. Continue?`)) return;
-    setBusy(true);
-    try { await db.deleteCategory(category.id); onClose(); }
-    catch (e: any) { toast(e?.message ?? "Delete failed", "error"); }
-    finally { setBusy(false); }
-  };
+  // Deleting a category lives in the Admin panel (header "⚙️ ADMIN"), behind
+  // typing its name: it erases the category's registrations and payments.
 
   return (
     <Modal open onClose={onClose} size="md" surface="dark" ariaLabel={category ? "Edit category" : "New category"}>
@@ -322,7 +316,6 @@ export function CategoryEditor({
         })()}
 
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-          {category && <button disabled={busy} onClick={remove} style={{ padding: "10px 16px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontWeight: 700, cursor: "pointer", fontSize: 12, letterSpacing: 1 }}>DELETE</button>}
           <div style={{ flex: 1 }} />
           <button disabled={busy} onClick={onClose} style={{ padding: "10px 18px", background: "transparent", color: "#94a3b8", border: "1px solid #1a3050", borderRadius: 6, fontWeight: 600, cursor: "pointer", fontSize: 12, letterSpacing: 1 }}>CANCEL</button>
           <button disabled={busy} onClick={save} className="font-display" style={{ padding: "10px 24px", background: "linear-gradient(135deg,#00b8ff,#0066ff)", color: "#fff", border: "none", borderRadius: 6, fontWeight: 700, cursor: busy ? "wait" : "pointer", fontSize: 13, letterSpacing: 1.5, opacity: busy ? 0.6 : 1 }}>SAVE</button>

@@ -192,12 +192,8 @@ export function TournamentPicker({
     }
   };
 
-  const removeCurrent = async () => {
-    if (!current) return;
-    if (!confirm(`Delete "${current.name}" and all its data? This cannot be undone.`)) return;
-    await db.deleteTournament(current.id);
-    onChange();
-  };
+  // Deleting the tournament lives in the Admin panel (header "⚙️ ADMIN"),
+  // behind typing its name: it erases every registration and payment record.
 
   const copyRegistrationLink = async () => {
     if (!current) return;
@@ -228,7 +224,6 @@ export function TournamentPicker({
           {current && <button onClick={() => setEditing(true)} title="Edit tournament settings — name, date, venue, registration form (prices are set per category)" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(168,85,247,0.4)", background: "rgba(168,85,247,0.2)", color: "#c4b5fd", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✏️ Edit</button>}
           {current && <button onClick={copyRegistrationLink} title="Copy public registration link — share via WhatsApp/text" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(0,212,255,0.5)", background: "rgba(0,212,255,0.2)", color: "#7dd3fc", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>📋 Copy Registration Link</button>}
           {current && <button onClick={() => navigate(`/register/${current.id}`)} title="Open the public registration form in this window — useful for testing push notifications inside the PWA" style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(250,204,21,0.5)", background: "rgba(250,204,21,0.2)", color: "#fde68a", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🧪 Test as Player</button>}
-          {current && <button onClick={removeCurrent} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(230,57,70,0.4)", background: "rgba(230,57,70,0.2)", color: "#fca5a5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Delete</button>}
         </>
       )}
       {creating && createPortal(
