@@ -77,6 +77,12 @@ const C = {
 const SANS = "'Archivo','Helvetica Neue',Helvetica,Arial,sans-serif";
 const MONO = "'JetBrains Mono',Menlo,Consolas,monospace";
 const TZ = "America/Vancouver";
+// Clock times for an instant (the entry deadline, when an entry came in).
+// BC is UTC-7 all year from Nov 1, 2026. A fixed offset reads the same on
+// every runtime: Supabase's Edge runtime has the new rule, but older time-zone
+// data (some local Deno builds, the database server) still applies -08:00 in
+// winter. Etc/GMT+7 is UTC-7 (POSIX sign). TZ stays the calendar zone id.
+const VENUE_CLOCK = "Etc/GMT+7";
 
 export const esc = (s: string) =>
   s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
@@ -126,8 +132,8 @@ export function deadlineText(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
-  const day = d.toLocaleDateString("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" });
-  const time = d.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).toLowerCase();
+  const day = d.toLocaleDateString("en-US", { timeZone: VENUE_CLOCK, weekday: "long", month: "long", day: "numeric" });
+  const time = d.toLocaleTimeString("en-US", { timeZone: VENUE_CLOCK, hour: "numeric", minute: "2-digit" }).toLowerCase();
   return `${day} at ${time}`;
 }
 
@@ -161,6 +167,11 @@ export function calendarUrl(t: EmailTournament): string | null {
 }
 
 // iCalendar invite (floating local time pinned with TZID; Vancouver rules).
+// The VTIMEZONE carries BC's rules as they are now: daylight time each
+// spring until March 2026, standard time each fall until Nov 2025, then
+// -07:00 all year from Nov 1, 2026. Calendars that use the file's own
+// definition (Outlook, and Apple Calendar for some files) showed the 9:30
+// start as 10:30 while it still said -08:00 from November.
 export function buildIcs(t: EmailTournament, uid: string): string | null {
   if (!t.event_date) return null;
   const icsEsc = (s: string) => s.replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, "\\n");
@@ -178,14 +189,20 @@ export function buildIcs(t: EmailTournament, uid: string): string | null {
     "TZOFFSETTO:-0700",
     "TZNAME:PDT",
     "DTSTART:19700308T020000",
-    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU;UNTIL=20260308T100000Z",
     "END:DAYLIGHT",
     "BEGIN:STANDARD",
     "TZOFFSETFROM:-0700",
     "TZOFFSETTO:-0800",
     "TZNAME:PST",
     "DTSTART:19701101T020000",
-    "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
+    "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU;UNTIL=20251102T090000Z",
+    "END:STANDARD",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:-0700",
+    "TZOFFSETTO:-0700",
+    "TZNAME:MST",
+    "DTSTART:20261101T020000",
     "END:STANDARD",
     "END:VTIMEZONE",
     "BEGIN:VEVENT",
@@ -1111,7 +1128,7 @@ export function adminNewEntry(d: AdminEntryData): RenderedEmail {
   const subject = `New entry: ${r.player_name.trim()}${r.partner_name ? ` & ${r.partner_name.trim()}` : ""} · ${d.category.name}` +
     (card ? " · paid" : " · e-Transfer to match");
   const when = new Date(r.submitted_at).toLocaleString("en-CA", {
-    timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    timeZone: VENUE_CLOCK, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
   const todo = card
     ? `Paid by card${amt ? ` (${amt})` : ""}. Review it and approve.`

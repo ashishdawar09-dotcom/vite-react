@@ -514,8 +514,8 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
    "name": "Shuttle Storm '26 Badminton Tournament",
    "description": "A provincial-level badminton tournament at the UFV Athletic Centre North Gym, Abbotsford: ten singles and doubles categories for youth, adults and masters. Entries close November 18.",
    "sport": "Badminton",
-   "startDate": "2026-11-21T09:30:00-08:00",
-   "endDate": "2026-11-21T17:00:00-08:00",
+   "startDate": "2026-11-21T09:30:00-07:00",
+   "endDate": "2026-11-21T17:00:00-07:00",
    "eventStatus": "https://schema.org/EventScheduled",
    "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
    "image": [
@@ -545,7 +545,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
     "highPrice": "40",
     "availability": "https://schema.org/InStock",
     "validFrom": "2026-10-10T00:00:00-07:00",
-    "validThrough": "2026-11-18T23:59:00-08:00"
+    "validThrough": "2026-11-18T23:59:00-07:00"
    },
    "performer": {
     "@id": "https://shuttlestorm.adawar.org/#organization"
@@ -1271,7 +1271,8 @@ document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(() => 
   if (vid.getAttribute('src')) { vid.closest('.hero').classList.add('has-video'); vid.muted = true; if (!reduce) vid.play().catch(()=>{}); }
 
   /* ---------- Countdown ---------- */
-  const target = Date.parse('2026-11-21T08:00:00-08:00');
+  // 9:30 am start. BC stays at -07:00 from Nov 1, 2026 (no fall-back).
+  const target = Date.parse('2026-11-21T09:30:00-07:00');
   const pad = n => String(n).padStart(2,'0');
   function tick(){
     const d = Math.max(0, target - Date.now());

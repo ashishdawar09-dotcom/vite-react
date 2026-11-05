@@ -101,6 +101,9 @@ Deno.test("approval email and calendar invite use Vancouver time", () => {
   assertStringIncludes(cal, "ctz=America%2FVancouver");
   const ics = buildIcs(data().tournament, "reg-1")!;
   assertStringIncludes(ics, "DTSTART;TZID=America/Vancouver:20261121T093000");
+  // BC's permanent -07:00 from Nov 1, 2026: no fall-back rule after 2025.
+  assertStringIncludes(ics, "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU;UNTIL=20251102T090000Z");
+  assertStringIncludes(ics, "TZOFFSETFROM:-0700\r\nTZOFFSETTO:-0700\r\nTZNAME:MST\r\nDTSTART:20261101T020000");
   assertStringIncludes(ics, "LOCATION:UFV Athletic Centre – North Gym\\, 1395 McKenzie Road\\, Abbotsford\\, BC");
   assert(ics.includes("\r\n"));
 });
@@ -207,7 +210,7 @@ Deno.test("WhatsApp invitation escapes names and keeps long ones on the heading'
 // Sam paid their own share and named Ana, who hasn't paid hers yet.
 const ownShare = (over: Partial<EmailData> = {}) => data({
   reg: { ...data().reg, player_email: "sam.lee@example.com", amount_due_cents: 4000, payment_paid_full_for_partner: false },
-  registrationDeadline: "2026-11-19T07:59:00Z",
+  registrationDeadline: "2026-11-19T06:59:00Z", // 11:59 pm Nov 18 at UTC-7
   registrationClosed: false,
   role: "partner",
   partnerShare: "due",
@@ -340,7 +343,10 @@ Deno.test("directors hear about a refused repeat entry, escaped", () => {
 });
 
 Deno.test("deadline and masked email helpers", () => {
-  assertEquals(deadlineText("2026-11-19T07:59:00Z"), "Wednesday, November 18 at 11:59 pm");
+  // BC is UTC-7 all year from Nov 1, 2026: 11:59 pm on Nov 18 is 06:59 UTC.
+  assertEquals(deadlineText("2026-11-19T06:59:00Z"), "Wednesday, November 18 at 11:59 pm");
+  // The value stored before the fix, written at -08:00, is an hour late.
+  assertEquals(deadlineText("2026-11-19T07:59:00Z"), "Thursday, November 19 at 12:59 am");
   assertEquals(deadlineText(null), null);
   assertEquals(maskEmail("sam.lee@example.com"), "s•••@example.com");
   assertEquals(maskEmail("not an email"), null);
