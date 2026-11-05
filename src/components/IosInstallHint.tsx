@@ -1,6 +1,8 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { colors, easings, radii, spacing, typography } from "../lib/theme";
+import { hintAllowedOn } from "./iosInstallHintPaths";
 
 const CYAN = "#00d4ff";
 const STORAGE_KEY = "ios-install-hint-dismissed";
@@ -27,6 +29,8 @@ function shouldShow(): boolean {
 
 export function IosInstallHint() {
   const reduce = useReducedMotion();
+  const { pathname } = useLocation();
+  const allowed = hintAllowedOn(pathname);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -42,7 +46,7 @@ export function IosInstallHint() {
 
   return (
     <AnimatePresence>
-      {show && (
+      {show && allowed && (
         <motion.div
           initial={reduce ? false : { y: 80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
