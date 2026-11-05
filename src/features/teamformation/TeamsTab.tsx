@@ -20,7 +20,8 @@ import { TeamDetailModal } from "./TeamDetailModal";
  *
  * Singles categories before the group stage list every active player in
  * the category instead: they are all entered when the stage starts, so
- * there is no pairing step and no per-player remove (use Sit Out).
+ * there is no pairing step and no per-player remove (use Sit Out on the
+ * player's profile).
  *
  * There is deliberately no reset button: wiping teams and matches is done
  * by hand on request, never from the app.
@@ -227,7 +228,7 @@ export function TeamsTab({
 
               {singlesDraw && (
                 <div style={{ fontSize: 13, color: "#cbd5e1", marginBottom: 12, textAlign: "center" }}>
-                  All {cards.length} active players will be entered. To leave someone out, use Sit Out on the Players tab.
+                  All {cards.length} active players will be entered. To leave someone out, open their profile (Profiles tab) and tap Sit out.
                 </div>
               )}
               <div style={{ display: "flex", justifyContent: "center" }}>

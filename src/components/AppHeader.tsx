@@ -141,7 +141,7 @@ export function AppHeader({
                 }}>💳 PAYMENTS</a>
               <button
                 onClick={onOpenAdminManager}
-                title="Manage admins"
+                title="Admins, and deleting a category or the tournament"
                 style={{
                   padding: "10px 14px",
                   minHeight: 44,
@@ -153,7 +153,7 @@ export function AppHeader({
                   fontSize: 12,
                   fontWeight: 600,
                   letterSpacing: 0.5,
-                }}>👥 ADMINS</button>
+                }}>⚙️ ADMIN</button>
               <button
                 onClick={() => void onSignOut()}
                 style={{

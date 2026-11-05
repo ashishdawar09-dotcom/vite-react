@@ -11,10 +11,11 @@ import { PendingRegistrationsPanel } from "./PendingRegistrationsPanel";
 
 /**
  * Player roster + management. Admins can add players with category
- * assignments, inline-edit names, toggle active state, choose
- * partners (doubles only). Deleting a player lives on their profile and
- * needs an emailed code. Singles players are never paired: they're
- * entered when the group stage starts.
+ * assignments, inline-edit names and choose partners (doubles only).
+ * Sit Out and Delete live on the player's profile (Profiles tab), away from
+ * this busy list, so neither can be tapped by accident; Delete also needs
+ * an emailed code. Singles players are never paired: they're entered when
+ * the group stage starts.
  *
  * Heavy prop surface (~22 props) reflecting the breadth of in-place
  * actions on a player card. Could shrink with a TournamentContext
@@ -43,7 +44,6 @@ export function RegisterTab({
   setEditingPlayerCats,
   pendingPlayerCats,
   setPendingPlayerCats,
-  toggleActive,
   handlePhoto,
   openPartnerPicker,
   partnerNeedsByPlayer,
@@ -75,7 +75,6 @@ export function RegisterTab({
   setEditingPlayerCats: (id: string | null) => void;
   pendingPlayerCats: Set<string> | null;
   setPendingPlayerCats: React.Dispatch<React.SetStateAction<Set<string> | null>>;
-  toggleActive: (id: string) => Promise<void>;
   handlePhoto: (id: string, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   openPartnerPicker: (pid: string, categoryId?: string) => void;
   partnerNeedsByPlayer: Map<string, string[]>;
@@ -160,7 +159,7 @@ export function RegisterTab({
           const pCats = playerCategoryMap.get(p.id);
           const isEditingCats = editingPlayerCats === p.id;
           return (
-            <motion.div key={p.id} variants={itemVariants} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14, border: "1px solid #e8ecf1", opacity: p.active ? 1 : 0.4, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", position: "relative", overflow: "hidden" }}>
+            <motion.div key={p.id} variants={itemVariants} style={{ background: "#fff", borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14, border: "1px solid #e8ecf1", opacity: p.active ? 1 : 0.6, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", position: "relative", overflow: "hidden" }}>
               <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 4, background: p.color, borderRadius: "0 4px 4px 0" }} />
               <div style={{ position: "relative", cursor: isAdmin ? "pointer" : "default", marginLeft: 4 }} onClick={() => isAdmin && fileRefs.current[p.id]?.click()}>
                 <Av name={p.name} photo={p.photo_url} sz={64} color={p.color} />
@@ -221,10 +220,10 @@ export function RegisterTab({
                   </div>
                 )}
                 {paired.has(p.id) && (currentCategoryId || !partnerNeedsByPlayer.has(p.id)) && <div style={{ fontSize: 12, color: "#16a34a", marginTop: 3, fontWeight: 600 }}>✓ Team assigned</div>}
+                {!p.active && <div style={{ fontSize: 12, color: "#b45309", marginTop: 3, fontWeight: 700 }}>Sitting out <span style={{ fontWeight: 500, color: "#94a3b8" }}>· change on their profile</span></div>}
               </div>
               {isAdmin && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                  <button onClick={() => toggleActive(p.id)} style={{ ...btn(p.active ? "#e2e8f0" : "#2A9D8F", p.active ? "#475569" : "#fff"), padding: "6px 12px", fontSize: 12, borderRadius: 8, boxShadow: "none" }}>{p.active ? "Sit Out" : "Activate"}</button>
                   {currentCategory?.team_size === 2 && p.active && !paired.has(p.id) && unpaired.length >= 2 && (
                     <button onClick={() => openPartnerPicker(p.id)} style={{ ...btn("#3A86FF"), padding: "6px 12px", fontSize: 12, borderRadius: 8 }}>Choose Partner</button>
                   )}

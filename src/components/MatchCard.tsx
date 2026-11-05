@@ -5,6 +5,7 @@ import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
 import type { Match, Player, Team } from "../types";
 import { isCancelledMatch } from "../lib/matchOutcome";
+import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 
 // MatchCard's "team view" — a Team enriched with its player objects.
 // Identical to the TeamView type used in App.tsx (kept in sync; if it
@@ -32,6 +33,8 @@ export type MatchCardActions = {
   /** After picking a walkover/winner; should also propagate the winner forward. */
   selectWinner: (match: Match, winnerId: string) => Promise<void>;
   markWalkover: (match: Match, winnerId: string) => Promise<void>;
+  /** Unplayed match, one team sitting out: the other team wins, no court needed. */
+  recordSitOutWalkover: (match: Match) => Promise<void>;
 };
 
 export type ShownScores = { a: number | null; b: number | null };
@@ -88,6 +91,10 @@ export function MatchCard({
   const winB = m.confirmed && m.winner_id === tb?.id;
   // Warming up = court allocated, scoring not yet begun. Status still `pending` at the DB.
   const isWarming = !m.confirmed && m.status !== "live" && !!m.court_allocated_at && !m.started_at;
+  // A team here is sitting out (Sit Out on their profile): the other team
+  // gets a walkover instead of the match going on a court.
+  const sitOutWinner = sitOutWalkoverWinner(m, teamById);
+  const unplayed = !m.confirmed && m.status !== "live" && !m.is_bye;
 
   // What the score boxes show right now. Typing then tapping Confirm used to
   // confirm the scores from before the typed one had saved, with the wrong
@@ -176,6 +183,11 @@ export function MatchCard({
               whiteSpace: "nowrap",
             }}>
               {tLabel(team)}
+            </span>
+          )}
+          {unplayed && teamSittingOut(team) && (
+            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, letterSpacing: 0.8, padding: "2px 6px", borderRadius: 4, color: "#b45309", background: "#fef3c7", border: "1px solid #fde68a", textTransform: "uppercase" }}>
+              Sitting out
             </span>
           )}
         </div>
@@ -284,7 +296,20 @@ export function MatchCard({
 
         {editable && ta && tb && isAdmin && (
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            {m.status === "pending" && !m.confirmed && !isWarming && (
+            {sitOutWinner && (
+              <button
+                onClick={() => void actions.recordSitOutWalkover(m)}
+                style={{ ...btn("#d97706"), flex: "1 1 100%", padding: "12px", fontSize: 14, borderRadius: 10 }}
+              >
+                Walkover: {tLabel(teamFromId(sitOutWinner))} wins
+              </button>
+            )}
+            {unplayed && teamSittingOut(ta) && teamSittingOut(tb) && (
+              <div style={{ flex: "1 1 100%", fontSize: 12, color: "#b45309", fontWeight: 600 }}>
+                Both teams are sitting out. Bring one back on their profile, then record the walkover.
+              </div>
+            )}
+            {m.status === "pending" && !m.confirmed && !isWarming && !sitOutWinner && !(teamSittingOut(ta) && teamSittingOut(tb)) && (
               <button
                 onClick={() => actions.startMatch(m.id)}
                 style={{ ...btn("#dc2626"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}

@@ -161,6 +161,26 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
         // listPlayerCategories() already scopes via inner-join on players.tournament_id.
         .on("postgres_changes", { event: "*", schema: "public", table: "player_categories" }, () => {
           debouncedLoadPlayerCategories.current();
+        })
+        // Supabase can't filter DELETE events ("Delete events are not
+        // filterable"), so the tournament_id listeners above never hear one:
+        // a team removed by Sit Out or the Teams tab, or a category deleted
+        // from the Admin panel, stayed on every admin screen until a reload,
+        // and starting that category then failed on the missing team.
+        // Deletes are rare, so listen to all of them and reload.
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "players" }, () => {
+          debouncedLoadPlayers.current();
+          debouncedLoadPlayerCategories.current();
+        })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "teams" }, () => {
+          debouncedLoadTeams.current();
+        })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "matches" }, () => {
+          debouncedLoadMatches.current();
+        })
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "categories" }, () => {
+          debouncedLoadCategories.current();
+          debouncedLoadPlayerCategories.current();
         });
       // subscribe() can throw synchronously if WebSocket is unusable in this
       // runtime (browser extension monkey-patching, blocked CSP, etc.). Catch

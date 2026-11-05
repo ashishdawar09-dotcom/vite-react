@@ -27,7 +27,8 @@ import { AppHeader } from "./components/AppHeader";
 import type { Match, Player, Team, Tournament } from "./types";
 import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
 import { courtTakenMessage, isCourtTaken } from "./lib/courts";
-import { groupStandings, groupsAllConfirmed } from "./lib/groups";
+import { groupLetter, groupStandings, groupsAllConfirmed } from "./lib/groups";
+import { pickQualifiers, planSitOut, sitOutWalkoverWinner, teamSittingOut } from "./lib/sitOut";
 
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
 // LIVE-tab view is split out so the main bundle stays small. Suspense
@@ -219,46 +220,87 @@ export default function App() {
     await db.updatePlayer(id, { name: n });
     setEditingId(null); setEditName("");
   };
-  const isPlayerInLiveMatch = (playerId: string) => {
-    const playerTeamIds = teams.filter(t => t.p1_id === playerId || t.p2_id === playerId).map(t => t.id);
-    return matches.some(m => m.status === "live" && (playerTeamIds.includes(m.team_a_id!) || playerTeamIds.includes(m.team_b_id!)));
+  // Sit Out lives on the player's profile (Profiles tab), not the Players
+  // tab, so it can't be tapped by accident. It works at any point in the day
+  // (lib/sitOut.ts): before a category's draw their teams there are removed
+  // (delete_team() logs each with a reason); after it, their teams stay so
+  // played results keep both teams, and every remaining match whose opponent
+  // is known is recorded as a walkover for the opponent (a knockout winner
+  // moves on as usual). A later-round match waits for its opponent and then
+  // offers the walkover on its card. It used to leave all of that to the
+  // admin, but a pending match has no Walkover button: it had to be put on a
+  // court (emailing the players) and run out its clock first.
+  const matchLabel = (m: Match) => {
+    const cat = catById[m.category_id]?.name ?? "Unknown category";
+    return `${cat} · ${m.stage === "knockout" ? knockoutLabel(m, matches) : `Group ${groupLetter(m.group_idx ?? 0)}`}`;
   };
-  // "Sit Out" used to delete every team the player was on, in every category,
-  // with no prompt; matches.team_*_id are ON DELETE SET NULL, so played
-  // results lost their teams and winners. Now it asks first, removes only
-  // teams that haven't played (delete_team() refuses the rest and logs each
-  // removal with a reason), and says which categories need a walkover instead.
-  const toggleActive = async (id: string) => {
+  const teamLabel = (id: string | null) => (id && allTeamById[id]?.name) || "TBD";
+  const sitOut = async (id: string) => {
     if (!guard()) return;
-    const p = playerById[id]; if (!p) return;
-    if (!p.active) { await db.updatePlayer(id, { active: true }); return; }
-    if (isPlayerInLiveMatch(id)) { toast(`"${p.name}" is in a live match and cannot be deactivated right now.`, "warn"); return; }
-
-    const catName = (cid: string) => categories.find(c => c.id === cid)?.name ?? "Unknown category";
-    const inAMatch = (teamId: string) => matches.some(m => m.team_a_id === teamId || m.team_b_id === teamId || m.winner_id === teamId);
-    const theirTeams = teams.filter(t => t.p1_id === id || t.p2_id === id);
-    const removable = theirTeams.filter(t => !inAMatch(t.id));
-    const playing = theirTeams.filter(t => inAMatch(t.id));
+    const p = playerById[id]; if (!p || !p.active) return;
+    const plan = planSitOut(id, teams, matches, teamId => teamSittingOut(allTeamById[teamId]));
+    if (plan.live.length) {
+      const courts = plan.live.map(m => m.court_number != null ? `Court ${m.court_number}` : matchLabel(m)).join(", ");
+      toast(`"${p.name}" is playing right now (${courts}). Finish that match first: enter the score and Confirm. Then sit them out.`, "warn");
+      return;
+    }
 
     const lines = [`Sit out "${p.name}"?`, ""];
-    if (removable.length) lines.push(`Teams removed (no matches played yet):\n${removable.map(t => `• ${t.name} (${catName(t.category_id)})`).join("\n")}`, "");
-    if (playing.length) lines.push(`Teams kept, already in matches. Record a walkover for their remaining games:\n${playing.map(t => `• ${t.name} (${catName(t.category_id)})`).join("\n")}`, "");
-    if (!theirTeams.length) lines.push("They aren't on any team.", "");
-    lines.push("Their results stay as they are.");
+    if (plan.removeTeams.length) lines.push(`Removed (their event hasn't started):\n${plan.removeTeams.map(t => `• ${t.name} (${catById[t.category_id]?.name ?? "Unknown category"})`).join("\n")}`, "");
+    if (plan.walkovers.length) lines.push(`Walkovers, the other team wins:\n${plan.walkovers.map(w => `• ${matchLabel(w.match)}: ${teamLabel(w.winnerId)}${w.freesCourt && w.match.court_number != null ? ` (frees Court ${w.match.court_number})` : ""}`).join("\n")}`, "");
+    if (plan.waiting.length) lines.push(`Waiting for an opponent. The match card will offer the walkover once one is known:\n${plan.waiting.map(m => `• ${matchLabel(m)}`).join("\n")}`, "");
+    if (plan.bothOut.length) lines.push(`Both teams are sitting out. Decide these yourself:\n${plan.bothOut.map(m => `• ${matchLabel(m)}: ${teamLabel(m.team_a_id)} v ${teamLabel(m.team_b_id)}`).join("\n")}`, "");
+    if (!plan.teams.length) lines.push("They aren't on any team.", "");
+    lines.push("Results already played stay as they are.");
     if (!confirm(lines.join("\n"))) return;
 
-    await db.updatePlayer(id, { active: false });
+    // Out first: if anything below fails, the match cards still offer the
+    // walkover instead of ▶ Start.
+    try {
+      await db.updatePlayer(id, { active: false });
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : "error"}. Check the connection and try again.`, "error");
+      return;
+    }
     const failed: string[] = [];
-    for (const t of removable) {
+    for (const t of plan.removeTeams) {
       try {
-        await db.deleteTeamWithReason(t.id, `${p.name} marked as sitting out`);
+        await db.deleteTeamWithReason(t.id, `${p.name} is sitting out`);
       } catch (e: unknown) {
         failed.push(`${t.name}: ${e instanceof Error ? e.message : "error"}`);
       }
     }
-    if (failed.length) toast(`"${p.name}" is sitting out, but some teams weren't removed. ${failed.join("; ")}`, "warn");
-    else if (playing.length) toast(`"${p.name}" is sitting out. Record walkovers in: ${[...new Set(playing.map(t => catName(t.category_id)))].join(", ")}.`, "info");
-    else toast(`"${p.name}" is sitting out.`, "info");
+    // A working copy, so a second walkover in the same bracket sees the first.
+    const working = matches.map(m => ({ ...m }));
+    let recorded = 0;
+    for (const w of plan.walkovers) {
+      const m = working.find(x => x.id === w.match.id);
+      if (!m) continue;
+      try {
+        const bracket = confirmKnockoutPlan(working, m, w.winnerId);
+        if (!bracket) { failed.push(`${matchLabel(m)}: skipped`); continue; }
+        await db.markWalkover(m.id, w.winnerId, { freeCourt: w.freesCourt });
+        Object.assign(m, { winner_id: w.winnerId, confirmed: true, status: "completed", is_walkover: true, ...(w.freesCourt ? { court_number: null, court_allocated_at: null } : {}) });
+        await applyPlan(bracket, db.updateMatch);
+        for (const u of bracket.updates) { const t = working.find(x => x.id === u.id); if (t) Object.assign(t, u.patch); }
+        recorded++;
+      } catch (e: unknown) {
+        failed.push(`${matchLabel(m)}: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}`);
+      }
+    }
+    if (failed.length) toast(`"${p.name}" is sitting out, but some steps didn't go through: ${failed.join("; ")}. Their match cards offer the walkover.`, "warn");
+    else toast(`"${p.name}" is sitting out.${recorded ? ` ${recorded} walkover${recorded === 1 ? "" : "s"} recorded.` : ""}`, "info");
+  };
+  const bringBack = async (id: string) => {
+    if (!guard()) return;
+    const p = playerById[id]; if (!p || p.active) return;
+    if (!confirm(`Bring "${p.name}" back?\n\nWalkovers already recorded stay as they are. Teams removed when they sat out aren't restored: pair them again on the Players tab.`)) return;
+    try {
+      await db.updatePlayer(id, { active: true });
+      toast(`"${p.name}" is back in.`, "success");
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : "error"}. Check the connection and try again.`, "error");
+    }
   };
   const handlePhoto = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!guard()) return;
@@ -435,13 +477,19 @@ export default function App() {
     // standard cross-group bracket seeding — same-group teams don't meet in
     // round 1, top seeds spread across halves, byes go to top seeds when the
     // qualifier count isn't a power of 2.
-    const qualifiers: TeamView[][] = groups.map(g => {
-      const st = getStandings(g);
-      const limit = Math.min(topN, st.length);
-      return st.slice(0, limit).map(s => s.team);
-    }).filter(arr => arr.length > 0);
+    // A team with a player sitting out can't play the knockout, so the next
+    // team in its group goes through in its place (lib/sitOut.ts).
+    const { qualifiers, skipped, promoted } = pickQualifiers(groups.map(g => getStandings(g)), topN, teamSittingOut);
     const totalQualifiers = qualifiers.reduce((sum, arr) => sum + arr.length, 0);
-    if (totalQualifiers < 2) return;
+    if (totalQualifiers < 2) {
+      if (skipped.length) toast("Not enough teams left to play a knockout: the rest are sitting out.", "warn");
+      return;
+    }
+    if (skipped.length && !confirm(
+      `Sitting out, so not in the knockout:\n${skipped.map(t => `• ${t.name}`).join("\n")}\n\n` +
+      (promoted.length ? `Going through in their place:\n${promoted.map(t => `• ${t.name}`).join("\n")}\n\n` : "") +
+      "Start the knockout?",
+    )) return;
 
     // seedBracket returns the slot-ordered placements (length is the next
     // power of 2). Nulls indicate byes — admins can also fix mis-seeded
@@ -518,6 +566,9 @@ export default function App() {
     if (!guard()) return;
     const m = matches.find(x => x.id === id);
     if (!m) return;
+    // The card shows a walkover instead of ▶ Start; this catches a stale card.
+    const out = [m.team_a_id, m.team_b_id].filter(t => t && teamSittingOut(allTeamById[t]));
+    if (out.length) { toast(`${out.map(teamLabel).join(" and ")} ${out.length > 1 ? "are" : "is"} sitting out. Record the walkover instead of putting this match on a court.`, "warn"); return; }
     setPickingCourtFor(m);
   };
   // Court picker → allocates the court (warm-up phase). The play clock is
@@ -663,6 +714,23 @@ export default function App() {
       toast(`Result saved, but the bracket didn't update: ${e instanceof Error ? e.message : "error"}. Refresh and check the next round.`, "error");
     }
   };
+  // A pending match where one team is sitting out: the other team wins by
+  // walkover, without a court (the card offers this instead of ▶ Start).
+  const recordSitOutWalkover = async (m: Match) => {
+    if (!guard()) return;
+    const winnerId = sitOutWalkoverWinner(m, allTeamById);
+    if (!winnerId) return;
+    const loserId = winnerId === m.team_a_id ? m.team_b_id : m.team_a_id;
+    if (!confirm(`${teamLabel(loserId)} is sitting out.\n\nRecord ${matchLabel(m)} as a walkover: ${teamLabel(winnerId)} wins?`)) return;
+    const plan = planBracket(m, winnerId); if (!plan) return;
+    try {
+      await db.markWalkover(m.id, winnerId, { freeCourt: !!m.court_allocated_at || m.court_number != null });
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    }
+    await applyBracket(plan);
+  };
   // Confirm and Save use the scores on screen (`shown`), which can be ahead
   // of `m` while a typed score is still saving, and write them in the same
   // update as the winner.
@@ -773,6 +841,7 @@ export default function App() {
       await db.markWalkover(m.id, winnerId);
       await applyBracket(plan);
     },
+    recordSitOutWalkover,
   };
 
   // What every card on the Groups/Knockout tabs needs from App. The cards
@@ -958,7 +1027,6 @@ export default function App() {
             setEditingPlayerCats={setEditingPlayerCats}
             pendingPlayerCats={pendingPlayerCats}
             setPendingPlayerCats={setPendingPlayerCats}
-            toggleActive={toggleActive}
             handlePhoto={handlePhoto}
             openPartnerPicker={openPartnerPicker}
             partnerNeedsByPlayer={partnerNeedsByPlayer}
@@ -1010,6 +1078,8 @@ export default function App() {
             saveEdit={saveEdit}
             fileRefs={fileRefs}
             handlePhoto={handlePhoto}
+            onSitOut={sitOut}
+            onBringBack={bringBack}
           />
           </Suspense>
         )}
@@ -1097,7 +1167,16 @@ export default function App() {
       {showLogin && <Login onClose={() => setShowLogin(false)} />}
       {showAdminManager && isAdmin && (
         <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
-          <AdminManager currentEmail={email} onClose={() => setShowAdminManager(false)} />
+          <AdminManager
+            currentEmail={email}
+            onClose={() => setShowAdminManager(false)}
+            tournament={current}
+            categories={categories}
+            players={players}
+            teams={teams}
+            matches={matches}
+            onTournamentDeleted={reloadTournaments}
+          />
         </Suspense>
       )}
 

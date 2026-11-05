@@ -22,6 +22,8 @@ export function PlayerProfileView({
   onBack,
   onShowProfile,
   isAdmin,
+  onSitOut,
+  onBringBack,
 }: {
   player: Player;
   allTeams: TeamView[];
@@ -33,6 +35,9 @@ export function PlayerProfileView({
   onBack: () => void;
   onShowProfile: (playerId: string) => void;
   isAdmin: boolean;
+  /** Admin screens only. Sit Out lives here, not on the Players tab. */
+  onSitOut?: (playerId: string) => Promise<void>;
+  onBringBack?: (playerId: string) => Promise<void>;
 }) {
   const reduceMotion = useReducedMotion(); /* NEW: motion gate for WinRateRing draw-on-view */
   const [editingEmail, setEditingEmail] = useState(false);
@@ -192,6 +197,9 @@ export function PlayerProfileView({
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: 1.8, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>Player Profile</div>
             <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, color: "#1a1a2e", letterSpacing: -0.5, lineHeight: 1.1 }}>{player.name}</h1>
+            {isAdmin && !player.active && (
+              <div style={{ marginTop: 8, fontSize: 12, fontWeight: 800, letterSpacing: 1, color: "#b45309", padding: "4px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 12, display: "inline-block", textTransform: "uppercase" }}>Sitting out</div>
+            )}
             {player.note && <div style={{ marginTop: 8, fontSize: 13, color: "#E63946", padding: "4px 12px", background: "#fef2f2", borderRadius: 12, display: "inline-block" }}>⚠️ {player.note}</div>}
 
             {/* Age — admin-only */}
@@ -333,6 +341,10 @@ export function PlayerProfileView({
       </div>
       )}
 
+      {isAdmin && onSitOut && onBringBack && (
+        <SitOutSection key={`sit-out-${player.id}`} player={player} onSitOut={onSitOut} onBringBack={onBringBack} />
+      )}
+
       {/* Upcoming */}
       {upcoming.length > 0 && (
         <div style={{ marginBottom: 22 }}>
@@ -413,6 +425,46 @@ export function PlayerProfileView({
 
       {/* Delete — admin-only, and only with a one-time code emailed to the owner. */}
       {isAdmin && <DeletePlayerSection key={player.id} player={player} onDeleted={onBack} />}
+    </div>
+  );
+}
+
+// Sit out / bring back. The work (walkovers, removed teams, the confirm
+// listing them) is App's sitOut / bringBack; this is just the control.
+function SitOutSection({ player, onSitOut, onBringBack }: {
+  player: Player;
+  onSitOut: (playerId: string) => Promise<void>;
+  onBringBack: (playerId: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: (id: string) => Promise<void>) => {
+    setBusy(true);
+    try { await fn(player.id); } finally { setBusy(false); }
+  };
+  const out = !player.active;
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: `1px solid ${out ? "#fde68a" : "#e8ecf1"}`, marginBottom: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 18 }}>{out ? "⏸️" : "🏸"}</span>
+        <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, minWidth: 60 }}>Status</div>
+        <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: out ? "#b45309" : "#1a1a2e" }}>{out ? "Sitting out" : "Playing"}</div>
+        {out ? (
+          <button onClick={() => void run(onBringBack)} disabled={busy}
+            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1, minHeight: 40 }}>
+            {busy ? "Saving…" : "Bring back"}
+          </button>
+        ) : (
+          <button onClick={() => void run(onSitOut)} disabled={busy}
+            style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fffbeb", color: "#b45309", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1, minHeight: 40 }}>
+            {busy ? "Working…" : "Sit out"}
+          </button>
+        )}
+      </div>
+      <div style={{ marginTop: 6, marginLeft: 30, fontSize: 11, color: "#94a3b8" }}>
+        {out
+          ? "Not in any draw or match. Walkovers already recorded stay as they are."
+          : "For an injury or someone who has left. Their unplayed matches go to the other team as walkovers; results already played stay. You'll see the list before anything changes."}
+      </div>
     </div>
   );
 }
