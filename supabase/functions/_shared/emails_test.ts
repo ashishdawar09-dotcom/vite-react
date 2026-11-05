@@ -101,6 +101,9 @@ Deno.test("approval email and calendar invite use Vancouver time", () => {
   assertStringIncludes(cal, "ctz=America%2FVancouver");
   const ics = buildIcs(data().tournament, "reg-1")!;
   assertStringIncludes(ics, "DTSTART;TZID=America/Vancouver:20261121T093000");
+  // BC's permanent -07:00 from Nov 1, 2026: no fall-back rule after 2025.
+  assertStringIncludes(ics, "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU;UNTIL=20251102T090000Z");
+  assertStringIncludes(ics, "TZOFFSETFROM:-0700\r\nTZOFFSETTO:-0700\r\nTZNAME:MST\r\nDTSTART:20261101T020000");
   assertStringIncludes(ics, "LOCATION:UFV Athletic Centre – North Gym\\, 1395 McKenzie Road\\, Abbotsford\\, BC");
   assert(ics.includes("\r\n"));
 });

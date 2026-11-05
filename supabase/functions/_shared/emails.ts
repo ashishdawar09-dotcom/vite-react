@@ -161,6 +161,11 @@ export function calendarUrl(t: EmailTournament): string | null {
 }
 
 // iCalendar invite (floating local time pinned with TZID; Vancouver rules).
+// The VTIMEZONE carries BC's rules as they are now: daylight time each
+// spring until March 2026, standard time each fall until Nov 2025, then
+// -07:00 all year from Nov 1, 2026. Calendars that use the file's own
+// definition (Outlook, and Apple Calendar for some files) showed the 9:30
+// start as 10:30 while it still said -08:00 from November.
 export function buildIcs(t: EmailTournament, uid: string): string | null {
   if (!t.event_date) return null;
   const icsEsc = (s: string) => s.replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, "\\n");
@@ -178,14 +183,20 @@ export function buildIcs(t: EmailTournament, uid: string): string | null {
     "TZOFFSETTO:-0700",
     "TZNAME:PDT",
     "DTSTART:19700308T020000",
-    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU;UNTIL=20260308T100000Z",
     "END:DAYLIGHT",
     "BEGIN:STANDARD",
     "TZOFFSETFROM:-0700",
     "TZOFFSETTO:-0800",
     "TZNAME:PST",
     "DTSTART:19701101T020000",
-    "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
+    "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU;UNTIL=20251102T090000Z",
+    "END:STANDARD",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:-0700",
+    "TZOFFSETTO:-0700",
+    "TZNAME:MST",
+    "DTSTART:20261101T020000",
     "END:STANDARD",
     "END:VTIMEZONE",
     "BEGIN:VEVENT",
