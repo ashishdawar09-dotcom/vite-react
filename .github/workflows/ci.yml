@@ -18,10 +18,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # Node 22+ required: @supabase/realtime-js needs native WebSocket
-          # (Node 20 lacks it and would need the "ws" polyfill). Also matches
-          # the local dev environment (Node 22.16) so CI catches the same things.
-          node-version: "22"
+          # Node 24: the same major as Vercel's production builds (project
+          # setting 24.x) and local dev (24.18), so CI catches the same things.
+          # @supabase/realtime-js needs native WebSocket (22+), and the service
+          # worker's route tests need the global URLPattern (Node 23.8+).
+          node-version: "24"
           cache: "npm"
 
       - name: Install dependencies
