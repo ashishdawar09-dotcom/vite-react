@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGroups, groupKeyOf, groupStandings, groupsAllConfirmed } from "../groups";
+import { buildGroups, groupComplete, groupKeyOf, groupStandings, groupTies, groupsAllConfirmed, isRoundRobinOnly, roundRobinPodium } from "../groups";
 
 type T = { id: string; category_id: string };
 type M = {
@@ -84,5 +84,74 @@ describe("groupsAllConfirmed", () => {
     const msGroups = buildGroups(matches, byId, ["MS"]).filter(g => g[0].category_id === "MS");
     expect(groupsAllConfirmed(msGroups, matches)).toBe(false);
     expect(groupsAllConfirmed([], matches)).toBe(false);
+  });
+});
+
+// Ties (QA review, Nov 4): wins, then point difference, then head-to-head,
+// then a coin toss. They used to be settled silently by draw order.
+describe("tie-breaks", () => {
+  const g3 = [team("x", "C"), team("y", "C"), team("z", "C")];
+  const ids = (st: { team: T }[]) => st.map(s => s.team.id);
+
+  it("two teams level on wins and point difference: head-to-head decides, not draw order", () => {
+    // x +4; y and z both -2 with one win each; z beat y.
+    const ms = [m("C", 0, "x", "y", [19, 21]), m("C", 0, "x", "z", [21, 15]), m("C", 0, "y", "z", [17, 21])];
+    expect(ids(groupStandings(g3, ms))).toEqual(["x", "z", "y"]);
+    expect(groupTies(g3, ms)).toEqual([{ teams: [g3[2], g3[1]], places: [2, 3], decidedBy: "head-to-head", tossed: false }]);
+  });
+
+  it("point difference still comes before head-to-head", () => {
+    // One win each; point differences 0, +14 and -14.
+    const ms = [m("C", 0, "x", "y", [21, 19]), m("C", 0, "y", "z", [21, 5]), m("C", 0, "z", "x", [21, 19])];
+    expect(ids(groupStandings(g3, ms))).toEqual(["y", "x", "z"]);
+    expect(groupTies(g3, ms)).toEqual([]);
+  });
+
+  it("three teams level on everything need a coin toss, shown in draw order until it's recorded", () => {
+    const ms = [m("C", 0, "x", "y", [21, 19]), m("C", 0, "y", "z", [21, 19]), m("C", 0, "z", "x", [21, 19])];
+    expect(ids(groupStandings(g3, ms))).toEqual(["x", "y", "z"]);
+    expect(groupTies(g3, ms)).toEqual([{ teams: g3, places: [1, 3], decidedBy: "coin toss", tossed: false }]);
+    // z wins the first toss: z goes top, x and y still level.
+    expect(ids(groupStandings(g3, ms, ["z"]))).toEqual(["z", "x", "y"]);
+    expect(groupTies(g3, ms, ["z"])[0].tossed).toBe(false);
+    // Then y wins the second.
+    expect(ids(groupStandings(g3, ms, ["z", "y"]))).toEqual(["z", "y", "x"]);
+    expect(groupTies(g3, ms, ["z", "y"])[0].tossed).toBe(true);
+  });
+
+  it("everyone plays twice and splits 1–1: coin toss", () => {
+    const g2 = [team("a", "C"), team("b", "C")];
+    const ms = [m("C", 0, "a", "b", [21, 19]), m("C", 0, "a", "b", [19, 21])];
+    expect(groupTies(g2, ms)).toEqual([{ teams: g2, places: [1, 2], decidedBy: "coin toss", tossed: false }]);
+  });
+});
+
+describe("round-robin-only events", () => {
+  const g3 = [team("x", "C"), team("y", "C"), team("z", "C")];
+
+  it("is one group with no knockout", () => {
+    expect(isRoundRobinOnly({ groups_count: 1, top_n_advance: 0 })).toBe(true);
+    expect(isRoundRobinOnly({ groups_count: 1, top_n_advance: 2 })).toBe(false);
+    expect(isRoundRobinOnly({ groups_count: 0, top_n_advance: 0 })).toBe(false);
+    expect(isRoundRobinOnly(null)).toBe(false);
+  });
+
+  it("names the podium once every match is confirmed", () => {
+    const done = [m("C", 0, "x", "y", [21, 10]), m("C", 0, "x", "z", [21, 12]), m("C", 0, "y", "z", [21, 18])];
+    const p = roundRobinPodium(g3, done);
+    expect([p?.first?.id, p?.second?.id, p?.third?.id]).toEqual(["x", "y", "z"]);
+    expect(p?.openTosses).toEqual([]);
+    const unfinished = [...done.slice(0, 2), m("C", 0, "y", "z")];
+    expect(groupComplete(g3, unfinished)).toBe(false);
+    expect(roundRobinPodium(g3, unfinished)).toBeNull();
+  });
+
+  it("leaves places open while a coin toss decides them", () => {
+    const circle = [m("C", 0, "x", "y", [21, 19]), m("C", 0, "y", "z", [21, 19]), m("C", 0, "z", "x", [21, 19])];
+    const open = roundRobinPodium(g3, circle);
+    expect([open?.first, open?.second, open?.third]).toEqual([null, null, null]);
+    expect(open?.openTosses).toHaveLength(1);
+    const tossed = roundRobinPodium(g3, circle, ["z", "y"]);
+    expect([tossed?.first?.id, tossed?.second?.id, tossed?.third?.id]).toEqual(["z", "y", "x"]);
   });
 });
