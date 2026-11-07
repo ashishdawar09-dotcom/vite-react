@@ -103,6 +103,14 @@ export function MatchCard({
   const shown = useRef<{ a?: number; b?: number }>({});
   // +/− taps show at once and save in order (src/lib/scoreTaps.ts).
   const onScreen = useShownScores(m);
+  // Editing a confirmed result: changes stay on the card until 💾 Save, which
+  // writes the scores and the winner together; Cancel drops them. They used to
+  // save as they were made, so Cancel left the new score with the old winner.
+  const [draft, setDraft] = useState<{ a: number; b: number } | null>(null);
+  if (isEditing && !draft) setDraft({ a: m.score_a ?? 0, b: m.score_b ?? 0 });
+  if (!isEditing && draft) setDraft(null);
+  const editDraft = (side: "a" | "b", next: number | ((cur: number) => number)) =>
+    setDraft(d => (d ? { ...d, [side]: Math.max(0, typeof next === "function" ? next(d[side]) : next) } : d));
   const onShownA = useCallback((n: number) => { shown.current.a = n; }, []);
   const onShownB = useCallback((n: number) => { shown.current.b = n; }, []);
   const shownScores = (): ShownScores => ({
@@ -110,7 +118,7 @@ export function MatchCard({
     b: inlineMode && shown.current.b !== undefined ? shown.current.b : m.score_b,
   });
 
-  const [cardNow, setCardNow] = useState(Date.now());
+  const [cardNow, setCardNow] = useState(() => Date.now());
   const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
   // Close the picker when the match moves on (confirmed, rescheduled,
   // cancelled, here or by another admin). Cards used to remount on every App
@@ -141,7 +149,10 @@ export function MatchCard({
     const stepBtn = (delta: number, label: string) => (
       <button
         // Steps from the number on screen, including taps and typed scores still saving.
-        onClick={() => { void actions.adjustScore(m, side, delta); }}
+        onClick={() => {
+          if (isEditing) editDraft(side, cur => cur + delta);
+          else void actions.adjustScore(m, side, delta);
+        }}
         style={{
           width: 56, height: 56, borderRadius: 14, border: "2px solid #e2e8f0",
           background: "#fff", fontSize: 26, fontWeight: 800, color: "#1a1a2e",
@@ -196,7 +207,7 @@ export function MatchCard({
             {stepBtn(-1, "−")}
             <ScoreInput
               value={scoreVal}
-              onCommit={(next) => actions.setScore(m, side, next)}
+              onCommit={(next) => (isEditing ? editDraft(side, next) : actions.setScore(m, side, next))}
               onShownChange={side === "a" ? onShownA : onShownB}
             />
             {stepBtn(1, "+")}
@@ -290,9 +301,9 @@ export function MatchCard({
         {isEditing && <span style={{ color: "#f59e0b" }}>✏️ Editing</span>}
       </div>
       <div style={{ padding: "8px 14px 14px" }}>
-        {teamRow(ta, "a", inlineMode ? onScreen.a : m.score_a ?? 0, winA)}
+        {teamRow(ta, "a", isEditing && draft ? draft.a : inlineMode ? onScreen.a : m.score_a ?? 0, winA)}
         <div style={{ height: 1, background: "#f1f5f9", margin: "2px 0" }} />
-        {teamRow(tb, "b", inlineMode ? onScreen.b : m.score_b ?? 0, winB)}
+        {teamRow(tb, "b", isEditing && draft ? draft.b : inlineMode ? onScreen.b : m.score_b ?? 0, winB)}
 
         {editable && ta && tb && isAdmin && (
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
