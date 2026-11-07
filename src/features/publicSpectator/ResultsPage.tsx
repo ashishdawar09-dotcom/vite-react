@@ -6,6 +6,7 @@ import { derivePublicTournamentState, type TeamView } from "./publicDerive";
 import type { Category } from "../../types";
 import { formatLocalDate } from "../../lib/dates";
 import { isCancelledMatch } from "../../lib/matchOutcome";
+import { isRoundRobinOnly, roundRobinPodium } from "../../lib/groups";
 
 /**
  * Printable results page — /t/:slug/results
@@ -52,11 +53,23 @@ export function ResultsPage() {
   );
   const catById = Object.fromEntries(ctx.categories.map(c => [c.id, c])) as Record<string, Category>;
 
-  // Champions per category: the Final (slot_idx=0, last round) confirmed winner.
-  const champions: { category: Category; champion: TeamView | null; runnerUp: TeamView | null; bronze: TeamView | null }[] = [];
+  // Champions per category: the Final (slot_idx=0, last round) confirmed
+  // winner; for a round-robin-only event, the group's top three once every
+  // match is confirmed. `pending` = a coin toss still decides first place.
+  const champions: { category: Category; champion: TeamView | null; runnerUp: TeamView | null; bronze: TeamView | null; pending?: string }[] = [];
   for (const cat of ctx.categories) {
     const koMatches = knockoutByCategory.get(cat.id) ?? [];
-    if (koMatches.length === 0) continue;
+    if (koMatches.length === 0) {
+      const catGroups = derived.groups.filter(g => g[0]?.category_id === cat.id);
+      const podium = isRoundRobinOnly(cat) && catGroups.length === 1 ? roundRobinPodium(catGroups[0], derived.groupMatches) : null;
+      if (podium) {
+        champions.push({
+          category: cat, champion: podium.first, runnerUp: podium.second, bronze: podium.third,
+          pending: podium.first ? undefined : "First place is decided by a coin toss.",
+        });
+      }
+      continue;
+    }
     const maxRound = Math.max(...koMatches.map(m => m.round_idx ?? 0));
     const finalMatch = koMatches.find(m => m.round_idx === maxRound && m.slot_idx === 0 && !m.is_bronze);
     const bronzeMatch = koMatches.find(m => m.is_bronze);
@@ -134,15 +147,15 @@ export function ResultsPage() {
         </header>
 
         {/* Champions */}
-        {champions.some(c => c.champion) && (
+        {champions.some(c => c.champion || c.pending) && (
           <section className="results-section" style={{ marginBottom: 28 }}>
             <SectionHeader>🏆 Champions</SectionHeader>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 14 }}>
-              {champions.filter(c => c.champion).map(c => (
+              {champions.filter(c => c.champion || c.pending).map(c => (
                 <div key={c.category.id} style={{ border: "2px solid #f59e0b", borderRadius: 12, padding: "14px 16px", background: "#fef9c3" }}>
                   <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, color: "#92400e", textTransform: "uppercase" }}>{c.category.name}</div>
                   <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                    <Podium rank="1st" color="#f59e0b" team={c.champion} />
+                    {c.champion ? <Podium rank="1st" color="#f59e0b" team={c.champion} /> : <div style={{ fontSize: 13, color: "#92400e" }}>🪙 {c.pending}</div>}
                     {c.runnerUp && <Podium rank="2nd" color="#94a3b8" team={c.runnerUp} />}
                     {c.bronze && <Podium rank="3rd" color="#b45309" team={c.bronze} />}
                   </div>
