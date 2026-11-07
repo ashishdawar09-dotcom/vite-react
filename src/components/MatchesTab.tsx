@@ -30,6 +30,8 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { courtTakenMessage, isCourtTaken } from "../lib/courts";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { resultLabel } from "../lib/matchOutcome";
+import { finalScorePatch } from "../lib/scoring";
+import { useScoreTaps } from "../hooks/useScoreTaps";
 import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -62,6 +64,7 @@ export function MatchesTab({
   const [now, setNow] = useState(Date.now());
   const isMobile = useIsMobile();
   const reduceMotion = useReducedMotion(); /* NEW: motion gate for whileTap + layoutId */
+  const taps = useScoreTaps();
 
   // Optimistic order overrides per-category for the pending list.
   // Maps category_id → ordered match-id array set immediately on drag-end so
@@ -289,20 +292,30 @@ export function MatchesTab({
     }
   };
 
-  const inlineScore = async (m: ProjectedMatch, side: "a" | "b", delta: number) => {
-    const cur = side === "a" ? (m.score_a ?? 0) : (m.score_b ?? 0);
-    const next = Math.max(0, cur + delta);
+  // Each tap steps from the number on screen; saves land in order
+  // (src/lib/scoreTaps.ts). Stepping from the last number the server sent
+  // back lost most quick taps (QA review, Nov 4: 6 of 8).
+  const inlineScore = (m: ProjectedMatch, side: "a" | "b", delta: number) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
-    await db.updateMatch(m.id, side === "a" ? { score_a: next } : { score_b: next });
+    taps.step(m, side, delta);
   };
 
+  // Confirms the score on screen, written with the winner in one update, after
+  // any tap still saving has landed. It used to read the last saved score.
   const confirmMatch = async (m: ProjectedMatch) => {
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    if (sa === 0 && sb === 0) { toast("Enter a score before confirming", "warn"); return; }
-    if (sa === sb) { toast("No ties allowed", "warn"); return; }
-    const winner_id = sa > sb ? m.team_a_id : m.team_b_id;
-    const plan = confirmKnockoutPlan(matches, m, winner_id); if (!plan) return;
-    await db.updateMatch(m.id, { winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString() });
+    const r = finalScorePatch(m, taps.shown(m, "a"), taps.shown(m, "b"), new Date().toISOString());
+    if (!r.ok) { toast(r.reason === "no-score" ? "Enter a score before confirming" : "No ties allowed", "warn"); return; }
+    const plan = confirmKnockoutPlan(matches, m, r.winnerId); if (!plan) return;
+    const release = taps.lock(m);
+    try {
+      if (!(await taps.flush(m.id))) return; // the saver already said the score didn't save
+      await db.updateMatch(m.id, r.patch);
+    } catch (e: unknown) {
+      toast(`Not confirmed: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    } finally {
+      release();
+    }
     /* Celebrate — small confetti burst from page bottom-center, brand palette.
        Honours prefers-reduced-motion (skip the visual jolt). */
     if (!reduceMotion) {
@@ -481,7 +494,7 @@ export function MatchesTab({
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(ta)}</span>
             {!isCompleted && !isLive && teamSittingOut(ta) && <SittingOutTag />}
             {(isLive || isCompleted) && (
-              isAdmin && isLive ? <ScoreStepper value={m.score_a ?? 0} onPlus={() => inlineScore(m, "a", 1)} onMinus={() => inlineScore(m, "a", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winA ? "#22c55e" : "#fff" }}>{m.score_a ?? 0}</span>
+              isAdmin && isLive ? <ScoreStepper value={taps.shown(m, "a")} team={tName(ta)} onPlus={() => inlineScore(m, "a", 1)} onMinus={() => inlineScore(m, "a", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winA ? "#22c55e" : "#fff" }}>{m.score_a ?? 0}</span>
             )}
           </div>
           <div style={{ height: 1, background: "#1a3050", margin: "4px 0" }} />
@@ -489,7 +502,7 @@ export function MatchesTab({
             <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(tb)}</span>
             {!isCompleted && !isLive && teamSittingOut(tb) && <SittingOutTag />}
             {(isLive || isCompleted) && (
-              isAdmin && isLive ? <ScoreStepper value={m.score_b ?? 0} onPlus={() => inlineScore(m, "b", 1)} onMinus={() => inlineScore(m, "b", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winB ? "#22c55e" : "#fff" }}>{m.score_b ?? 0}</span>
+              isAdmin && isLive ? <ScoreStepper value={taps.shown(m, "b")} team={tName(tb)} onPlus={() => inlineScore(m, "b", 1)} onMinus={() => inlineScore(m, "b", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winB ? "#22c55e" : "#fff" }}>{m.score_b ?? 0}</span>
             )}
           </div>
         </div>
@@ -759,12 +772,15 @@ function FilterChip({ label, value, onChange, options }: { label: string; value:
   );
 }
 
-function ScoreStepper({ value, onPlus, onMinus }: { value: number; onPlus: () => void; onMinus: () => void }) {
+// touch-action: manipulation stops a phone reading two quick taps as a zoom.
+const stepperBtn = { width: 28, height: 28, borderRadius: 5, fontSize: 16, fontWeight: 800, cursor: "pointer", padding: 0, touchAction: "manipulation", userSelect: "none" } as const;
+
+function ScoreStepper({ value, team, onPlus, onMinus }: { value: number; team: string; onPlus: () => void; onMinus: () => void }) {
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-      <button onClick={onMinus} style={{ width: 28, height: 28, borderRadius: 5, border: "1px solid #1a3050", background: "#0a1628", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", padding: 0 }}>−</button>
-      <span className="font-display" style={{ minWidth: 32, textAlign: "center", fontSize: 18, fontWeight: 800, color: "#fff" }}>{value}</span>
-      <button onClick={onPlus} style={{ width: 28, height: 28, borderRadius: 5, border: "1px solid #00d4ff", background: "rgba(0,184,255,0.15)", color: "#00d4ff", fontSize: 16, fontWeight: 800, cursor: "pointer", padding: 0 }}>+</button>
+      <button onClick={onMinus} aria-label={`Take a point off ${team}`} style={{ ...stepperBtn, border: "1px solid #1a3050", background: "#0a1628", color: "#fff" }}>−</button>
+      <span className="font-display" aria-live="polite" style={{ minWidth: 32, textAlign: "center", fontSize: 18, fontWeight: 800, color: "#fff" }}>{value}</span>
+      <button onClick={onPlus} aria-label={`Add a point for ${team}`} style={{ ...stepperBtn, border: "1px solid #00d4ff", background: "rgba(0,184,255,0.15)", color: "#00d4ff" }}>+</button>
     </div>
   );
 }
