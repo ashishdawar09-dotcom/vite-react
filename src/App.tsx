@@ -28,7 +28,7 @@ import { AppHeader } from "./components/AppHeader";
 import type { Match, Player, Team, Tournament } from "./types";
 import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
 import { courtTakenMessage, isCourtTaken } from "./lib/courts";
-import { groupLetter, groupStandings, groupsAllConfirmed } from "./lib/groups";
+import { groupKeyOf, groupLetter, groupStandings, groupTies, groupsAllConfirmed, isRoundRobinOnly, roundRobinPodium } from "./lib/groups";
 import { pickQualifiers, planSitOut, sitOutWalkoverWinner, teamSittingOut } from "./lib/sitOut";
 
 // Lazy-loaded surfaces. Anything below the fold for a spectator's initial
@@ -89,6 +89,10 @@ export default function App() {
   // category settings via the useEffect below; user clicks override.
   const [selectedFormatLabel, setSelectedFormatLabel] = useState<FormatPlan["label"]>("Recommended");
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null); // confirmed match being re-edited
+  // Coin-toss winners for group ties (lib/groups.ts), in the order recorded.
+  // Kept on this device: they decide Start Knockout and the round-robin
+  // champion here, and the public pages show the tie as a coin toss.
+  const [tossWinners, setTossWinners] = useState<string[]>([]);
   const [currentCategoryId, setCurrentCategoryId] = useState<string | null>(null);
   const [pickingCourtFor, setPickingCourtFor] = useState<Match | null>(null);
   const [addPlayerCats, setAddPlayerCats] = useState<Set<string>>(new Set()); // categories for new player
@@ -439,7 +443,10 @@ export default function App() {
 
   // The group's own matches decide its table (lib/groups.ts); the index
   // argument is kept for the tabs' (g, gi) signature.
-  const getStandings = (g: TeamView[]) => groupStandings(g, groupMatches);
+  const getStandings = (g: TeamView[]) => groupStandings(g, groupMatches, tossWinners);
+  const getTies = (g: TeamView[]) => groupTies(g, groupMatches, tossWinners);
+  const recordTossWinner = (teamId: string) => setTossWinners(w => (w.includes(teamId) ? w : [...w, teamId]));
+  const clearToss = (teamIds: string[]) => setTossWinners(w => w.filter(id => !teamIds.includes(id)));
 
   const allGroupsDone = groupsAllConfirmed(groups, groupMatches);
 
@@ -465,6 +472,12 @@ export default function App() {
       return;
     }
 
+    // Set up as a round robin: the group winner is already the champion.
+    if (isRoundRobinOnly(cat) && !confirm(
+      `${cat.name} is set up as a round robin with no knockout, so the group winner is the champion.\n\n` +
+      "Start a knockout anyway?",
+    )) return;
+
     // Determine top-N-advance per group. Honor category.top_n_advance if set;
     // otherwise fall back to the planner's default for the current team count.
     let topN = cat.top_n_advance ?? 0;
@@ -480,6 +493,16 @@ export default function App() {
     // qualifier count isn't a power of 2.
     // A team with a player sitting out can't play the knockout, so the next
     // team in its group goes through in its place (lib/sitOut.ts).
+    // A coin toss that decides a place through has to be recorded first
+    // (Groups tab): the table only shows those teams in draw order.
+    const tosses = groups.flatMap((g, gi) => getTies(g)
+      .filter(t => t.decidedBy === "coin toss" && !t.tossed && t.places[0] <= topN && topN < t.places[1])
+      .map(t => `Group ${groupLetter(groupKeyOf(g, groupMatches)?.group_idx ?? gi)}: ${t.teams.map(x => teamLabel(x.id)).join(", ")}`));
+    if (tosses.length) {
+      alert(`A coin toss decides who goes through:\n\n${tosses.join("\n")}\n\nThey're level on wins, point difference and head-to-head. Toss the coin, record the winner on the Groups tab, then start the knockout.`);
+      return;
+    }
+
     const { qualifiers, skipped, promoted } = pickQualifiers(groups.map(g => getStandings(g)), topN, teamSittingOut);
     const totalQualifiers = qualifiers.reduce((sum, arr) => sum + arr.length, 0);
     if (totalQualifiers < 2) {
@@ -557,6 +580,11 @@ export default function App() {
   };
 
   const champion = (() => {
+    // Round robin only: the group winner, once every match is confirmed (and
+    // no coin toss is left for first place).
+    if (isRoundRobinOnly(currentCategory) && groups.length === 1) {
+      return roundRobinPodium(groups[0], groupMatches, tossWinners)?.first ?? null;
+    }
     const last = knockout[knockout.length - 1];
     if (!last || !last[0] || !last[0].confirmed || !last[0].winner_id) return null;
     return teamById[last[0].winner_id] ?? null;
@@ -1126,6 +1154,11 @@ export default function App() {
             groups={groups}
             groupMatches={groupMatches}
             getStandings={getStandings}
+            getTies={getTies}
+            tossWinners={tossWinners}
+            onRecordToss={recordTossWinner}
+            onClearToss={clearToss}
+            champion={champion}
             isAdmin={isAdmin}
             allGroupsDone={allGroupsDone}
             phase={phase}
