@@ -91,7 +91,9 @@ export function AppHeader({
       <div style={{ position: "absolute", bottom: 3, left: 0, right: 0, height: 1, background: "rgba(0,184,255,0.3)", zIndex: 1 }} />
 
       {/* Top bar: brand + admin chip / login CTA */}
-      <div style={{ position: "relative", zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 28px", borderBottom: "1px solid rgba(0,184,255,0.12)" }}>
+      {/* On phones (App.tsx, max-width 700px) the admin buttons wrap under the
+          brand; one row cut off Payments, Admin and Sign out. */}
+      <div className="topbar" style={{ position: "relative", zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 28px", borderBottom: "1px solid rgba(0,184,255,0.12)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 38, height: 38, borderRadius: 10, background: colors.gradient.brandCta, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,184,255,0.4)" }}>
             <ShuttleSVG sz={22} color="#fff" opacity={1} />
@@ -105,10 +107,10 @@ export function AppHeader({
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className={isAdmin ? "topbar-actions topbar-admin" : "topbar-actions"} style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {isAdmin ? (
             <>
-              <span style={{
+              <span className="topbar-email" style={{
                 fontSize: 11,
                 color: colors.brand.cyan,
                 background: colors.brand.cyanSubtle,

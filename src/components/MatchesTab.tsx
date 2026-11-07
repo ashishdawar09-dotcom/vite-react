@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as db from "../lib/db";
-import { applyPlan, confirmKnockoutPlan, type KnockoutPlan } from "../lib/knockout";
+import { applyPlan, confirmKnockoutPlan, stageTag, type KnockoutPlan } from "../lib/knockout";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
 import { MatchHistoryModal } from "./MatchHistoryModal";
@@ -413,15 +413,7 @@ export function MatchesTab({
     return elapsed > matchMin + extended;
   };
 
-  const stageLabel = (m: ProjectedMatch) => {
-    if (m.stage === "group") return `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}`;
-    const total = matches.filter(x => x.category_id === m.category_id && x.stage === "knockout").reduce((mx, x) => Math.max(mx, x.round_idx ?? 0), 0) + 1;
-    const ri = m.round_idx ?? 0;
-    if (ri === total - 1) return "FINAL";
-    if (ri === total - 2) return "SEMI";
-    if (ri === total - 3) return "QUARTER";
-    return `RD ${ri + 1}`;
-  };
+  const stageLabel = (m: ProjectedMatch) => stageTag(m, matches);
 
   const tName = (t: TeamView | null | undefined) => t?.p1 ? (t.p2 ? `${t.p1.name} & ${t.p2.name}` : t.p1.name) : "TBD";
 

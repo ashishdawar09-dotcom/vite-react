@@ -1294,6 +1294,12 @@ export default function App() {
         @media (max-width: 700px) {
           .hero-title { font-size: 36px !important; max-width: 100% !important; }
           .hero-pad { padding: 28px 18px 24px !important; }
+          /* Header (AppHeader): the signed-in email gets its own line and
+             Payments, Admin and Sign out share the next one. */
+          .topbar { padding: 12px 16px !important; flex-wrap: wrap; row-gap: 10px; }
+          .topbar-admin { width: 100%; flex-wrap: wrap; }
+          .topbar-admin > a, .topbar-admin > button { flex: 1 1 0; justify-content: center; text-align: center; white-space: nowrap; padding-left: 6px !important; padding-right: 6px !important; }
+          .topbar-email { display: block !important; flex: 1 1 100%; min-height: 0 !important; padding: 6px 10px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         }
         @media print {
           body { background: #fff !important; color: #000 !important; }
