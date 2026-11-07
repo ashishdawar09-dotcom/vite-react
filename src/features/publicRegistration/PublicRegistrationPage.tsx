@@ -8,7 +8,7 @@
 // tracked for the registration funnel.
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { saveRegistrationLead, submitPublicRegistration } from "../../lib/db";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../../lib/analytics";
 import { captureAttribution, getAttribution } from "../../lib/attribution";
 import { captureError, captureWarning } from "../../lib/sentry";
+import { lazyWithReload } from "../../lib/lazyWithReload";
 import { clearDraft, loadDraft, saveDraft } from "./draft";
 import {
   STEP_LABEL, buildPayload, emptyFlow, emptyPartner, firstInvalidStep, hasErrors, isDoubles, partnerMode,
@@ -30,7 +31,7 @@ import { ChatWithUs } from "./ChatWithUs";
 import { usePublicTournament } from "./usePublicTournament";
 import { useEntryCapacity } from "./useEntryCapacity";
 import { SpotsMeter, SpotsStrip } from "./SpotsMeter";
-import { FullHouse, type Socials } from "./FullHouse";
+import type { Socials } from "./FullHouse";
 import { ActionBar, ActionButtons, Arrow, Button, Note, Progress, Shell, TopBar } from "./ss/parts";
 import { isTextField, useKeepFieldInView, useTypingOnTouch } from "./ss/keyboard";
 import { money, monoLabel, ss } from "./ss/theme";
@@ -44,6 +45,10 @@ const TOURNAMENT_HIGHLIGHTS: Record<string, Highlight[]> = {
     { title: "Prizes", sub: "For first and second place in every category" },
   ],
 };
+
+// The "we're full" page loads only when it's needed (and reloads the page if
+// a deploy replaced its file meanwhile).
+const FullHouse = lazyWithReload(() => import("./FullHouse").then((m) => ({ default: m.FullHouse })));
 
 // Where to follow the tournament, on the "we're full" page.
 const TOURNAMENT_SOCIALS: Record<string, Socials> = {
@@ -427,13 +432,15 @@ export function PublicRegistrationPage() {
     return (
       <Shell bottomSpace={false}>
         <TopBar deadline={null} status="Entries full" />
-        <FullHouse
-          tournament={tournament}
-          capacity={capacity}
-          eventCount={categories.length}
-          prefill={{ name: flow.player_name, email: flow.player_email, phone: flow.player_phone }}
-          socials={TOURNAMENT_SOCIALS[tournament.id]}
-        />
+        <Suspense fallback={<FullHouseLoading />}>
+          <FullHouse
+            tournament={tournament}
+            capacity={capacity}
+            eventCount={categories.length}
+            prefill={{ name: flow.player_name, email: flow.player_email, phone: flow.player_phone }}
+            socials={TOURNAMENT_SOCIALS[tournament.id]}
+          />
+        </Suspense>
       </Shell>
     );
   }
@@ -583,6 +590,19 @@ export function PublicRegistrationPage() {
 
       <ActionBar hidden={typing} summary={summary} onBack={index > 0 ? goBack : undefined}>{primary}</ActionBar>
     </Shell>
+  );
+}
+
+// While the full-house page loads: blocks shaped like its first screen.
+function FullHouseLoading() {
+  const block = (h: number, w = "100%", r = 24): React.CSSProperties => ({ height: h, width: w, borderRadius: r, background: ss.panel });
+  return (
+    <div aria-busy="true" aria-label="Loading" style={{ display: "grid", gap: 16, paddingTop: 12 }}>
+      <div style={{ ...block(0), aspectRatio: "3 / 2", height: "auto" }} />
+      <div style={block(48, "70%", 12)} />
+      <div style={block(48, "90%", 12)} />
+      <div style={block(48, "100%", 12)} />
+    </div>
   );
 }
 
