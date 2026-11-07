@@ -31,6 +31,8 @@ import { ChatWithUs } from "./ChatWithUs";
 import { usePublicTournament } from "./usePublicTournament";
 import { useEntryCapacity } from "./useEntryCapacity";
 import { SpotsMeter, SpotsStrip } from "./SpotsMeter";
+import { formSpot } from "../../lib/liveVisitors";
+import { useFormVisitorPing } from "./useFormVisitorPing";
 import type { Socials } from "./FullHouse";
 import { ActionBar, ActionButtons, Arrow, Button, Note, Progress, Shell, TopBar } from "./ss/parts";
 import { isTextField, useKeepFieldInView, useTypingOnTouch } from "./ss/keyboard";
@@ -220,6 +222,16 @@ export function PublicRegistrationPage() {
     const id = setTimeout(() => { savedKey.current = typedKey; void saveRegistrationLead(typedLead); }, 1500);
     return () => clearTimeout(id);
   }, [typedLead, typedKey, leadOpen]);
+
+  // ---- Counted in the admins' live "on the registration form now" (no names) ----
+  useFormVisitorPing(tournamentId, formSpot({
+    loaded: !loading && ready && capacityLoaded,
+    found: !error && !!tournament,
+    success: status === "success",
+    full: !!capacity?.full && !capBypass,
+    closed: formClosed,
+    step,
+  }));
 
   // Computer keyboards: a field that gets focus is kept clear of the bar
   // pinned to the bottom of the screen.
