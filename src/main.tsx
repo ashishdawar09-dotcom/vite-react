@@ -10,6 +10,12 @@ import { ToastProvider, ToastBridge } from './components/Toast'
 import { Analytics } from '@vercel/analytics/react'
 import { webAnalyticsBeforeSend } from './lib/webAnalytics'
 import { clearChunkReloadGuard, lazyWithReload } from './lib/lazyWithReload'
+import { fitViewportForChromeOnIos } from './lib/chromeIosViewport'
+
+// Chrome on iPhone hid the top of the page under its address bar because of
+// viewport-fit=cover (see chromeIosViewport.ts). Chrome reads the tag when the
+// page loads, so this has to run first, before React renders.
+fitViewportForChromeOnIos()
 
 // Reset scroll to top whenever the URL changes. Without this, navigating
 // from a half-scrolled /t/:slug spectator view to /p/:id leaves the new
