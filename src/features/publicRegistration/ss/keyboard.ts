@@ -55,7 +55,15 @@ export function useKeepFieldInView(): void {
     if (!touchScreen()) return;
     const vv = window.visualViewport;
     let timer: number | undefined;
+    // The person's own scrolling wins: no adjusting just after a finger moved.
+    let lastTouchMove = 0;
+    const onTouchMove = () => { lastTouchMove = Date.now(); };
+    // A keyboard changes the visible height by a lot; the browser's toolbars
+    // growing and shrinking as the page scrolls change it by a little, and
+    // must not pull the page back to the field.
+    let lastHeight = vv ? vv.height : window.innerHeight;
     const adjust = () => {
+      if (Date.now() - lastTouchMove < 600) return;
       const el = document.activeElement;
       if (!isTextField(el) || el instanceof HTMLSelectElement) return;
       const box = (el.closest("[data-field]") as HTMLElement | null) ?? (el as HTMLElement);
@@ -75,12 +83,19 @@ export function useKeepFieldInView(): void {
     // After focus, once the keyboard has slid up; and whenever the visible
     // area changes size (keyboard opening, closing or changing height).
     const onFocus = (e: FocusEvent) => { if (isTextField(e.target)) later(320); };
-    const onResize = () => later(90);
+    const onResize = () => {
+      const h = vv ? vv.height : window.innerHeight;
+      const keyboard = Math.abs(h - lastHeight) > 120;
+      lastHeight = h;
+      if (keyboard) later(90);
+    };
     document.addEventListener("focusin", onFocus);
+    document.addEventListener("touchmove", onTouchMove, { passive: true });
     vv?.addEventListener("resize", onResize);
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("touchmove", onTouchMove);
       vv?.removeEventListener("resize", onResize);
     };
   }, []);

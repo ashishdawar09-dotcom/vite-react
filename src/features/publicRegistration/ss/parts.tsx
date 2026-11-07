@@ -78,7 +78,7 @@ export function Countdown({ deadline }: { deadline: string }) {
 // `status` replaces the countdown, e.g. "Entries full" once every spot is taken.
 export function TopBar({ deadline, status }: { deadline: string | null; status?: string }) {
   return (
-    <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 72 }}>
+    <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 56 }}>
       <a href="https://shuttlestorm.adawar.org/" aria-label="Shuttle Storm home" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", minWidth: 0 }}>
         <Mark size={28} />
         {/* The wordmark is part of the logo, so it keeps the logo's lettering. */}
@@ -103,7 +103,7 @@ export function TopBar({ deadline, status }: { deadline: string | null; status?:
 
 export function Progress({ index, total, label }: { index: number; total: number; label: string }) {
   return (
-    <div role="group" aria-label={`Step ${index + 1} of ${total}: ${label}`} style={{ margin: "8px 0 24px" }}>
+    <div role="group" aria-label={`Step ${index + 1} of ${total}: ${label}`} style={{ margin: "16px 0 16px" }}>
       <div aria-hidden="true" style={{ display: "flex", gap: 4 }}>
         {Array.from({ length: total }, (_, i) => (
           <span key={i} style={{
@@ -125,7 +125,7 @@ export function StepTitle({ title, sub, headingRef }: {
   title: string; sub?: React.ReactNode; headingRef?: React.Ref<HTMLHeadingElement>;
 }) {
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 16 }}>
       <h2 ref={headingRef} tabIndex={-1} className="ss-balance" style={{
         margin: 0, fontFamily: ss.display, fontWeight: 600, fontSize: 30, lineHeight: "36px",
         letterSpacing: "-.02em", color: ss.bone, outline: "none",
@@ -256,10 +256,10 @@ export function ActionBar({ summary, onBack, backLabel = "Back", children, hidde
       inert={hidden || undefined}
       style={{
         position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 20,
-        // Flat and translucent over a blur, so the page stays faintly visible.
-        background: "rgba(0,0,0,.86)",
-        WebkitBackdropFilter: "blur(16px)",
-        backdropFilter: "blur(16px)",
+        // Solid, with a fine line on top: nothing half-shows through it, and no
+        // blur to recompute on every frame of a scroll (iPhones stutter on it).
+        background: ss.ink,
+        boxShadow: "0 -1px 0 rgba(236, 238, 242, .10)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         // Its own compositing layer, so scrolling never repaints it.
         transform: hidden ? "translate3d(0, calc(100% + 24px), 0)" : "translate3d(0, 0, 0)",

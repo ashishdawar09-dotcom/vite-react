@@ -25,7 +25,7 @@ import {
   type FlowContext, type FlowState, type StepKey,
 } from "./multiEntry";
 import { flowLead } from "./registrationLead";
-import { Hero, StepEvents, StepPartners, StepPay, StepWaiver, StepYou, WelcomeBack, type Highlight, type StepProps } from "./steps";
+import { GoodToKnow, Hero, StepEvents, StepPartners, StepPay, StepWaiver, StepYou, WelcomeBack, type Highlight, type StepProps } from "./steps";
 import { Success } from "./Success";
 import { ChatWithUs } from "./ChatWithUs";
 import { usePublicTournament } from "./usePublicTournament";
@@ -59,6 +59,10 @@ const TOURNAMENT_SOCIALS: Record<string, Socials> = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// A saved draft worth a "welcome back": something was typed or picked.
+const draftHasContent = (s: FlowState) =>
+  !!(s.player_name.trim() || s.player_email.trim() || s.player_phone.trim() || s.category_ids.length);
 
 // The fields the keyboard's Next key moves through, in page order (not the
 // hidden honeypot, nor textareas, where Enter is a new line).
@@ -112,6 +116,16 @@ export function PublicRegistrationPage() {
 
   useEffect(() => { captureAttribution(); void initAnalytics(); }, []);
 
+  // The browser's own scroll restore would put a reloaded or revisited form
+  // at an old position (iOS lands mid-hero) and fight the step changes below.
+  useEffect(() => {
+    const h = window.history;
+    if (!("scrollRestoration" in h)) return;
+    const prev = h.scrollRestoration;
+    h.scrollRestoration = "manual";
+    return () => { h.scrollRestoration = prev; };
+  }, []);
+
   const spotsLeft = capacity && !capBypass ? capacity.remaining : null;
   const ctx: FlowContext | null = useMemo(
     () => (tournament ? { tournament, categories, payingShareFor: payingShare ? wantedCategory : null, spotsLeft } : null),
@@ -162,7 +176,7 @@ export function PublicRegistrationPage() {
         if (hasErrors(stepErrors(k, s, ctx))) { target = k; break; }
       }
       if (payment === "cancelled") setCardReturn("cancelled");
-      else if (draft) setWelcomeBack(true);
+      else if (draft && draftHasContent(s)) setWelcomeBack(true);
       setFlow(s);
       setStep(target);
     }
@@ -449,7 +463,7 @@ export function PublicRegistrationPage() {
     return (
       <Shell bottomSpace={false}>
         <TopBar deadline={null} />
-        <Hero tournament={tournament} highlights={TOURNAMENT_HIGHLIGHTS[tournament.id]} soloOffered={false} />
+        <Hero tournament={tournament} />
         <Note tone="danger">Registration is closed for this tournament.</Note>
       </Shell>
     );
@@ -489,20 +503,6 @@ export function PublicRegistrationPage() {
   return (
     <Shell>
       <TopBar deadline={tournament.registration_deadline} />
-      {step === "you" && (
-        <Hero tournament={tournament} highlights={TOURNAMENT_HIGHLIGHTS[tournament.id]} soloOffered={soloOffered}>
-          {capacity && !capBypass && <SpotsMeter capacity={capacity} />}
-        </Hero>
-      )}
-      {step !== "you" && capacity && !capBypass && <SpotsStrip capacity={capacity} />}
-      {/* Until events are picked, count the partner step (most entries are
-          doubles) so the total doesn't jump on step 2. */}
-      <Progress
-        index={index}
-        total={steps.length + (picked.length === 0 && !steps.includes("partners") && categories.some(isDoubles) ? 1 : 0)}
-        label={STEP_LABEL[step]}
-      />
-      {welcomeBack && <WelcomeBack onStartOver={startOver} />}
 
       <form
         ref={formRef}
@@ -546,14 +546,33 @@ export function PublicRegistrationPage() {
             requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
           }}
         >
+          {/* Everything that changes with the step moves as one block: the old
+              step fades out where it is (the page keeps its height, so nothing
+              jumps), the page goes to the top while nothing is on screen, and
+              the new step fades in there. */}
           <motion.div
             key={step}
             initial={reduce ? false : { opacity: 0, x: 18 }}
             animate={{ opacity: 1, x: 0 }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, x: -18 }}
-            transition={{ duration: 0.22, ease: [0.2, 0.7, 0.2, 1] }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           >
+            {step === "you" && (
+              <Hero tournament={tournament}>
+                {capacity && !capBypass && <SpotsMeter capacity={capacity} />}
+              </Hero>
+            )}
+            {step !== "you" && capacity && !capBypass && <SpotsStrip capacity={capacity} />}
+            {/* Until events are picked, count the partner step (most entries are
+                doubles) so the total doesn't jump on step 2. */}
+            <Progress
+              index={index}
+              total={steps.length + (picked.length === 0 && !steps.includes("partners") && categories.some(isDoubles) ? 1 : 0)}
+              label={STEP_LABEL[step]}
+            />
+            {welcomeBack && <WelcomeBack onStartOver={startOver} />}
             {step === "you" && <StepYou {...props} />}
+            {step === "you" && <GoodToKnow highlights={TOURNAMENT_HIGHLIGHTS[tournament.id]} soloOffered={soloOffered} />}
             {step === "events" && <StepEvents {...props} />}
             {step === "partners" && <StepPartners {...props} />}
             {step === "waiver" && <StepWaiver {...props} />}
@@ -568,13 +587,13 @@ export function PublicRegistrationPage() {
       {/* While typing on a phone the bottom bar is away: the step's buttons
           sit right under the form, where they can't cover a field. */}
       {typing && (
-        <div style={{ marginTop: 26 }}>
+        <div style={{ marginTop: 24 }}>
           <ActionButtons keepFocus onBack={index > 0 ? goBack : undefined}>{primary}</ActionButtons>
         </div>
       )}
 
       {isPay && (
-        <p style={{ margin: "26px 0 0", fontSize: 12, lineHeight: "16px", color: ss.mute }}>
+        <p style={{ margin: "24px 0 0", fontSize: 12, lineHeight: "16px", color: ss.mute }}>
           How we use your details: <a className="ss-link" href={PRIVACY_URL} target="_blank" rel="noopener" style={{ color: ss.body }}>privacy policy</a>
           {GA_MEASUREMENT_ID && (
             <>
