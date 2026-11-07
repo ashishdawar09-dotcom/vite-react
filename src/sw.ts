@@ -14,6 +14,7 @@ import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from "workbox-
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { NetworkOnly, NetworkFirst, CacheFirst } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
+import { addNetworkRoutes } from "./lib/swNetworkRoutes";
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
@@ -123,5 +124,10 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 // Skip waiting + claim clients so the new SW takes over immediately on update.
-self.addEventListener("install", () => { void self.skipWaiting(); });
+// The install also tells the browser to send the live visitor count's
+// beacons straight to the network, without this worker (lib/swNetworkRoutes.ts).
+self.addEventListener("install", (event) => {
+  addNetworkRoutes(event);
+  void self.skipWaiting();
+});
 self.addEventListener("activate", (e) => { e.waitUntil(self.clients.claim()); });
