@@ -3,6 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+// Chrome on iPhone and iPad: no viewport-fit=cover. Chrome for iOS reads this tag when the page loads
+// and again on every <head> change (Chromium ios/web/js_features/fullscreen/resources/fullscreen.ts).
+// With cover it lays the page out under its own address bar, which hid the top of the registration
+// form (Nov 7, 2026). So in Chrome (user agent "CriOS/"), unless the site was opened from the home
+// screen, the tag loses viewport-fit here, before load. Safari keeps cover for the full-bleed hero
+// (the top bar and footer pad by the safe-area insets). Same rule as the app's chromeIosViewport.ts.
+(function(){
+  try {
+    if (!/\bCriOS\/\d/.test(navigator.userAgent || "")) return;
+    if (navigator.standalone === true) return;
+    try { if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return; } catch (e) {}
+    var tags = document.querySelectorAll('meta[name="viewport"]');
+    for (var i = 0; i < tags.length; i++) {
+      var content = tags[i].getAttribute("content");
+      if (!content || !/viewport-fit/i.test(content)) continue;
+      tags[i].setAttribute("content", content.split(/[,;]/)
+        .map(function(e){ return e.trim(); })
+        .filter(function(e){ return e !== "" && e.split("=")[0].trim().toLowerCase() !== "viewport-fit"; })
+        .join(", "));
+    }
+  } catch (e) { /* the page works either way; this only changes where Chrome draws it */ }
+})();
+</script>
 <meta name="description" content="Provincial-level badminton tournament at the UFV Athletic Centre North Gym, Abbotsford, BC, Saturday, Nov 21, 2026. Ten categories; entries close Nov 18.">
 <title>Shuttle Storm ’26 | Abbotsford Badminton Tournament, Nov 21</title>
 <link rel="canonical" href="https://shuttlestorm.adawar.org/">

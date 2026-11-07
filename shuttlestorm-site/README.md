@@ -37,6 +37,13 @@ step. Registration itself lives in the main app (badminton.adawar.org).
   privacy page lists it.
 - Security headers and CSP: `public/_headers`. `connect-src` must list bare
   `https://analytics.google.com` or GA4 hits are blocked.
+- Viewport: only the home page asks for `viewport-fit=cover` (full-bleed
+  hero; the top bar and footer pad by the safe-area insets). Chrome on iOS
+  lays cover pages out under its own address bar, so the small script right
+  after that tag drops `viewport-fit` in Chrome (user agent `CriOS/`) before
+  the page loads, unless the site was opened from the home screen. Safari
+  keeps cover. Same rule as the app's `src/lib/chromeIosViewport.ts`. Keep
+  the script if you keep cover; a new page doesn't need cover.
 - Sitemap: `public/sitemap.xml`. Add new pages there.
 
 ## Deploy
