@@ -114,6 +114,26 @@ export function describeCleared(cleared: Match[], label: (m: Match) => string): 
 }
 
 /** "Semi-final 2", "Final", "Bronze match", from the match's own category. */
+/**
+ * Short stage tag for the Matches tab rows: "GROUP A", "FINAL", "3RD PLACE",
+ * "SEMI", "QUARTER", "RD 1". The bronze match shares the final's round, so it
+ * used to be tagged FINAL.
+ */
+export function stageTag(
+  m: Pick<Match, "stage" | "group_idx" | "round_idx" | "category_id" | "is_bronze">,
+  all: Pick<Match, "category_id" | "stage" | "round_idx">[],
+): string {
+  if (m.stage === "group") return `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}`;
+  if (m.is_bronze) return "3RD PLACE";
+  const total = all.filter(x => x.category_id === m.category_id && x.stage === "knockout")
+    .reduce((mx, x) => Math.max(mx, x.round_idx ?? 0), 0) + 1;
+  const ri = m.round_idx ?? 0;
+  if (ri === total - 1) return "FINAL";
+  if (ri === total - 2) return "SEMI";
+  if (ri === total - 3) return "QUARTER";
+  return `RD ${ri + 1}`;
+}
+
 export function knockoutLabel(m: Match, all: Match[]): string {
   if (m.is_bronze) return "Bronze match";
   const rounds = all.filter(x => x.category_id === m.category_id && x.stage === "knockout" && x.round_idx != null).map(x => x.round_idx!);
