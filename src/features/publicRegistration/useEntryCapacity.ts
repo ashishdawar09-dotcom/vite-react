@@ -28,7 +28,8 @@ export function useEntryCapacity(tournamentId: string | undefined) {
       if (error) throw error;
       const c = parseCapacity(data);
       if (alive.current) {
-        setCapacity(c);
+        // Same count as before: keep the same object, so nothing re-renders.
+        setCapacity((prev) => (prev && c && prev.cap === c.cap && prev.taken === c.taken ? prev : c));
         setLoaded(true);
       }
       return c;

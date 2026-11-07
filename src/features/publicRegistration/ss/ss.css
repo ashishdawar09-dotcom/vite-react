@@ -31,7 +31,6 @@
 .ss-root :focus-visible { outline: 2px solid var(--ss-volt); outline-offset: 3px; }
 .ss-root a { color: inherit; }
 .ss-root input, .ss-root textarea { caret-color: var(--ss-volt); }
-.ss-root { scroll-behavior: smooth; }
 
 /* Text wrapping: no orphaned last words. */
 .ss-balance { text-wrap: balance; }

@@ -45,28 +45,39 @@ function fmtLongDate(t: Tournament): string | null {
   return new Date(`${t.event_date}T12:00:00`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" });
 }
 
-// The top of step 1: what this is, when and where, the spots meter (passed in
-// as children) and what players get.
-export function Hero({ tournament, highlights, soloOffered, children }: {
-  tournament: Tournament; highlights?: Highlight[]; soloOffered: boolean; children?: React.ReactNode;
-}) {
+// The top of step 1: what this is, when and where, and the spots meter
+// (passed in as children). Kept short so the first field shows on a phone's
+// first screen; the rest of the pitch sits under the fields (GoodToKnow).
+export function Hero({ tournament, children }: { tournament: Tournament; children?: React.ReactNode }) {
   const [brand, rest] = splitName(tournament.name);
   const day = fmtLongDate(tournament);
   const venue = tournament.venue_name?.split("–")[0].trim();
   return (
-    <section aria-labelledby="ss-hero-title" style={{ padding: `${space[300]}px 0 ${space[400]}px` }}>
+    <section aria-labelledby="ss-hero-title" style={{ padding: `${space[75]}px 0 0` }}>
       <h1 id="ss-hero-title" className="ss-h-hero ss-hero-text ss-balance" style={{ margin: 0, maxWidth: 680, fontFamily: ss.display }}>
         {brand}
         {rest && <><br />{rest.trim()}</>}
       </h1>
-      <p className="ss-pretty" style={{ ...type.body3, margin: `${space[200]}px 0 0`, maxWidth: 680, color: ss.body }}>
-        {day && venue ? <>{day} at {venue}. </> : null}
-        Enter in about 5 minutes, pick as many events as you like and pay once.
+      {(day || venue) && (
+        <p className="ss-pretty" style={{ ...type.body5, margin: `${space[75]}px 0 0`, color: ss.body }}>
+          {[day, venue].filter(Boolean).join(" · ")}
+        </p>
+      )}
+      {children}
+    </section>
+  );
+}
+
+// Under step 1's fields: how the form works and what players get.
+export function GoodToKnow({ highlights, soloOffered }: { highlights?: Highlight[]; soloOffered: boolean }) {
+  return (
+    <section aria-label="Good to know" style={{ marginTop: space[400] }}>
+      <p className="ss-pretty" style={{ ...type.body6, margin: 0, color: ss.body, maxWidth: 680 }}>
+        Pick as many events as you like and pay once.
         {soloOffered && <> No partner? <span style={{ color: ss.bone }}>We'll find you one.</span></>}
       </p>
-      {children}
       {highlights && highlights.length > 0 && (
-        <ul style={{ listStyle: "none", padding: 0, margin: `${space[300]}px 0 0`, display: "grid", gap: space[100] }}>
+        <ul style={{ listStyle: "none", padding: 0, margin: `${space[200]}px 0 0`, display: "grid", gap: space[100] }}>
           {highlights.map((h) => {
             const inner = (
               <>
@@ -110,7 +121,7 @@ export function StepYou({ flow, set, errors, headingRef }: StepProps) {
   const e = errors?.fields ?? {};
   return (
     <>
-      <StepTitle headingRef={headingRef} title="Your details" sub="Who's playing. We'll send your confirmation to this email." />
+      <StepTitle headingRef={headingRef} title="Your details" />
       <Field label="Full name" required error={e.player_name}>
         {(p) => <TextInput {...p} type="text" autoComplete="name" value={flow.player_name} onChange={(ev) => set("player_name", ev.target.value)} />}
       </Field>
@@ -166,14 +177,23 @@ export function StepEvents({ flow, set, ctx, tournament, errors, headingRef }: S
   return (
     <>
       <StepTitle headingRef={headingRef} title="Pick your events" sub="Choose as many as you like. You'll add partners next and pay once for everything." />
-      {ctx.spotsLeft != null && flow.category_ids.length > 0 && (() => {
+      {ctx.spotsLeft != null && (() => {
         // Over the limit, the step's own message explains; this line is for picks that fit.
         const needed = spotsNeeded(ctx.categories, flow.category_ids, ctx.payingShareFor);
         if (needed > ctx.spotsLeft) return null;
         return (
           <p className="ss-pretty" style={{ ...type.body5, margin: `-${space[100]}px 0 ${space[200]}px`, color: ss.body }}>
-            Your events use <span style={{ color: ss.volt, fontFamily: ss.mono }}>{needed}</span> of the{" "}
-            <span style={{ fontFamily: ss.mono }}>{ctx.spotsLeft}</span> {spotsWord(ctx.spotsLeft)} left.
+            {flow.category_ids.length > 0 ? (
+              <>
+                Your events use <span style={{ color: ss.volt, fontFamily: ss.mono }}>{needed}</span> of the{" "}
+                <span style={{ fontFamily: ss.mono }}>{ctx.spotsLeft}</span> {spotsWord(ctx.spotsLeft)} left.
+              </>
+            ) : (
+              <>
+                <span style={{ color: ss.volt, fontFamily: ss.mono }}>{ctx.spotsLeft}</span> {spotsWord(ctx.spotsLeft)} left.
+              </>
+            )}{" "}
+            <span style={{ color: ss.mute }}>A doubles event takes 2 spots (you and your partner), singles 1.</span>
           </p>
         );
       })()}
