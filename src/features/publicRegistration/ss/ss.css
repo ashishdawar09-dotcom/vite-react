@@ -9,13 +9,19 @@
 @font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/jetbrains-mono-latin-ext-v24.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
 @font-face{font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/jetbrains-mono-latin-v24.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
 
+/* Geist and Geist Mono (SIL Open Font License, /fonts/GEIST-LICENSE.txt): the form's typeface. */
+@font-face{font-family: 'Geist'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/geist-latin-ext-wght-normal.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family: 'Geist'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/geist-latin-wght-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family: 'Geist Mono'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/geist-mono-latin-ext-wght-normal.woff2) format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family: 'Geist Mono'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/geist-mono-latin-wght-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
 .ss-root {
-  --ss-ink: #06080D; --ss-ink-2: #0C1018; --ss-bone: #ECEEF2; --ss-body: #C4CAD6; --ss-mute: #8F97A8;
+  --ss-ink: #000000; --ss-ink-2: #1F1F1F; --ss-panel: #181818; --ss-bone: #ECEEF2; --ss-body: #C4CAD6; --ss-mute: #8F97A8;
   --ss-line: rgba(236, 238, 242, .13); --ss-volt: #D4FF3A; --ss-danger: #FF8A8A;
   color-scheme: dark;
   background: var(--ss-ink);
   color: var(--ss-bone);
-  font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
@@ -24,22 +30,72 @@
 .ss-root ::selection { background: rgba(212, 255, 58, .35); color: #fff; }
 .ss-root :focus-visible { outline: 2px solid var(--ss-volt); outline-offset: 3px; }
 .ss-root a { color: inherit; }
+.ss-root input, .ss-root textarea { caret-color: var(--ss-volt); }
+.ss-root { scroll-behavior: smooth; }
 
-.ss-input { transition: border-color .16s ease, box-shadow .16s ease, background .16s ease; }
+/* Text wrapping: no orphaned last words. */
+.ss-balance { text-wrap: balance; }
+.ss-pretty { text-wrap: pretty; }
+
+/* Hero headings: left to right gradient on the text only. */
+.ss-hero-text {
+  background-image: linear-gradient(90deg, #FFFFFF, #9B9B9B);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+/* Hero heading sizes, on the type scale: Heading 3 on small phones,
+   Heading 2 on larger ones, Heading 1 from tablets up. */
+.ss-h-hero { font-weight: 600; font-size: 36px; line-height: 40px; letter-spacing: -0.02em; }
+@media (min-width: 421px) { .ss-h-hero { font-size: 48px; line-height: 1; letter-spacing: -0.03em; } }
+@media (min-width: 640px) { .ss-h-hero { font-size: 60px; line-height: 1; } }
+/* A longer hero line stays on Heading 2 so its break falls where the thought does. */
+@media (min-width: 640px) { .ss-h-hero.ss-h-hero-long { font-size: 48px; } }
+/* Section headings: Heading 5 on phones, Heading 4 from tablets up. */
+.ss-h-section { font-weight: 600; font-size: 24px; line-height: 32px; letter-spacing: -0.01em; }
+@media (min-width: 640px) { .ss-h-section { font-size: 30px; line-height: 36px; letter-spacing: -0.02em; } }
+/* The large tagline: Heading 3 on phones, Heading 2 from tablets up. */
+.ss-h-tagline { font-weight: 600; font-size: 36px; line-height: 40px; letter-spacing: -0.02em; }
+@media (min-width: 640px) { .ss-h-tagline { font-size: 48px; line-height: 1; letter-spacing: -0.03em; } }
+
+/* The net: one tick per entry. Ticks drop in once, left to right. */
+@keyframes ss-tick-in { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+.ss-tick { transform-box: fill-box; transform-origin: 50% 0; animation: ss-tick-in .5s cubic-bezier(.22, 1, .36, 1) both; }
+.ss-tick-open { transition: opacity .3s cubic-bezier(.22, 1, .36, 1); }
+
+/* Links styled as buttons (call, text, email, WhatsApp). */
+.ss-root .ss-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px 12px;
+  border-radius: 12px; border: 1px solid var(--ss-line); background: var(--ss-ink-2); color: var(--ss-bone);
+  font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 600; text-decoration: none;
+  transition: background .3s cubic-bezier(.22, 1, .36, 1), border-color .3s cubic-bezier(.22, 1, .36, 1), transform .3s cubic-bezier(.22, 1, .36, 1);
+  touch-action: manipulation;
+}
+.ss-root .ss-action:hover { background: #272727; border-color: rgba(236, 238, 242, .24); }
+.ss-root .ss-action:active { transform: scale(.98); }
+.ss-root .ss-action-primary { background: var(--ss-volt); border-color: var(--ss-volt); color: #000000; }
+.ss-root .ss-action-primary:hover { background: #E2FF70; border-color: #E2FF70; }
+
+/* Waitlist and similar inline links. */
+.ss-root .ss-quiet-link { color: var(--ss-bone); text-decoration: underline; text-decoration-color: rgba(236, 238, 242, .35); text-underline-offset: 4px; transition: text-decoration-color .3s cubic-bezier(.22, 1, .36, 1); }
+.ss-root .ss-quiet-link:hover { text-decoration-color: var(--ss-volt); }
+
+.ss-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.ss-input { transition: border-color .3s cubic-bezier(.22, 1, .36, 1), box-shadow .3s cubic-bezier(.22, 1, .36, 1), background .3s cubic-bezier(.22, 1, .36, 1); }
 .ss-input::placeholder { color: rgba(143, 151, 168, .65); }
 .ss-input:hover { border-color: rgba(236, 238, 242, .24); }
-.ss-input:focus { outline: none; border-color: var(--ss-volt); box-shadow: 0 0 0 3px rgba(212, 255, 58, .16); background: #0E131C; }
+.ss-input:focus { outline: none; border-color: var(--ss-volt); box-shadow: 0 0 0 3px rgba(212, 255, 58, .16); background: #272727; }
 .ss-input[aria-invalid="true"] { border-color: var(--ss-danger); }
 .ss-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(255, 138, 138, .16); }
 select.ss-input { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238F97A8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 42px; }
 select.ss-input option { background: #0C1018; color: #ECEEF2; }
 
-.ss-btn { transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease, opacity .18s ease; }
+.ss-btn { transition: background .3s cubic-bezier(.22, 1, .36, 1), color .3s cubic-bezier(.22, 1, .36, 1), border-color .3s cubic-bezier(.22, 1, .36, 1), transform .3s cubic-bezier(.22, 1, .36, 1), opacity .3s cubic-bezier(.22, 1, .36, 1); }
 .ss-btn-primary:hover:not(:disabled), .ss-btn-primary:focus-visible { background: var(--ss-volt); }
-.ss-btn-ghost:hover:not(:disabled) { border-color: rgba(236, 238, 242, .42); background: rgba(236, 238, 242, .04); }
+.ss-btn-ghost:hover:not(:disabled) { border-color: rgba(236, 238, 242, .42); background: #1F1F1F; }
 .ss-btn:disabled { cursor: not-allowed; }
 
-.ss-choice { transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .12s ease; }
+.ss-choice { transition: border-color .3s cubic-bezier(.22, 1, .36, 1), background .3s cubic-bezier(.22, 1, .36, 1), box-shadow .3s cubic-bezier(.22, 1, .36, 1), transform .3s cubic-bezier(.22, 1, .36, 1); }
 .ss-choice:not([aria-disabled="true"]):hover { border-color: rgba(236, 238, 242, .34); }
 .ss-choice[aria-checked="true"]:hover { border-color: var(--ss-volt); }
 
@@ -51,14 +107,14 @@ select.ss-input option { background: #0C1018; color: #ECEEF2; }
 /* Press feedback only where there's a mouse: on a phone, a swipe that starts on a
    card or button would flicker it while the page scrolls. */
 @media (hover: hover) and (pointer: fine) {
-  .ss-btn:active:not(:disabled) { transform: scale(.985); }
-  .ss-choice:not([aria-disabled="true"]):active { transform: scale(.992); }
+  .ss-btn:active:not(:disabled) { transform: scale(.98); }
+  .ss-choice:not([aria-disabled="true"]):active { transform: scale(.98); }
 }
 /* No double-tap zoom delay on the form's controls. */
 .ss-btn, .ss-choice, .ss-input, .ss-root label { touch-action: manipulation; }
 
 @keyframes ss-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-.ss-pulse { animation: ss-pulse 1.6s ease-in-out infinite; }
+.ss-pulse { animation: ss-pulse 1.6s cubic-bezier(.22, 1, .36, 1) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .ss-root *, .ss-root *::before, .ss-root *::after { transition: none !important; animation: none !important; }

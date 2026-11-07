@@ -520,6 +520,23 @@ async function handle(req: Request): Promise<Response> {
 
     const { error: insErr } = await supabase.from("pending_registrations").insert(rows);
     if (insErr) {
+      // The tournament's entry cap (enforce_entry_cap in the database) undid
+      // the insert: these entries don't fit in what's left.
+      if (/entry_cap_reached/.test(insErr.message ?? "")) {
+        const { data: cap } = await supabase.rpc("registration_capacity", { p_tournament_id: t.id });
+        const remaining = typeof cap?.remaining === "number" ? cap.remaining : 0;
+        const total = typeof cap?.cap === "number" ? cap.cap : null;
+        console.warn(`register-player: entry cap reached (remaining ${remaining})`);
+        return json({
+          success: false,
+          full: remaining === 0,
+          remaining,
+          error: remaining === 0
+            ? `Sorry, entries are full: all ${total ?? "the"} spots are taken. Refresh this page to join the waitlist.`
+            : `Only ${remaining} ${remaining === 1 ? "spot is" : "spots are"} left, and this entry needs more. ` +
+              "A doubles event takes 2 spots (you and your partner), singles 1. Remove an event and try again.",
+        }, 409);
+      }
       console.error("register-player insert failed:", insErr.message);
       return json({ success: false, error: "Failed to save registration. Please try again." }, 500);
     }
