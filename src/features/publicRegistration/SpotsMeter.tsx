@@ -2,7 +2,7 @@
 // one tick per entry along the tape. Taken entries hang dim; open ones are
 // lit, so the gap that's left is something you can see shrink.
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { type Capacity, spotsWord, urgencyLine } from "./capacity";
 import { radius, space, type } from "./ss/scale";
@@ -11,8 +11,9 @@ import { ss } from "./ss/theme";
 const DIM = "rgba(236, 238, 242, .26)";
 
 // The net. `height` is the tick length for open entries; taken ones are shorter.
-// `filled` lights every taken tick too: the full house.
-export function Net({ cap, taken, height = 28, animate = true, filled = false }: {
+// `filled` lights every taken tick too: the full house. Memoized: the meter's
+// number counts down every frame for a moment and the net needn't redraw.
+export const Net = memo(function Net({ cap, taken, height = 28, animate = true, filled = false }: {
   cap: number; taken: number; height?: number; animate?: boolean; filled?: boolean;
 }) {
   const reduce = useReducedMotion();
@@ -44,7 +45,7 @@ export function Net({ cap, taken, height = 28, animate = true, filled = false }:
       })}
     </svg>
   );
-}
+});
 
 // Counts from the cap down to what's left, once, when the meter first shows,
 // and moves to any new count after that.
@@ -77,7 +78,8 @@ function LiveDot() {
   return <span aria-hidden="true" className="ss-pulse" style={{ width: 8, height: 8, borderRadius: 8, background: ss.volt, flex: "0 0 auto" }} />;
 }
 
-// The full meter, at the top of the form.
+// The full meter, at the top of the form: kept compact so the form's first
+// field still shows on a phone's first screen.
 export function SpotsMeter({ capacity }: { capacity: Capacity }) {
   const { cap, taken, remaining } = capacity;
   const shown = useCountTo(remaining, cap);
@@ -86,32 +88,26 @@ export function SpotsMeter({ capacity }: { capacity: Capacity }) {
     <section
       aria-labelledby="ss-spots-title"
       style={{
-        marginTop: space[300], padding: space[300], borderRadius: radius["3xl"],
+        marginTop: space[200], padding: space[200], borderRadius: radius["3xl"],
         background: ss.panel, border: `1px solid ${tight ? "rgba(212, 255, 58, .5)" : ss.line}`,
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: space[200] }}>
         <h2 id="ss-spots-title" style={{ margin: 0, display: "flex", alignItems: "baseline", flexWrap: "wrap", columnGap: space[100] }}>
-          <span aria-hidden="true" style={{ ...type.count1, color: ss.volt }}>{shown}</span>
-          <span aria-hidden="true" style={{ ...type.title1, color: ss.bone }}>{spotsWord(remaining)} left</span>
+          <span aria-hidden="true" style={{ ...type.count2, color: ss.volt }}>{shown}</span>
+          <span aria-hidden="true" style={{ ...type.title2, color: ss.bone }}>{spotsWord(remaining)} left</span>
           <span className="ss-sr-only">{remaining} {spotsWord(remaining)} left of {cap}</span>
         </h2>
-        <span style={{ ...type.caption5, display: "inline-flex", alignItems: "center", gap: space[75], color: ss.mute, paddingTop: space[50] }}>
+        <span style={{ ...type.countCaption, display: "inline-flex", alignItems: "center", gap: space[75], color: ss.mute, paddingTop: space[50], whiteSpace: "nowrap" }}>
           <LiveDot />
-          Live
+          {Math.min(taken, cap)}/{cap}
         </span>
       </div>
-      <div style={{ marginTop: space[300] }}>
-        <Net cap={cap} taken={taken} />
+      <div style={{ marginTop: space[100] }}>
+        <Net cap={cap} taken={taken} height={20} />
       </div>
-      <p style={{ ...type.countCaption, margin: `${space[100]}px 0 0`, color: ss.mute }}>
-        {Math.min(taken, cap)} of {cap} entries taken
-      </p>
-      <p className="ss-pretty" style={{ ...type.body2, margin: `${space[200]}px 0 0`, color: ss.bone }}>
+      <p className="ss-pretty" style={{ ...type.body5, margin: `${space[75]}px 0 0`, color: ss.bone }}>
         {urgencyLine(capacity)}
-      </p>
-      <p className="ss-pretty" style={{ ...type.caption5, margin: `${space[50]}px 0 0`, color: ss.mute }}>
-        One spot is one player in one event. A doubles pair takes two.
       </p>
     </section>
   );
