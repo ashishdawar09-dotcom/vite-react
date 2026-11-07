@@ -15,6 +15,8 @@ import {
 import { parseAge } from "./validate";
 import { CheckRow, ChoiceCard, Field, Note, Panel, Segmented, StepTitle, TextInput } from "./ss/parts";
 import { inputStyle, money, monoLabel, ss } from "./ss/theme";
+import { space, type } from "./ss/scale";
+import { spotsNeeded, spotsWord } from "./capacity";
 
 export type StepProps = {
   flow: FlowState;
@@ -27,17 +29,6 @@ export type StepProps = {
 
 const digits = (v: string, max = 15) => v.replace(/\D/g, "").slice(0, max);
 
-function fmtEventDate(t: Tournament): string | null {
-  if (!t.event_date) return null;
-  const d = new Date(`${t.event_date}T12:00:00`);
-  const day = d.toLocaleDateString("en-CA", { weekday: "short", month: "short", day: "numeric" });
-  if (!t.event_time) return day;
-  const [hh, mm] = t.event_time.split(":").map(Number);
-  if (Number.isNaN(hh)) return day;
-  const h12 = hh % 12 === 0 ? 12 : hh % 12;
-  return `${day} · ${h12}:${String(mm).padStart(2, "0")} ${hh >= 12 ? "PM" : "AM"}`;
-}
-
 // "Shuttle Storm Abbotsford 2026" → "Shuttle Storm" + " Abbotsford 2026", so
 // the brand part can carry the accent.
 function splitName(name: string): [string, string] {
@@ -49,54 +40,56 @@ function splitName(name: string): [string, string] {
 
 export type Highlight = { title: string; sub: string; href?: string };
 
-export function Hero({ tournament, highlights, soloOffered }: { tournament: Tournament; highlights?: Highlight[]; soloOffered: boolean }) {
+function fmtLongDate(t: Tournament): string | null {
+  if (!t.event_date) return null;
+  return new Date(`${t.event_date}T12:00:00`).toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" });
+}
+
+// The top of step 1: what this is, when and where, the spots meter (passed in
+// as children) and what players get.
+export function Hero({ tournament, highlights, soloOffered, children }: {
+  tournament: Tournament; highlights?: Highlight[]; soloOffered: boolean; children?: React.ReactNode;
+}) {
   const [brand, rest] = splitName(tournament.name);
-  const when = fmtEventDate(tournament);
+  const day = fmtLongDate(tournament);
+  const venue = tournament.venue_name?.split("–")[0].trim();
   return (
-      <div style={{ padding: "18px 0 30px" }}>
-        <div style={{ ...monoLabel, display: "flex", flexWrap: "wrap", gap: "6px 14px", color: ss.mute }}>
-          {when && <span>{when}</span>}
-          {tournament.venue_name && <span>{tournament.venue_name.split("–")[0].trim()}</span>}
-        </div>
-        <h1 style={{
-          margin: "16px 0 0", fontFamily: ss.display, fontWeight: 200, fontStretch: "118%",
-          fontSize: "clamp(38px, 10.5vw, 64px)", lineHeight: 0.95, letterSpacing: "-.01em",
-          textTransform: "uppercase", color: ss.bone,
-        }}>
-          {brand}
-          {rest && (
-            <span style={{ display: "block", fontStyle: "italic", fontWeight: 300, fontStretch: "100%", textTransform: "none", color: ss.volt, fontSize: "0.62em", marginTop: 8, letterSpacing: 0 }}>
-              {rest.trim()}
-            </span>
-          )}
-        </h1>
-        <p style={{ margin: "18px 0 0", color: ss.body, fontSize: 16.5, lineHeight: 1.55, maxWidth: 460 }}>
-          Enter in about 5 minutes. Pick as many events as you like and pay once.
-          {soloOffered && <> No partner? <span style={{ color: ss.bone }}>We'll find you one.</span></>}
-        </p>
-        {highlights && highlights.length > 0 && (
-          <ul style={{ listStyle: "none", padding: 0, margin: "22px 0 0", display: "grid", gap: 0, borderTop: `1px solid ${ss.line}` }}>
-            {highlights.map((h) => {
-              const inner = (
-                <>
-                  <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 6, background: ss.volt, flex: "0 0 auto", marginTop: 8 }} />
-                  <span>
-                    <span style={{ color: ss.bone, fontSize: 15 }}>{h.title}</span>
-                    <span style={{ color: ss.mute, fontSize: 13.5 }}> · {h.sub}</span>
-                  </span>
-                </>
-              );
-              return (
-                <li key={h.title} style={{ borderBottom: `1px solid ${ss.line}` }}>
-                  {h.href
-                    ? <a href={h.href} target="_blank" rel="noopener noreferrer" style={{ display: "flex", gap: 12, padding: "12px 0", textDecoration: "none" }}>{inner}</a>
-                    : <div style={{ display: "flex", gap: 12, padding: "12px 0" }}>{inner}</div>}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+    <section aria-labelledby="ss-hero-title" style={{ padding: `${space[300]}px 0 ${space[400]}px` }}>
+      <h1 id="ss-hero-title" className="ss-h-hero ss-hero-text ss-balance" style={{ margin: 0, maxWidth: 680, fontFamily: ss.display }}>
+        {brand}
+        {rest && <><br />{rest.trim()}</>}
+      </h1>
+      <p className="ss-pretty" style={{ ...type.body3, margin: `${space[200]}px 0 0`, maxWidth: 680, color: ss.body }}>
+        {day && venue ? <>{day} at {venue}. </> : null}
+        Enter in about 5 minutes, pick as many events as you like and pay once.
+        {soloOffered && <> No partner? <span style={{ color: ss.bone }}>We'll find you one.</span></>}
+      </p>
+      {children}
+      {highlights && highlights.length > 0 && (
+        <ul style={{ listStyle: "none", padding: 0, margin: `${space[300]}px 0 0`, display: "grid", gap: space[100] }}>
+          {highlights.map((h) => {
+            const inner = (
+              <>
+                <svg width="16" height="16" viewBox="0 0 256 256" aria-hidden="true" style={{ flex: "0 0 auto", marginTop: 2, color: ss.volt }}>
+                  <polyline points="40 144 96 200 224 72" fill="none" stroke="currentColor" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="ss-pretty" style={type.body6}>
+                  <span style={{ color: ss.bone, fontWeight: 500 }}>{h.title}.</span>{" "}
+                  <span style={{ color: ss.mute }}>{h.sub}.</span>
+                </span>
+              </>
+            );
+            return (
+              <li key={h.title}>
+                {h.href
+                  ? <a href={h.href} target="_blank" rel="noopener noreferrer" style={{ display: "flex", gap: space[100], textDecoration: "none" }}>{inner}</a>
+                  : <div style={{ display: "flex", gap: space[100] }}>{inner}</div>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -173,6 +166,17 @@ export function StepEvents({ flow, set, ctx, tournament, errors, headingRef }: S
   return (
     <>
       <StepTitle headingRef={headingRef} title="Pick your events" sub="Choose as many as you like. You'll add partners next and pay once for everything." />
+      {ctx.spotsLeft != null && flow.category_ids.length > 0 && (() => {
+        // Over the limit, the step's own message explains; this line is for picks that fit.
+        const needed = spotsNeeded(ctx.categories, flow.category_ids, ctx.payingShareFor);
+        if (needed > ctx.spotsLeft) return null;
+        return (
+          <p className="ss-pretty" style={{ ...type.body5, margin: `-${space[100]}px 0 ${space[200]}px`, color: ss.body }}>
+            Your events use <span style={{ color: ss.volt, fontFamily: ss.mono }}>{needed}</span> of the{" "}
+            <span style={{ fontFamily: ss.mono }}>{ctx.spotsLeft}</span> {spotsWord(ctx.spotsLeft)} left.
+          </p>
+        );
+      })()}
       {needAge && (
         <Field
           label={`Your age on ${tournament.event_date ? new Date(`${tournament.event_date}T12:00:00`).toLocaleDateString("en-CA", { month: "short", day: "numeric" }) : "tournament day"}`}
@@ -190,7 +194,7 @@ export function StepEvents({ flow, set, ctx, tournament, errors, headingRef }: S
         <div style={{ margin: "-4px 0 18px" }}>
           <CheckRow checked={flow.player_student} onChange={(v) => set("player_student", v)}>
             I'm a current {tournament.student_label ?? "student"}
-            <span style={{ display: "block", fontSize: 13, color: ss.mute, marginTop: 2 }}>
+            <span style={{ display: "block", fontSize: 12, lineHeight: "16px", color: ss.mute, marginTop: 2 }}>
               {money(Number(tournament.student_price))} per event. Bring your student ID to check-in.
             </span>
           </CheckRow>
@@ -213,17 +217,17 @@ export function StepEvents({ flow, set, ctx, tournament, errors, headingRef }: S
               return (
                 <div key={c.id} data-field-error={problem ? "" : undefined}>
                   <ChoiceCard checked={on} onToggle={() => toggle(c)} disabled={locked || (!!reason && !on)}>
-                    <div style={{ fontSize: 17, color: ss.bone, lineHeight: 1.25 }}>{c.name}</div>
-                    <div style={{ ...monoLabel, fontSize: 10.5, marginTop: 7, display: "flex", flexWrap: "wrap", gap: "4px 10px" }}>
+                    <div style={{ fontSize: 16, lineHeight: "24px", color: ss.bone }}>{c.name}</div>
+                    <div style={{ ...monoLabel, fontSize: 12, lineHeight: "16px", marginTop: 7, display: "flex", flexWrap: "wrap", gap: "4px 10px" }}>
                       {tag && <span style={{ color: ss.body }}>{tag}</span>}
                       {ownPrice !== null && (
                         <span>{money(ownPrice)}{isDoubles(c) ? (priceBasis(c) === "per_team" ? " / team" : " / player") : ""}</span>
                       )}
                       {isDoubles(c) && c.allow_solo_signup && <span style={{ color: ss.volt }}>Solo OK</span>}
                     </div>
-                    {reason && <div style={{ marginTop: 8, fontSize: 13.5, color: on ? ss.danger : ss.mute }}>{reason}</div>}
+                    {reason && <div style={{ marginTop: 8, fontSize: 12, lineHeight: "16px", color: on ? ss.danger : ss.mute }}>{reason}</div>}
                   </ChoiceCard>
-                  {problem && on && <div style={{ marginTop: 6, fontSize: 13, color: ss.danger }}>{problem} Untick it to continue.</div>}
+                  {problem && on && <div style={{ marginTop: 6, fontSize: 12, lineHeight: "16px", color: ss.danger }}>{problem} Untick it to continue.</div>}
                 </div>
               );
             })}
@@ -265,7 +269,7 @@ export function StepPartners({ flow, set, ctx, tournament, errors, headingRef }:
         return (
           <Panel key={c.id}>
             <div style={{ ...monoLabel, marginBottom: 6 }}>Event {i + 1} of {doubles.length}</div>
-            <h3 style={{ margin: "0 0 16px", fontFamily: ss.display, fontWeight: 500, fontSize: 21, color: ss.bone }}>{c.name}</h3>
+            <h3 style={{ margin: "0 0 16px", fontFamily: ss.display, fontWeight: 500, fontSize: 20, lineHeight: "28px", color: ss.bone }}>{c.name}</h3>
             {sharing && (
               <div style={{ marginBottom: 16 }}>
                 <Note>Paying your share? Enter the partner who entered you, with the email address they registered with.</Note>
@@ -314,12 +318,12 @@ export function StepPartners({ flow, set, ctx, tournament, errors, headingRef }:
                     <div style={{ ...monoLabel, marginBottom: 10 }}>Who pays for {p.name.trim().split(/\s+/)[0] || "your partner"}?</div>
                     <div role="radiogroup" style={{ display: "grid", gap: 10 }}>
                       <ChoiceCard role="radio" checked={split === "separate"} onToggle={() => update(c, { split: "separate" })}>
-                        <div style={{ fontSize: 15.5, color: ss.bone }}>They pay their own share</div>
-                        <div style={{ fontSize: 13.5, color: ss.mute, marginTop: 3 }}>You pay {money(own)} now. We'll email them how to pay theirs.</div>
+                        <div style={{ fontSize: 14, lineHeight: "20px", color: ss.bone }}>They pay their own share</div>
+                        <div style={{ fontSize: 12, lineHeight: "16px", color: ss.mute, marginTop: 3 }}>You pay {money(own)} now. We'll email them how to pay theirs.</div>
                       </ChoiceCard>
                       <ChoiceCard role="radio" checked={split === "full"} onToggle={() => update(c, { split: "full" })}>
-                        <div style={{ fontSize: 15.5, color: ss.bone }}>I'll pay for both of us</div>
-                        <div style={{ fontSize: 13.5, color: ss.mute, marginTop: 3 }}>
+                        <div style={{ fontSize: 14, lineHeight: "20px", color: ss.bone }}>I'll pay for both of us</div>
+                        <div style={{ fontSize: 12, lineHeight: "16px", color: ss.mute, marginTop: 3 }}>
                           {both !== null && (partnerAge !== null || !ageRequired(ctx)) ? `${money(both)} for the team.` : "Both shares; your partner's age sets theirs."}
                         </div>
                       </ChoiceCard>
@@ -356,7 +360,7 @@ function WaiverText({ text }: { text: string }) {
         <div
           id="waiver-text" role="region" aria-label="Waiver text"
           style={{
-            padding: "16px 18px", color: ss.body, fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap",
+            padding: "16px 18px", color: ss.body, fontSize: 14, lineHeight: "20px", whiteSpace: "pre-wrap",
             maxHeight: open ? "none" : 230, overflow: "hidden",
           }}
         >
@@ -377,7 +381,7 @@ function WaiverText({ text }: { text: string }) {
           // leaving the reader far below it.
           if (open) requestAnimationFrame(() => boxRef.current?.scrollIntoView({ block: "nearest" }));
         }}
-        style={{ font: "inherit", fontSize: 15, color: ss.bone, background: "none", border: 0, padding: "12px 0 4px", cursor: "pointer", minHeight: 44 }}
+        style={{ font: "inherit", fontSize: 14, lineHeight: "20px", color: ss.bone, background: "none", border: 0, padding: "12px 0 4px", cursor: "pointer", minHeight: 44 }}
       >
         {open ? "Show less" : "Read the full waiver"}
       </button>
@@ -402,8 +406,8 @@ export function StepWaiver({ flow, set, tournament, errors, headingRef, ctx }: S
       />
       {(rules || waiverUrl) && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 20px", marginBottom: 14 }}>
-          {rules && <a className="ss-link" href={rules} target="_blank" rel="noopener" style={{ color: ss.bone, fontSize: 15 }}>Competition regulations ↗</a>}
-          {waiverUrl && <a className="ss-link" href={waiverUrl} target="_blank" rel="noopener" style={{ color: ss.bone, fontSize: 15 }}>Waiver in a new tab ↗</a>}
+          {rules && <a className="ss-link" href={rules} target="_blank" rel="noopener" style={{ color: ss.bone, fontSize: 14, lineHeight: "20px" }}>Competition regulations ↗</a>}
+          {waiverUrl && <a className="ss-link" href={waiverUrl} target="_blank" rel="noopener" style={{ color: ss.bone, fontSize: 14, lineHeight: "20px" }}>Waiver in a new tab ↗</a>}
         </div>
       )}
       <WaiverText text={tournament.waiver_text ?? ""} />
@@ -429,11 +433,11 @@ export function StepWaiver({ flow, set, tournament, errors, headingRef, ctx }: S
       >
         {(f) => (
           <TextInput {...f} type="text" autoComplete="off" value={flow.signature} onChange={(ev) => set("signature", ev.target.value)}
-            style={{ fontStyle: "italic", fontSize: 20, fontWeight: 300 }} />
+            style={{ fontSize: 20, lineHeight: "28px", fontWeight: 500 }} />
         )}
       </Field>
       {namedPartners.length > 0 && (
-        <p style={{ margin: "0 0 8px", fontSize: 14, color: ss.mute, lineHeight: 1.55 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 14, lineHeight: "20px", color: ss.mute }}>
           Partners sign their own waiver: we'll email {namedPartners.length > 1 ? "each of them" : "them"} a link after you submit.
         </p>
       )}
@@ -468,16 +472,16 @@ export function StepPay({ flow, set, ctx, tournament, errors, headingRef, cardAv
           return (
             <div key={c.id} style={{ display: "flex", justifyContent: "space-between", gap: 14, padding: "14px 0", borderBottom: `1px solid ${ss.line}` }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ color: ss.bone, fontSize: 16 }}>{c.name}</div>
-                <div style={{ color: ss.mute, fontSize: 13.5, marginTop: 3 }}>{detail}</div>
+                <div style={{ color: ss.bone, fontSize: 16, lineHeight: "24px" }}>{c.name}</div>
+                <div style={{ color: ss.mute, fontSize: 12, lineHeight: "16px", marginTop: 3 }}>{detail}</div>
               </div>
-              <div style={{ fontFamily: ss.mono, color: ss.bone, fontSize: 15, whiteSpace: "nowrap" }}>{fee === null ? "—" : money(fee)}</div>
+              <div style={{ fontFamily: ss.mono, color: ss.bone, fontSize: 14, lineHeight: "20px", whiteSpace: "nowrap" }}>{fee === null ? "—" : money(fee)}</div>
             </div>
           );
         })}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "16px 0 10px" }}>
           <span style={monoLabel}>Total</span>
-          <span style={{ fontFamily: ss.display, fontWeight: 300, fontStretch: "110%", fontSize: 40, color: ss.bone, letterSpacing: "-.01em" }}>
+          <span style={{ fontFamily: ss.display, fontWeight: 600, fontSize: 36, lineHeight: "40px", color: ss.bone, letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums" }}>
             {total === null ? "—" : money(total)}
           </span>
         </div>
@@ -489,12 +493,12 @@ export function StepPay({ flow, set, ctx, tournament, errors, headingRef, cardAv
         <div role="radiogroup" aria-label="How would you like to pay?" style={{ display: "grid", gap: 10, margin: "8px 0 18px" }}>
           <div style={{ ...monoLabel, marginBottom: 0 }}>How would you like to pay?</div>
           <ChoiceCard role="radio" checked={method === "etransfer"} onToggle={() => set("payment_method", "etransfer")}>
-            <div style={{ fontSize: 16, color: ss.bone }}>Interac e-Transfer</div>
-            <div style={{ fontSize: 13.5, color: ss.mute, marginTop: 3 }}>Send it from your bank, then paste the reference number.</div>
+            <div style={{ fontSize: 16, lineHeight: "24px", color: ss.bone }}>Interac e-Transfer</div>
+            <div style={{ fontSize: 12, lineHeight: "16px", color: ss.mute, marginTop: 3 }}>Send it from your bank, then paste the reference number.</div>
           </ChoiceCard>
           <ChoiceCard role="radio" checked={method === "card"} onToggle={() => set("payment_method", "card")}>
-            <div style={{ fontSize: 16, color: ss.bone }}>Card, Apple Pay or Google Pay</div>
-            <div style={{ fontSize: 13.5, color: ss.mute, marginTop: 3 }}>Same price. Pay on Stripe's secure page; shows as ADAWAR* SHUTTLE STORM.</div>
+            <div style={{ fontSize: 16, lineHeight: "24px", color: ss.bone }}>Card, Apple Pay or Google Pay</div>
+            <div style={{ fontSize: 12, lineHeight: "16px", color: ss.mute, marginTop: 3 }}>Same price. Pay on Stripe's secure page; shows as ADAWAR* SHUTTLE STORM.</div>
           </ChoiceCard>
         </div>
       )}
@@ -505,16 +509,16 @@ export function StepPay({ flow, set, ctx, tournament, errors, headingRef, cardAv
             <li style={{ display: "flex", gap: 14, marginBottom: 18 }}>
               <StepDot n={1} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ color: ss.bone, fontSize: 15.5, lineHeight: 1.45 }}>
+                <div style={{ color: ss.bone, fontSize: 14, lineHeight: "20px" }}>
                   Send {total === null ? "the entry fee" : <strong style={{ fontWeight: 600 }}>{money(total)}</strong>} by Interac e-Transfer to
                 </div>
                 {tournament.e_transfer_email && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 10 }}>
-                    <code style={{ fontFamily: ss.mono, fontSize: 14.5, color: ss.volt, padding: "8px 12px", borderRadius: 10, background: ss.ink2, border: `1px solid ${ss.line}`, wordBreak: "break-all" }}>
+                    <code style={{ fontFamily: ss.mono, fontSize: 14, lineHeight: "20px", color: ss.volt, padding: "8px 12px", borderRadius: 10, background: ss.ink2, border: `1px solid ${ss.line}`, wordBreak: "break-all" }}>
                       {tournament.e_transfer_email}
                     </code>
                     <button type="button" className="ss-btn ss-btn-ghost" onClick={() => onCopy("email", tournament.e_transfer_email!)}
-                      style={{ minHeight: 38, padding: "0 14px", borderRadius: 999, border: `1px solid ${ss.lineStrong}`, background: "transparent", color: ss.bone, fontFamily: ss.mono, fontSize: 11.5, letterSpacing: ".12em", textTransform: "uppercase", cursor: "pointer" }}>
+                      style={{ minHeight: 38, padding: "0 14px", borderRadius: 999, border: `1px solid ${ss.lineStrong}`, background: "transparent", color: ss.bone, fontFamily: ss.display, fontSize: 14, lineHeight: "20px", fontWeight: 600, cursor: "pointer" }}>
                       {copied === "email" ? "Copied" : "Copy"}
                     </button>
                   </div>
@@ -553,14 +557,14 @@ export function StepPay({ flow, set, ctx, tournament, errors, headingRef, cardAv
         </Field>
       ) : (
         <button type="button" onClick={() => setShowNote(true)} className="ss-link"
-          style={{ font: "inherit", fontSize: 15, color: ss.body, background: "none", border: 0, padding: "4px 0", cursor: "pointer", marginBottom: 18 }}>
+          style={{ font: "inherit", fontSize: 14, lineHeight: "20px", color: ss.body, background: "none", border: 0, padding: "4px 0", cursor: "pointer", marginBottom: 18 }}>
           + Add a note for the directors
         </button>
       )}
       {tournament.terms_text && (
         <details style={{ marginTop: 6, borderTop: `1px solid ${ss.line}`, paddingTop: 14 }}>
           <summary style={{ ...monoLabel, cursor: "pointer", listStylePosition: "outside" }}>Entry terms</summary>
-          <div style={{ marginTop: 12, color: ss.mute, fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{tournament.terms_text}</div>
+          <div style={{ marginTop: 12, color: ss.mute, fontSize: 12, lineHeight: "16px", whiteSpace: "pre-wrap" }}>{tournament.terms_text}</div>
         </details>
       )}
     </>
@@ -571,7 +575,7 @@ function StepDot({ n }: { n: number }) {
   return (
     <span aria-hidden="true" style={{
       flex: "0 0 auto", width: 26, height: 26, borderRadius: 26, display: "grid", placeItems: "center",
-      border: `1px solid ${ss.volt}`, color: ss.volt, fontFamily: ss.mono, fontSize: 12, marginTop: 1,
+      border: `1px solid ${ss.volt}`, color: ss.volt, fontFamily: ss.mono, fontSize: 12, lineHeight: "16px", marginTop: 1,
     }}>{n}</span>
   );
 }

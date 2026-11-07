@@ -9,6 +9,7 @@ import type { Category, ConsentPayload, PublicRegistrationPayload, RegistrationE
 import { ageProblem } from "./ageEligibility";
 import { computeFee, priceBasis, type Concessions, type Participant, type PaymentSplit } from "./computeFee";
 import { AGE_OF_MAJORITY, emptyFormState, parseAge, partnerAgeRequired, validate, type FormErrors, type FormState } from "./validate";
+import { overCapacityMessage, spotsNeeded } from "./capacity";
 
 export type StepKey = "you" | "events" | "partners" | "waiver" | "pay";
 
@@ -81,6 +82,9 @@ export type FlowContext = {
   categories: Category[];
   // ?share=1: paying their share of an entry that named them, for this event.
   payingShareFor: string | null;
+  // Entries still open when the tournament has a cap; null or absent means no
+  // limit is checked here (the server always checks).
+  spotsLeft?: number | null;
 };
 
 const num = (v: number | string | null | undefined): number | null => {
@@ -259,6 +263,10 @@ export function stepErrors(step: StepKey, state: FlowState, ctx: FlowContext): S
     for (const c of cats) {
       const problem = ageProblem(c, age);
       if (problem) out.events[c.id] = problem;
+    }
+    if (cats.length && ctx.spotsLeft != null) {
+      const short = overCapacityMessage(ctx.spotsLeft, spotsNeeded(ctx.categories, state.category_ids, ctx.payingShareFor));
+      if (short) out.fields.events = short;
     }
     return out;
   }

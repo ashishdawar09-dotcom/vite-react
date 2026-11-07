@@ -12,17 +12,14 @@ export function Shell({ children, bottomSpace = true }: { children: React.ReactN
   return (
     <div className="ss-root" style={{
       minHeight: "100dvh",
-      backgroundImage:
-        "radial-gradient(120% 60% at 50% -12%, rgba(236,238,242,.075), transparent 62%)," +
-        "radial-gradient(60% 40% at 92% 8%, rgba(212,255,58,.045), transparent 70%)",
-      backgroundRepeat: "no-repeat",
+      background: ss.ink,
       paddingTop: "env(safe-area-inset-top, 0px)",
       paddingLeft: "env(safe-area-inset-left, 0px)",
       paddingRight: "env(safe-area-inset-right, 0px)",
     }}>
       <div style={{
-        maxWidth: 600, margin: "0 auto", padding: "0 20px",
-        paddingBottom: bottomSpace ? "calc(150px + env(safe-area-inset-bottom, 0px))" : 48,
+        maxWidth: 600, margin: "0 auto", padding: "0 16px",
+        paddingBottom: bottomSpace ? "calc(160px + env(safe-area-inset-bottom, 0px))" : 48,
       }}>
         {children}
       </div>
@@ -66,9 +63,9 @@ export function Countdown({ deadline }: { deadline: string }) {
   const left = diffLabel(end - now);
   return (
     <span aria-live="polite" style={{
-      ...monoLabel, fontSize: 10.5, color: left ? ss.bone : ss.danger,
+      fontFamily: ss.display, fontSize: 12, lineHeight: "16px", fontWeight: 500, color: left ? ss.bone : ss.danger,
       display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
-      padding: "7px 12px", borderRadius: 999, border: `1px solid ${ss.line}`, background: "rgba(6,8,13,.6)",
+      padding: "8px 12px", borderRadius: 9999, border: `1px solid ${ss.line}`, background: ss.panel,
     }}>
       {left && <span className="ss-pulse" style={{ width: 6, height: 6, borderRadius: 6, background: ss.volt }} />}
       {left
@@ -78,34 +75,45 @@ export function Countdown({ deadline }: { deadline: string }) {
   );
 }
 
-export function TopBar({ deadline }: { deadline: string | null }) {
+// `status` replaces the countdown, e.g. "Entries full" once every spot is taken.
+export function TopBar({ deadline, status }: { deadline: string | null; status?: string }) {
   return (
     <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 72 }}>
-      <a href="https://shuttlestorm.adawar.org/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", minWidth: 0 }}>
+      <a href="https://shuttlestorm.adawar.org/" aria-label="Shuttle Storm home" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", minWidth: 0 }}>
         <Mark size={28} />
+        {/* The wordmark is part of the logo, so it keeps the logo's lettering. */}
         <span className="ss-brand-word" style={{
-          fontFamily: ss.display, fontWeight: 600, fontStretch: "125%",
+          fontFamily: ss.brand, fontWeight: 600, fontStretch: "125%",
           textTransform: "uppercase", color: ss.bone, whiteSpace: "nowrap",
         }}>Shuttle Storm</span>
       </a>
-      {deadline && <Countdown deadline={deadline} />}
+      {status ? (
+        <span style={{
+          fontFamily: ss.display, fontSize: 12, lineHeight: "16px", fontWeight: 500, color: ss.bone,
+          display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap",
+          padding: "8px 12px", borderRadius: 9999, border: `1px solid ${ss.line}`, background: ss.panel,
+        }}>
+          <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 6, background: ss.volt }} />
+          {status}
+        </span>
+      ) : deadline && <Countdown deadline={deadline} />}
     </header>
   );
 }
 
 export function Progress({ index, total, label }: { index: number; total: number; label: string }) {
   return (
-    <div role="group" aria-label={`Step ${index + 1} of ${total}: ${label}`} style={{ margin: "6px 0 26px" }}>
-      <div aria-hidden="true" style={{ display: "flex", gap: 6 }}>
+    <div role="group" aria-label={`Step ${index + 1} of ${total}: ${label}`} style={{ margin: "8px 0 24px" }}>
+      <div aria-hidden="true" style={{ display: "flex", gap: 4 }}>
         {Array.from({ length: total }, (_, i) => (
           <span key={i} style={{
-            flex: 1, height: 3, borderRadius: 3,
+            flex: 1, height: 4, borderRadius: 4,
             background: i < index ? "rgba(212,255,58,.55)" : i === index ? ss.volt : ss.line,
-            transition: "background .3s ease",
+            transition: "background .3s cubic-bezier(.22, 1, .36, 1)",
           }} />
         ))}
       </div>
-      <div aria-hidden="true" style={{ ...monoLabel, display: "flex", justifyContent: "space-between", marginTop: 10 }}>
+      <div aria-hidden="true" style={{ ...monoLabel, display: "flex", justifyContent: "space-between", marginTop: 8 }}>
         <span>Step {index + 1} / {total}</span>
         <span style={{ color: ss.bone }}>{label}</span>
       </div>
@@ -117,12 +125,12 @@ export function StepTitle({ title, sub, headingRef }: {
   title: string; sub?: React.ReactNode; headingRef?: React.Ref<HTMLHeadingElement>;
 }) {
   return (
-    <div style={{ marginBottom: 22 }}>
-      <h2 ref={headingRef} tabIndex={-1} style={{
-        margin: 0, fontFamily: ss.display, fontWeight: 400, fontSize: 30, lineHeight: 1.1,
-        letterSpacing: "-.01em", color: ss.bone, outline: "none",
+    <div style={{ marginBottom: 24 }}>
+      <h2 ref={headingRef} tabIndex={-1} className="ss-balance" style={{
+        margin: 0, fontFamily: ss.display, fontWeight: 600, fontSize: 30, lineHeight: "36px",
+        letterSpacing: "-.02em", color: ss.bone, outline: "none",
       }}>{title}</h2>
-      {sub && <p style={{ margin: "10px 0 0", color: ss.body, fontSize: 15.5, lineHeight: 1.55 }}>{sub}</p>}
+      {sub && <p className="ss-pretty" style={{ margin: "8px 0 0", color: ss.body, fontSize: 16, lineHeight: "24px" }}>{sub}</p>}
     </div>
   );
 }
@@ -140,15 +148,15 @@ export function Field({ label, hint, error, required, optional, children, id }: 
   const controlId = id ?? auto;
   const msgId = `${controlId}-msg`;
   return (
-    <div data-field="" data-field-error={error ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+    <div data-field="" data-field-error={error ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
       <label htmlFor={controlId} style={{ ...monoLabel, display: "flex", gap: 8, alignItems: "baseline" }}>
         <span>{label}</span>
         {required && <span aria-hidden="true" style={{ color: ss.volt }}>*</span>}
-        {optional && <span style={{ color: "rgba(143,151,168,.7)", letterSpacing: ".1em" }}>Optional</span>}
+        {optional && <span style={{ color: "rgba(143,151,168,.85)", fontWeight: 400 }}>Optional</span>}
       </label>
       {children({ id: controlId, "aria-describedby": error || hint ? msgId : undefined, "aria-invalid": error ? true : undefined })}
       {(error || hint) && (
-        <div id={msgId} style={{ fontSize: 13, lineHeight: 1.45, color: error ? ss.danger : ss.mute }}>
+        <div id={msgId} className="ss-pretty" style={{ fontSize: 14, lineHeight: "20px", color: error ? ss.danger : ss.mute }}>
           {error ? <ErrorText>{error}</ErrorText> : hint}
         </div>
       )}
@@ -177,7 +185,7 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement> & {
       enterKeyHint="next"
       {...rest}
       className="ss-input"
-      style={{ ...inputStyle, ...(mono ? { fontFamily: ss.mono, fontSize: 16, letterSpacing: ".04em" } : {}), ...style }}
+      style={{ ...inputStyle, ...(mono ? { fontFamily: ss.mono, fontSize: 16, lineHeight: "24px", letterSpacing: ".04em" } : {}), ...style }}
     />
   );
 }
@@ -194,9 +202,9 @@ export function Button({ variant = "primary", children, style, ...rest }: React.
       {...rest}
       className={`ss-btn ${primary ? "ss-btn-primary" : "ss-btn-ghost"}`}
       style={{
-        minHeight: 56, padding: "0 24px", borderRadius: 999,
+        minHeight: 48, padding: "8px 12px", borderRadius: 9999,
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 12,
-        fontFamily: ss.display, fontWeight: 600, fontSize: 14, letterSpacing: ".08em", textTransform: "uppercase",
+        fontFamily: ss.display, fontWeight: 600, fontSize: 16, lineHeight: "24px",
         cursor: "pointer",
         border: primary ? "none" : `1px solid ${ss.lineStrong}`,
         background: primary ? (rest.disabled ? "rgba(236,238,242,.45)" : ss.bone) : "transparent",
@@ -248,7 +256,10 @@ export function ActionBar({ summary, onBack, backLabel = "Back", children, hidde
       inert={hidden || undefined}
       style={{
         position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 20,
-        background: "linear-gradient(to top, rgba(6,8,13,.98) 70%, rgba(6,8,13,.0))",
+        // Flat and translucent over a blur, so the page stays faintly visible.
+        background: "rgba(0,0,0,.86)",
+        WebkitBackdropFilter: "blur(16px)",
+        backdropFilter: "blur(16px)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         // Its own compositing layer, so scrolling never repaints it.
         transform: hidden ? "translate3d(0, calc(100% + 24px), 0)" : "translate3d(0, 0, 0)",
@@ -258,7 +269,7 @@ export function ActionBar({ summary, onBack, backLabel = "Back", children, hidde
         pointerEvents: hidden ? "none" : "auto",
       }}
     >
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "26px 20px 16px" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px 16px 16px" }}>
         {summary && <div style={{ marginBottom: 12 }}>{summary}</div>}
         <ActionButtons onBack={onBack} backLabel={backLabel}>{children}</ActionButtons>
       </div>
@@ -271,7 +282,7 @@ export function ActionBar({ summary, onBack, backLabel = "Back", children, hidde
 export function CheckMark({ on, round = false }: { on: boolean; round?: boolean }) {
   return (
     <span aria-hidden="true" style={{
-      flex: "0 0 auto", width: 24, height: 24, borderRadius: round ? 24 : 7,
+      flex: "0 0 auto", width: 24, height: 24, borderRadius: round ? 24 : 6,
       display: "grid", placeItems: "center",
       border: `1.5px solid ${on ? ss.volt : ss.lineStrong}`,
       background: on ? ss.volt : "transparent",
@@ -306,8 +317,8 @@ export function ChoiceCard({ checked, onToggle, disabled, role = "checkbox", chi
         if (e.key === " " || e.key === "Enter") { e.preventDefault(); onToggle(); }
       }}
       style={{
-        display: "flex", alignItems: "center", gap: 14,
-        padding: "16px 16px 16px 18px", borderRadius: 16,
+        display: "flex", alignItems: "center", gap: 12,
+        padding: 16, borderRadius: 16,
         border: `1px solid ${checked ? ss.volt : ss.line}`,
         background: checked ? ss.voltSoft : ss.ink2,
         boxShadow: checked ? "0 10px 30px -18px rgba(212,255,58,.55)" : "none",
@@ -331,7 +342,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, e
     <div data-field-error={error ? "" : undefined}>
       <div role="radiogroup" aria-label={label} style={{
         display: "grid", gridTemplateColumns: `repeat(${options.length}, minmax(0,1fr))`, gap: 6,
-        padding: 5, borderRadius: 16, border: `1px solid ${error ? ss.danger : ss.line}`, background: ss.ink2,
+        padding: 4, borderRadius: 16, border: `1px solid ${error ? ss.danger : ss.line}`, background: ss.ink2,
       }}>
         {options.map((o) => {
           const on = value === o.value;
@@ -344,8 +355,8 @@ export function Segmented<T extends string>({ value, options, onChange, label, e
               className="ss-btn"
               onClick={() => onChange(o.value)}
               style={{
-                minHeight: 48, padding: "0 10px", borderRadius: 12, border: "none", cursor: "pointer",
-                fontFamily: ss.display, fontSize: 14.5, fontWeight: on ? 600 : 500, lineHeight: 1.2,
+                minHeight: 48, padding: "0 12px", borderRadius: 12, border: "none", cursor: "pointer",
+                fontFamily: ss.display, fontSize: 14, lineHeight: "20px", fontWeight: on ? 600 : 500,
                 background: on ? ss.bone : "transparent", color: on ? ss.ink : ss.body,
               }}
             >
@@ -354,7 +365,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, e
           );
         })}
       </div>
-      {error && <div style={{ marginTop: 8, fontSize: 13, color: ss.danger }}><ErrorText>{error}</ErrorText></div>}
+      {error && <div style={{ marginTop: 8, fontSize: 12, lineHeight: "16px", color: ss.danger }}><ErrorText>{error}</ErrorText></div>}
     </div>
   );
 }
@@ -364,7 +375,7 @@ export function CheckRow({ checked, onChange, children, error }: {
 }) {
   return (
     <label data-field-error={error ? "" : undefined} style={{
-      display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 0", cursor: "pointer",
+      display: "flex", gap: 12, alignItems: "flex-start", padding: "12px 0", cursor: "pointer",
       borderTop: `1px solid ${ss.line}`,
     }}>
       <input
@@ -374,9 +385,9 @@ export function CheckRow({ checked, onChange, children, error }: {
         onBlur={(e) => e.currentTarget.parentElement?.style.removeProperty("outline")}
       />
       <CheckMark on={checked} />
-      <span style={{ fontSize: 15, lineHeight: 1.5, color: ss.body }}>
+      <span style={{ fontSize: 14, lineHeight: "20px", color: ss.body }}>
         {children}
-        {error && <span style={{ display: "block", marginTop: 4, fontSize: 13, color: ss.danger }}><ErrorText>{error}</ErrorText></span>}
+        {error && <span style={{ display: "block", marginTop: 4, fontSize: 12, lineHeight: "16px", color: ss.danger }}><ErrorText>{error}</ErrorText></span>}
       </span>
     </label>
   );
@@ -388,7 +399,7 @@ export function Note({ children, tone = "info" }: { children: React.ReactNode; t
   const color = tone === "danger" ? ss.danger : tone === "volt" ? ss.volt : ss.lineStrong;
   return (
     <div role={tone === "danger" ? "alert" : undefined} style={{
-      padding: "14px 16px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.55,
+      padding: "12px 16px", borderRadius: 12, fontSize: 14, lineHeight: "20px",
       border: `1px solid ${tone === "info" ? ss.line : color}`,
       background: tone === "danger" ? ss.dangerSoft : tone === "volt" ? ss.voltSoft : ss.panel,
       color: tone === "danger" ? ss.danger : ss.body,
@@ -401,7 +412,7 @@ export function Note({ children, tone = "info" }: { children: React.ReactNode; t
 export function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <section style={{
-      border: `1px solid ${ss.line}`, borderRadius: 20, padding: "20px 18px 6px",
+      border: `1px solid ${ss.line}`, borderRadius: 24, padding: "16px 12px 0",
       background: ss.panel, marginBottom: 16, ...style,
     }}>
       {children}

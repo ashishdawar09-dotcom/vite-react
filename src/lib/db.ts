@@ -955,6 +955,40 @@ export async function rejectRegistration(reg_id: string, reason: string): Promis
   if (error) throw error;
 }
 
+export type WaitlistEntry = {
+  tournament_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  website?: string; // honeypot, left empty by people
+};
+
+// Puts someone on a full tournament's waitlist (join-waitlist Edge Function,
+// no sign-in). The directors get an email for each new name.
+export async function joinRegistrationWaitlist(
+  entry: WaitlistEntry,
+): Promise<{ success: boolean; already?: boolean; error?: string; status?: number }> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/join-waitlist`;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  const ctrl = new AbortController();
+  const timeoutId = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify(entry),
+      signal: ctrl.signal,
+    });
+    const body = (await resp.json().catch(() => ({}))) as { success?: boolean; already?: boolean; error?: string };
+    if (!resp.ok) return { success: false, error: body.error ?? `HTTP ${resp.status}`, status: resp.status };
+    return { success: !!body.success, already: !!body.already, error: body.error, status: resp.status };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // Saves someone who has started the public form (name + email) so a director
 // can remind them if they never finish. Best effort: never throws, and the
 // form works the same whether or not it lands.
@@ -979,7 +1013,12 @@ export async function saveRegistrationLead(lead: RegistrationLead): Promise<bool
 // gateway returns 401 even though the function itself accepts anonymous input.
 export async function submitPublicRegistration(
   payload: PublicRegistrationPayload,
-): Promise<{ success: boolean; registrationId?: string; registrationIds?: string[]; checkoutUrl?: string; error?: string; status?: number }> {
+): Promise<{
+  success: boolean; registrationId?: string; registrationIds?: string[]; checkoutUrl?: string; error?: string; status?: number;
+  // Refused because the entries don't fit: `full` once every spot is taken,
+  // `remaining` the spots still open.
+  full?: boolean; remaining?: number;
+}> {
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-player`;
   const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   const ctrl = new AbortController();
@@ -995,9 +1034,14 @@ export async function submitPublicRegistration(
     });
     const body = (await resp.json().catch(() => ({}))) as {
       success?: boolean; registrationId?: string; registrationIds?: string[]; checkoutUrl?: string; error?: string;
+      full?: boolean; remaining?: number;
     };
     if (!resp.ok) {
-      return { success: false, error: body.error ?? `HTTP ${resp.status}`, status: resp.status };
+      return {
+        success: false, error: body.error ?? `HTTP ${resp.status}`, status: resp.status,
+        ...(typeof body.full === "boolean" ? { full: body.full } : {}),
+        ...(typeof body.remaining === "number" ? { remaining: body.remaining } : {}),
+      };
     }
     return {
       success: !!body.success, registrationId: body.registrationId, registrationIds: body.registrationIds,

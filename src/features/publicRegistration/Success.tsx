@@ -35,13 +35,10 @@ export function Success({ tournament, events, playerName, paidByCard, registrati
         }}>
           <svg width="28" height="22" viewBox="0 0 28 22"><path d="M2.5 11.5l7.5 7.5L25.5 3" fill="none" stroke={ss.ink} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </span>
-        <h1 style={{
-          margin: "26px 0 0", fontFamily: ss.display, fontWeight: 200, fontStretch: "118%", textTransform: "uppercase",
-          fontSize: "clamp(36px, 10vw, 58px)", lineHeight: 0.95, color: ss.bone,
-        }}>
+        <h1 className="ss-h-hero ss-hero-text ss-balance" style={{ margin: "24px 0 0", fontFamily: ss.display, maxWidth: 680 }}>
           {paidByCard ? "Payment received" : "Entry received"}
         </h1>
-        <p style={{ margin: "16px 0 0", fontSize: 16.5, lineHeight: 1.6, color: ss.body }}>
+        <p style={{ margin: "16px 0 0", fontSize: 16, lineHeight: "24px", color: ss.body }}>
           {first ? `Thanks, ${first}. ` : "Thanks. "}
           {paidByCard
             ? "Your card payment went through and your entry is with the directors. They'll confirm your spot by email. Stripe has emailed your receipt; it shows on your statement as ADAWAR* SHUTTLE STORM."
@@ -54,14 +51,14 @@ export function Success({ tournament, events, playerName, paidByCard, registrati
           {events.map((name) => (
             <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${ss.line}` }}>
               <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 6, background: ss.volt }} />
-              <span style={{ color: ss.bone, fontSize: 15.5 }}>{name}</span>
+              <span style={{ color: ss.bone, fontSize: 14, lineHeight: "20px" }}>{name}</span>
             </div>
           ))}
           <div style={{ ...monoLabel, padding: "12px 0" }}>{tournament.name}</div>
         </Panel>
       )}
       {namedPartners > 0 && tournament.waiver_text && (
-        <p style={{ margin: "4px 0 18px", fontSize: 14.5, color: ss.mute, lineHeight: 1.55 }}>
+        <p style={{ margin: "4px 0 18px", fontSize: 14, lineHeight: "20px", color: ss.mute }}>
           We've emailed your partner{namedPartners > 1 ? "s" : ""} what they still need to do before they can play.
         </p>
       )}
@@ -75,7 +72,7 @@ export function Success({ tournament, events, playerName, paidByCard, registrati
 
       <div style={{ marginTop: 26, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
         <Button variant="ghost" onClick={onAnother}>Enter another event</Button>
-        <a className="ss-link" href="https://shuttlestorm.adawar.org/" style={{ color: ss.body, fontSize: 15 }}>Back to Shuttle Storm</a>
+        <a className="ss-link" href="https://shuttlestorm.adawar.org/" style={{ color: ss.body, fontSize: 14, lineHeight: "20px" }}>Back to Shuttle Storm</a>
       </div>
       {/* Room for the chat button (ChatWithUs), so the last line scrolls clear of it. */}
       {tournament.whatsapp_number && <div aria-hidden="true" style={{ height: "calc(48px + env(safe-area-inset-bottom, 0px))" }} />}
@@ -107,23 +104,23 @@ function ShareCard() {
         <Mark size={22} />
         <span style={{ ...monoLabel, color: ss.volt }}>Bring a partner</span>
       </div>
-      <h2 style={{ margin: "12px 0 6px", fontFamily: ss.display, fontWeight: 400, fontSize: 24, lineHeight: 1.2, color: ss.bone }}>
+      <h2 style={{ margin: "12px 0 6px", fontFamily: ss.display, fontWeight: 400, fontSize: 24, lineHeight: "32px", color: ss.bone }}>
         Know someone who'd play?
       </h2>
-      <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55, color: ss.body }}>
+      <p style={{ margin: 0, fontSize: 14, lineHeight: "20px", color: ss.body }}>
         Send them the link. Doubles are better with your own partner, and every category needs more players.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
         <a href={wa} target="_blank" rel="noopener noreferrer" className="ss-btn ss-btn-primary"
           onClick={() => trackEvent("share", { method: "whatsapp", content_type: "registration" })}
           style={{
-            minHeight: 50, padding: "0 20px", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 10,
-            background: ss.bone, color: ss.ink, textDecoration: "none", fontWeight: 600, fontSize: 13.5, letterSpacing: ".08em", textTransform: "uppercase",
+            minHeight: 48, padding: "8px 16px", borderRadius: 9999, display: "inline-flex", alignItems: "center", gap: 8,
+            background: ss.bone, color: ss.ink, textDecoration: "none", fontWeight: 600, fontSize: 14, lineHeight: "20px",
           }}>
           Share on WhatsApp
         </a>
         {canShare ? (
-          <Button variant="ghost" style={{ minHeight: 50, fontSize: 13.5 }}
+          <Button variant="ghost" style={{ minHeight: 48, fontSize: 14, lineHeight: "20px" }}
             onClick={() => {
               trackEvent("share", { method: "native", content_type: "registration" });
               navigator.share({ title: "Shuttle Storm '26", text, url: SHARE_URL }).catch(() => {});
@@ -131,7 +128,7 @@ function ShareCard() {
             More ways
           </Button>
         ) : (
-          <Button variant="ghost" style={{ minHeight: 50, fontSize: 13.5 }} onClick={() => void copy()}>
+          <Button variant="ghost" style={{ minHeight: 48, fontSize: 14, lineHeight: "20px" }} onClick={() => void copy()}>
             {copied ? "Link copied" : "Copy link"}
           </Button>
         )}
@@ -150,19 +147,19 @@ function WhatsAppOptIn({ clubNumber, tournamentName, registrationId }: {
   if (!link) return null;
   return (
     <Panel style={{ marginTop: 16, padding: "18px 18px" }}>
-      <div style={{ color: ss.bone, fontSize: 16 }}>Updates on WhatsApp</div>
-      <p style={{ margin: "6px 0 0", fontSize: 14, color: ss.mute, lineHeight: 1.55 }}>
+      <div style={{ color: ss.bone, fontSize: 16, lineHeight: "24px" }}>Updates on WhatsApp</div>
+      <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: "20px", color: ss.mute }}>
         A reminder the evening before, and a message when your court is ready. Only if you ask: tap the button, then press Send in WhatsApp. Reply STOP anytime.
       </p>
       <a href={link} target="_blank" rel="noopener noreferrer" onClick={() => setOpened(true)} className="ss-btn"
         style={{
           marginTop: 14, minHeight: 50, padding: "0 20px", borderRadius: 999, display: "inline-flex", alignItems: "center", gap: 10,
-          background: "#25D366", color: "#062b16", textDecoration: "none", fontWeight: 700, fontSize: 14,
+          background: "#25D366", color: "#062b16", textDecoration: "none", fontWeight: 700, fontSize: 14, lineHeight: "20px",
         }}>
         Get updates on WhatsApp
       </a>
       {opened && (
-        <p style={{ margin: "12px 0 0", fontSize: 13.5, color: ss.mute, lineHeight: 1.55 }}>
+        <p style={{ margin: "12px 0 0", fontSize: 12, lineHeight: "16px", color: ss.mute }}>
           Once you press Send, you'll get a reply confirming it. If WhatsApp didn't open, message{" "}
           <strong style={{ color: ss.bone }}>{formatClubNumber(clubNumber)}</strong> with: <strong style={{ color: ss.bone }}>My code: {optinCode(registrationId)}</strong>
         </p>
@@ -223,14 +220,14 @@ function PushOptIn({ tournamentId, pendingRegistrationId }: { tournamentId: stri
   };
   return (
     <Panel style={{ marginTop: 16, padding: "18px 18px" }}>
-      <div style={{ color: ss.bone, fontSize: 16 }}>Court-ready alerts</div>
-      <p style={{ margin: "6px 0 0", fontSize: 14, color: ss.mute, lineHeight: 1.55 }}>
+      <div style={{ color: ss.bone, fontSize: 16, lineHeight: "24px" }}>Court-ready alerts</div>
+      <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: "20px", color: ss.mute }}>
         A notification on this device the moment your court opens on the day.
       </p>
-      <Button variant="ghost" disabled={state === "working"} onClick={() => void enable()} style={{ marginTop: 14, minHeight: 50, fontSize: 13.5 }}>
+      <Button variant="ghost" disabled={state === "working"} onClick={() => void enable()} style={{ marginTop: 14, minHeight: 50, fontSize: 12, lineHeight: "16px" }}>
         {state === "working" ? "Turning on…" : "Turn on notifications"}
       </Button>
-      {state === "error" && errMsg && <div style={{ marginTop: 10, fontSize: 13, color: ss.danger }}>{errMsg}</div>}
+      {state === "error" && errMsg && <div style={{ marginTop: 10, fontSize: 12, lineHeight: "16px", color: ss.danger }}>{errMsg}</div>}
     </Panel>
   );
 }

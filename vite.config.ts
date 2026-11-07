@@ -45,8 +45,9 @@ export default defineConfig({
         // tag in index.html — the SW never needs to serve them. Excluding
         // saves ~2 MB of first-install precache bandwidth.
         // The Shuttle Storm fonts in /fonts (~400 KB) are only used by the
-        // public registration form, which loads them on demand.
-        globIgnores: ['**/apple-splash-*.png', 'fonts/**'],
+        // public registration form, which loads them on demand. The GIFs in
+        // /shuttlestorm (~1.7 MB) show only once a tournament is full.
+        globIgnores: ['**/apple-splash-*.png', 'fonts/**', 'shuttlestorm/**'],
       },
     }),
   ],

@@ -8,7 +8,7 @@
 // tracked for the registration funnel.
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { saveRegistrationLead, submitPublicRegistration } from "../../lib/db";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../../lib/analytics";
 import { captureAttribution, getAttribution } from "../../lib/attribution";
 import { captureError, captureWarning } from "../../lib/sentry";
+import { lazyWithReload } from "../../lib/lazyWithReload";
 import { clearDraft, loadDraft, saveDraft } from "./draft";
 import {
   STEP_LABEL, buildPayload, emptyFlow, emptyPartner, firstInvalidStep, hasErrors, isDoubles, partnerMode,
@@ -28,6 +29,9 @@ import { Hero, StepEvents, StepPartners, StepPay, StepWaiver, StepYou, WelcomeBa
 import { Success } from "./Success";
 import { ChatWithUs } from "./ChatWithUs";
 import { usePublicTournament } from "./usePublicTournament";
+import { useEntryCapacity } from "./useEntryCapacity";
+import { SpotsMeter, SpotsStrip } from "./SpotsMeter";
+import type { Socials } from "./FullHouse";
 import { ActionBar, ActionButtons, Arrow, Button, Note, Progress, Shell, TopBar } from "./ss/parts";
 import { isTextField, useKeepFieldInView, useTypingOnTouch } from "./ss/keyboard";
 import { money, monoLabel, ss } from "./ss/theme";
@@ -37,9 +41,21 @@ const TOURNAMENT_HIGHLIGHTS: Record<string, Highlight[]> = {
   // Shuttle Storm '26
   "e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb": [
     { title: "Badminton BC registered club", sub: "Run to Badminton BC standards", href: "https://www.badmintonbc.com" },
-    { title: "Feather shuttles", sub: "Tournament-grade, on every court" },
-    { title: "Prizes", sub: "For winners and runners-up in every category" },
+    { title: "Feather shuttles", sub: "Tournament grade, on every court" },
+    { title: "Prizes", sub: "For first and second place in every category" },
   ],
+};
+
+// The "we're full" page loads only when it's needed (and reloads the page if
+// a deploy replaced its file meanwhile).
+const FullHouse = lazyWithReload(() => import("./FullHouse").then((m) => ({ default: m.FullHouse })));
+
+// Where to follow the tournament, on the "we're full" page.
+const TOURNAMENT_SOCIALS: Record<string, Socials> = {
+  "e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb": {
+    instagram: "https://www.instagram.com/shuttlstorm/",
+    facebook: "https://www.facebook.com/profile.php?id=61595251802328",
+  },
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,6 +71,7 @@ function textFields(form: HTMLFormElement): HTMLInputElement[] {
 export function PublicRegistrationPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
   const { tournament, categories, loading, error } = usePublicTournament(tournamentId);
+  const { capacity, loaded: capacityLoaded, refresh: refreshCapacity } = useEntryCapacity(tournamentId);
   const reduce = useReducedMotion();
 
   // Read once: ?category=<id> picks an event (e.g. from a partner's "Pay your
@@ -63,6 +80,10 @@ export function PublicRegistrationPage() {
   const [params] = useState(() => new URLSearchParams(window.location.search));
   const wantedCategory = params.get("category");
   const payingShare = params.get("share") === "1";
+  // Paying a share of an entry that already named you, or coming back from a
+  // cancelled card payment (whose entries still hold their spots): the form
+  // stays open even when the count says full, and the server decides.
+  const capBypass = payingShare || params.get("payment") === "cancelled";
 
   const [flow, setFlow] = useState<FlowState>(emptyFlow);
   const [step, setStep] = useState<StepKey>("you");
@@ -91,9 +112,10 @@ export function PublicRegistrationPage() {
 
   useEffect(() => { captureAttribution(); void initAnalytics(); }, []);
 
+  const spotsLeft = capacity && !capBypass ? capacity.remaining : null;
   const ctx: FlowContext | null = useMemo(
-    () => (tournament ? { tournament, categories, payingShareFor: payingShare ? wantedCategory : null } : null),
-    [tournament, categories, payingShare, wantedCategory],
+    () => (tournament ? { tournament, categories, payingShareFor: payingShare ? wantedCategory : null, spotsLeft } : null),
+    [tournament, categories, payingShare, wantedCategory, spotsLeft],
   );
 
   // When the page opened; the server enforces the deadline to the second.
@@ -327,6 +349,9 @@ export function PublicRegistrationPage() {
     }
     setStatus("idle");
     setSubmitError(result.error ?? "Submission failed. Please try again.");
+    // Refused because the entries don't fit: read the count again. If it's
+    // full, the page turns into the waitlist with these details filled in.
+    if (result.full !== undefined || result.remaining !== undefined) void refreshCapacity();
     // status is undefined when the request never got a response (offline,
     // timeout, blocked). Some server messages quote ages, so digits are masked.
     const detail = {
@@ -362,7 +387,7 @@ export function PublicRegistrationPage() {
   };
 
   // ---------- loading / not found / closed ----------
-  if (loading || (tournament && !ready)) {
+  if (loading || (tournament && !ready) || !capacityLoaded) {
     return (
       <Shell bottomSpace={false}>
         <TopBar deadline={null} />
@@ -402,6 +427,24 @@ export function PublicRegistrationPage() {
     );
   }
 
+  // ---------- every spot taken ----------
+  if (capacity?.full && !capBypass) {
+    return (
+      <Shell bottomSpace={false}>
+        <TopBar deadline={null} status="Entries full" />
+        <Suspense fallback={<FullHouseLoading />}>
+          <FullHouse
+            tournament={tournament}
+            capacity={capacity}
+            eventCount={categories.length}
+            prefill={{ name: flow.player_name, email: flow.player_email, phone: flow.player_phone }}
+            socials={TOURNAMENT_SOCIALS[tournament.id]}
+          />
+        </Suspense>
+      </Shell>
+    );
+  }
+
   if (formClosed) {
     return (
       <Shell bottomSpace={false}>
@@ -419,7 +462,7 @@ export function PublicRegistrationPage() {
   const summary = (step === "events" || step === "partners" || isPay) && picked.length > 0 ? (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
       <span style={monoLabel}>{picked.length} event{picked.length === 1 ? "" : "s"}</span>
-      <span style={{ fontFamily: ss.mono, fontSize: 15, color: ss.bone }}>{total === null ? "" : money(total)}</span>
+      <span style={{ fontFamily: ss.mono, fontSize: 14, lineHeight: "20px", color: ss.bone }}>{total === null ? "" : money(total)}</span>
     </div>
   ) : null;
 
@@ -446,7 +489,12 @@ export function PublicRegistrationPage() {
   return (
     <Shell>
       <TopBar deadline={tournament.registration_deadline} />
-      {step === "you" && <Hero tournament={tournament} highlights={TOURNAMENT_HIGHLIGHTS[tournament.id]} soloOffered={soloOffered} />}
+      {step === "you" && (
+        <Hero tournament={tournament} highlights={TOURNAMENT_HIGHLIGHTS[tournament.id]} soloOffered={soloOffered}>
+          {capacity && !capBypass && <SpotsMeter capacity={capacity} />}
+        </Hero>
+      )}
+      {step !== "you" && capacity && !capBypass && <SpotsStrip capacity={capacity} />}
       {/* Until events are picked, count the partner step (most entries are
           doubles) so the total doesn't jump on step 2. */}
       <Progress
@@ -526,7 +574,7 @@ export function PublicRegistrationPage() {
       )}
 
       {isPay && (
-        <p style={{ margin: "26px 0 0", fontSize: 13.5, color: ss.mute, lineHeight: 1.6 }}>
+        <p style={{ margin: "26px 0 0", fontSize: 12, lineHeight: "16px", color: ss.mute }}>
           How we use your details: <a className="ss-link" href={PRIVACY_URL} target="_blank" rel="noopener" style={{ color: ss.body }}>privacy policy</a>
           {GA_MEASUREMENT_ID && (
             <>
@@ -542,6 +590,19 @@ export function PublicRegistrationPage() {
 
       <ActionBar hidden={typing} summary={summary} onBack={index > 0 ? goBack : undefined}>{primary}</ActionBar>
     </Shell>
+  );
+}
+
+// While the full-house page loads: blocks shaped like its first screen.
+function FullHouseLoading() {
+  const block = (h: number, w = "100%", r = 24): React.CSSProperties => ({ height: h, width: w, borderRadius: r, background: ss.panel });
+  return (
+    <div aria-busy="true" aria-label="Loading" style={{ display: "grid", gap: 16, paddingTop: 12 }}>
+      <div style={{ ...block(0), aspectRatio: "3 / 2", height: "auto" }} />
+      <div style={block(48, "70%", 12)} />
+      <div style={block(48, "90%", 12)} />
+      <div style={block(48, "100%", 12)} />
+    </div>
   );
 }
 

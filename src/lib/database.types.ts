@@ -1023,6 +1023,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      registration_capacity: { Args: { p_tournament_id: string }; Returns: Json }
       reject_registration: {
         Args: { p_reason: string; p_reg_id: string }
         Returns: undefined
