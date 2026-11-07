@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Match } from "../../types";
-import { planKnockoutAdvance, applyPlan } from "../knockout";
+import { planKnockoutAdvance, applyPlan, stageTag } from "../knockout";
 
 // Minimal knockout match factory. Only the fields the planner reads matter.
 let seq = 0;
@@ -253,5 +253,23 @@ describe("planPlaceTeam: review fixes", () => {
     const plan = planPlaceTeam([bye], bye, "team_b_id", "P2", "c");
     expect(plan.updates).toEqual([]);
     expect(plan.blocked.map(m => m.id)).toEqual([bye.id]);
+  });
+});
+
+describe("stageTag (Matches tab rows)", () => {
+  it("tags the bronze match 3RD PLACE, not FINAL", () => {
+    const { qf, sf, fin, br, all } = bracket8("tag");
+    expect(stageTag(fin, all)).toBe("FINAL");
+    expect(stageTag(br[0], all)).toBe("3RD PLACE");
+    expect(stageTag(sf[0], all)).toBe("SEMI");
+    expect(stageTag(qf[0], all)).toBe("QUARTER");
+  });
+
+  it("tags group matches by letter and early knockout rounds by number", () => {
+    const group = { ...km("g", 0, 0), stage: "group" as const, group_idx: 1, round_idx: null };
+    expect(stageTag(group, [group])).toBe("GROUP B");
+    const rounds = [0, 1, 2, 3].map(r => km("big", r, 0));
+    expect(stageTag(rounds[0], rounds)).toBe("RD 1");
+    expect(stageTag(rounds[3], rounds)).toBe("FINAL");
   });
 });

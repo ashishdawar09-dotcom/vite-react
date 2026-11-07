@@ -18,6 +18,7 @@ import { byeAdvances, defaultFormat, recommendFormats, seedBracket, type FormatP
 import { planSinglesDraw } from "./lib/pairing";
 import { finalOnlyRows, hasStageRows, isStageAlreadyStarted, planStart } from "./lib/stageStart";
 import { finalScorePatch } from "./lib/scoring";
+import { scoreTaps } from "./hooks/useScoreTaps";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { AppFooter } from "./components/AppFooter";
 import { MoreDrawer, type TabId } from "./components/MoreDrawer";
@@ -685,21 +686,37 @@ export default function App() {
     else toast(`Removed ${removed} of ${bad.length}; ${failed} failed.`, "warn");
   };
 
-  const adjustScore = async (m: Match, side: "a" | "b", delta: number) => {
+  // +/− and typed scores go through one saver per match (src/lib/scoreTaps.ts):
+  // each tap steps from the number on screen and saves land in order. Stepping
+  // from the last number the server sent back lost most quick taps.
+  const adjustScore = (m: Match, side: "a" | "b", delta: number) => {
     if (!isAdmin) return;
-    const cur = side === "a" ? (m.score_a ?? 0) : (m.score_b ?? 0);
-    const next = Math.max(0, cur + delta);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
-    await db.updateMatch(m.id, side === "a" ? { score_a: next } : { score_b: next });
+    scoreTaps.step(m, side, delta);
   };
-  const setScore = async (m: Match, side: "a" | "b", val: number) => {
+  // Rejects if the save fails (the saver says so), so the box drops the number.
+  const setScore = (m: Match, side: "a" | "b", val: number) => {
     if (!isAdmin) return;
-    const next = Math.max(0, isNaN(val) ? 0 : val);
+    return scoreTaps.type(m, side, isNaN(val) ? 0 : val);
+  };
+  // Server copies of the matches hand the score boxes back once they've caught up.
+  useEffect(() => { for (const m of matches) scoreTaps.serverSaw(m); }, [matches]);
+  /**
+   * Write a result with the scores on screen. Taps are ignored meanwhile and
+   * any score still saving lands first, so nothing changes the score after it.
+   * False when it didn't save (already said in a toast).
+   */
+  const writeResult = async (m: Match, patch: Partial<Match>, failed: string): Promise<boolean> => {
+    const release = scoreTaps.lock(m);
     try {
-      await db.updateMatch(m.id, side === "a" ? { score_a: next } : { score_b: next });
-    } catch (e) {
-      toast("That score didn't save. Check the connection and enter it again.", "error");
-      throw e;
+      if (!(await scoreTaps.flush(m.id))) return false;
+      await db.updateMatch(m.id, patch);
+      return true;
+    } catch (e: unknown) {
+      toast(`${failed}: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return false;
+    } finally {
+      release();
     }
   };
   // Bracket writes for a knockout result, scoped to the match's own category
@@ -736,29 +753,19 @@ export default function App() {
   // update as the winner.
   const confirmInline = async (m: Match, shown?: ShownScores) => {
     if (!guard()) return;
-    const r = finalScorePatch(m, shown ? shown.a : m.score_a, shown ? shown.b : m.score_b, new Date().toISOString());
+    const r = finalScorePatch(m, shown ? shown.a : scoreTaps.shown(m, "a"), shown ? shown.b : scoreTaps.shown(m, "b"), new Date().toISOString());
     if (!r.ok) { toast(r.reason === "no-score" ? "Enter a score before confirming." : "No ties allowed — set a winner.", "warn"); return; }
     const plan = planBracket(m, r.winnerId); if (!plan) return;
-    try {
-      await db.updateMatch(m.id, r.patch);
-    } catch (e: unknown) {
-      toast(`Not confirmed: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
-      return;
-    }
+    if (!(await writeResult(m, r.patch, "Not confirmed"))) return;
     await applyBracket(plan);
     setEditingMatchId(null);
   };
   const saveEditedMatch = async (m: Match, shown?: ShownScores) => {
     if (!guard()) return;
-    const r = finalScorePatch(m, shown ? shown.a : m.score_a, shown ? shown.b : m.score_b, new Date().toISOString());
+    const r = finalScorePatch(m, shown ? shown.a : scoreTaps.shown(m, "a"), shown ? shown.b : scoreTaps.shown(m, "b"), new Date().toISOString());
     if (!r.ok) { toast("No ties allowed.", "warn"); return; }
     const plan = planBracket(m, r.winnerId); if (!plan) return;
-    try {
-      await db.updateMatch(m.id, r.patch);
-    } catch (e: unknown) {
-      toast(`Not saved: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
-      return;
-    }
+    if (!(await writeResult(m, r.patch, "Not saved"))) return;
     await applyBracket(plan);
     setEditingMatchId(null);
   };
@@ -1287,6 +1294,12 @@ export default function App() {
         @media (max-width: 700px) {
           .hero-title { font-size: 36px !important; max-width: 100% !important; }
           .hero-pad { padding: 28px 18px 24px !important; }
+          /* Header (AppHeader): the signed-in email gets its own line and
+             Payments, Admin and Sign out share the next one. */
+          .topbar { padding: 12px 16px !important; flex-wrap: wrap; row-gap: 10px; }
+          .topbar-admin { width: 100%; flex-wrap: wrap; }
+          .topbar-admin > a, .topbar-admin > button { flex: 1 1 0; justify-content: center; text-align: center; white-space: nowrap; padding-left: 6px !important; padding-right: 6px !important; }
+          .topbar-email { display: block !important; flex: 1 1 100%; min-height: 0 !important; padding: 6px 10px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         }
         @media print {
           body { background: #fff !important; color: #000 !important; }

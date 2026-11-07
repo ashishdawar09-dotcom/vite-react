@@ -17,12 +17,23 @@ vi.mock("../supabase", () => ({
 vi.mock("@sentry/react", () => ({ captureMessage: (...a: unknown[]) => captureMessage(...a) }));
 vi.mock("../notifications", () => ({ notifyCourtAllocated: (...a: unknown[]) => notifyCourtAllocated(...a) }));
 
-const { allocateCourtAndNotify, reassignCourt } = await import("../db");
+const { allocateCourtAndNotify, reassignCourt, rescheduleMatch } = await import("../db");
 const { isCourtTaken, courtTakenMessage } = await import("../courts");
 
 beforeEach(() => {
   rpc.mockReset(); update.mockReset(); eq.mockReset(); captureMessage.mockReset(); notifyCourtAllocated.mockReset();
   eq.mockResolvedValue({ error: null });
+});
+
+describe("rescheduleMatch", () => {
+  it("frees the court completely, so the match doesn't look like it's warming up", async () => {
+    await rescheduleMatch("m1");
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      status: "pending", started_at: null, court_number: null, court_allocated_at: null,
+      score_a: null, score_b: null, confirmed: false, winner_id: null,
+    }));
+    expect(eq).toHaveBeenCalledWith("id", "m1");
+  });
 });
 
 describe("allocateCourtAndNotify", () => {

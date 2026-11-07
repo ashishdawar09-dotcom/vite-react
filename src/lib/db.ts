@@ -634,9 +634,12 @@ export async function selectMatchWinner(id: string, winner_id: string) {
   if (error) throw error;
 }
 
+// Back to the queue with no court. court_allocated_at goes too: left set, the
+// match still looked like it was warming up, offered ▶ Begin Scoring, and that
+// made a live match with no court.
 export async function rescheduleMatch(id: string) {
   const { error } = await supabase.from("matches").update({
-    status: "pending", started_at: null, court_number: null, score_a: null, score_b: null,
+    status: "pending", started_at: null, court_number: null, court_allocated_at: null, score_a: null, score_b: null,
     extended_minutes: 0, confirmed: false, winner_id: null, is_walkover: false, confirmed_at: null,
   }).eq("id", id);
   if (error) throw error;
