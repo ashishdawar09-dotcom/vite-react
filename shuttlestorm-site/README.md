@@ -25,6 +25,16 @@ step. Registration itself lives in the main app (badminton.adawar.org).
   `https://cloudflareinsights.com` in `connect-src`), and the privacy page
   lists it. The numbers are in the Cloudflare dashboard under Analytics → Web
   analytics.
+- Live visitor count: `public/live.js`, loaded on every page right after the
+  Web Analytics line (a new page needs it too). While a page is open it
+  tells the tournament app which page it is and whether it's on screen
+  (after load, every 30 s on screen, on going to the background, and "bye"
+  on leaving), through Supabase Realtime's broadcast API with the app's
+  public key. No cookie, nothing stored. The directors see "N people on the
+  website right now" at the top of the app's Players tab. The message format
+  matches the app's `src/lib/liveVisitors.ts`; the CSP allows
+  `https://wdqooznwzesmjdvlcrxw.supabase.co` in `connect-src`, and the
+  privacy page lists it.
 - Security headers and CSP: `public/_headers`. `connect-src` must list bare
   `https://analytics.google.com` or GA4 hits are blocked.
 - Sitemap: `public/sitemap.xml`. Add new pages there.

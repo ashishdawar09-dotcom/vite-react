@@ -23,6 +23,7 @@
 <script src="/menu.js" defer></script>
 <script src="/chat.js" defer></script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "5a0c90d631fe4103a44633c7738fbaf7"}'></script><!-- End Cloudflare Web Analytics -->
+<script src="/live.js" defer></script>
 </head>
 <body>
 <header class="top"><div class="wrap">
@@ -33,7 +34,7 @@
 <main><div class="wrap">
   <p class="mono" style="color:var(--mute)">Shuttle Storm ’26</p>
   <h1>Privacy <em>policy.</em></h1>
-  <p class="updated">Last updated November 4, 2026</p>
+  <p class="updated">Last updated November 7, 2026</p>
 
   <p>Shuttle Storm Badminton Club (“we”) runs the Shuttle Storm ’26 tournament. This policy covers this website, <strong>shuttlestorm.adawar.org</strong>, and tournament registration at <strong>badminton.adawar.org</strong>. Questions or requests: <a href="mailto:ashishdawar09@gmail.com">ashishdawar09@gmail.com</a>.</p>
 
@@ -41,6 +42,7 @@
   <p>This site has no forms and no accounts. It collects:</p>
   <ul>
     <li><strong>Visit statistics (Google Analytics).</strong> Pages viewed, approximate location (city and country), device and browser type, how you found us, and clicks on the Register buttons. Google Analytics does not store your IP address.</li>
+    <li><strong>Live visitor count.</strong> While a page is open, it tells our tournament app which page it is and whether it’s on screen, once when it loads, every 30 seconds while you’re reading, and when you leave, so the organizers can see how many people are on the site right now. It carries no name, no cookie and nothing that identifies you, and it isn’t stored.</li>
     <li><strong>Visit counts (Cloudflare Web Analytics).</strong> Pages viewed, how fast they load, the site that sent you, and device, browser and country. It sets no cookies, and Cloudflare does not track individual visitors.</li>
     <li><strong>Advertising (Google Ads).</strong> We advertise the tournament with Google Ads. If you reach us through one of our ads, Google Ads cookies record that click so we can see whether the ad led to a registration. We don’t use Google remarketing, and Google Ads never receives your name or contact details.</li>
     <li><strong>Advertising (Meta Pixel).</strong> We also advertise on Facebook and Instagram. The Meta Pixel records page visits, clicks on the Register buttons and completed registrations, so we can see whether those ads work and show our tournament ads to people who visited this site. Meta links this to your Facebook or Instagram account if you have one. It never receives your name, email or phone number from us. You can control ads from Meta in your <a href="https://accountscenter.facebook.com/ad_preferences" rel="noopener">Facebook ad preferences</a>.</li>
@@ -68,7 +70,7 @@
     <li><strong>Voice assistant.</strong> If you tap the microphone, your question is sent to Cloudflare’s AI service to produce an answer.</li>
     <li><strong>WhatsApp updates.</strong> If you send your code to our WhatsApp number, <strong>+91 98183 38393</strong> (an Indian number; it’s the club’s WhatsApp Business line), we keep your WhatsApp ID (usually your phone number), your WhatsApp name and when you started or stopped the updates. We use them only to send you a reminder the evening before the tournament and a message when your court is ready. We never message anyone who hasn’t messaged us first, and replying STOP ends the updates.</li>
   </ul>
-  <p>The registration app also sends technical error reports to Sentry, with names and emails removed, so we can fix bugs. On the registration page, Google Analytics records that a registration was completed, the payment method and the amount, and shares that count with Google Ads. The Meta Pixel records the same completed registration and amount. Neither records your name or contact details.</p>
+  <p>While the registration form is open, it also tells the organizers’ live count which step it’s on, the same way and with nothing that identifies you. The registration app also sends technical error reports to Sentry, with names and emails removed, so we can fix bugs. On the registration page, Google Analytics records that a registration was completed, the payment method and the amount, and shares that count with Google Ads. The Meta Pixel records the same completed registration and amount. Neither records your name or contact details.</p>
   <p>With your registration we also save how you found us: your answer to “How did you hear about us?” (optional) and, if you arrived from one of our ads or posts, the campaign tags on that link (for example “meta / paid_social”) and whether the click came from a Google or Meta ad. We never store the ad click ID itself. This lets us check which ads actually bring in entries.</p>
 
   <h2>Photos at the event</h2>
@@ -82,7 +84,7 @@
   <ul>
     <li><strong>Cloudflare</strong>: hosting for this site, security, visit counts (Web Analytics) and the voice assistant</li>
     <li><strong>Vercel</strong>: hosting for the registration app</li>
-    <li><strong>Supabase</strong>: the registration database</li>
+    <li><strong>Supabase</strong>: the registration database and the live visitor count</li>
     <li><strong>Stripe</strong>: card payments</li>
     <li><strong>Resend</strong>: email delivery</li>
     <li><strong>WhatsApp</strong> (Meta): delivery of the WhatsApp updates you ask for</li>

@@ -7,6 +7,7 @@ import { matchesPlayerSearch } from "../../lib/playerSearch";
 import { Av } from "../../components/ui";
 import { toast } from "../../components/Toast";
 import type { Category, Player, Tournament } from "../../types";
+import { LiveVisitors } from "./LiveVisitors";
 import { PendingRegistrationsPanel } from "./PendingRegistrationsPanel";
 
 /**
@@ -102,6 +103,7 @@ export function RegisterTab({
 
   return (
     <div>
+      <LiveVisitors key={tournament?.id ?? "none"} tournament={tournament} isAdmin={isAdmin} />
       <PendingRegistrationsPanel tournament={tournament} categories={categories} isAdmin={isAdmin} />
 
       <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
