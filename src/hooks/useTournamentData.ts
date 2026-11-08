@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react";
 import { supabase } from "../lib/supabase";
 import * as db from "../lib/db";
 import { createRefresher, type FetchResult } from "../lib/refreshRetry";
+import { startSpectatorPoll } from "../lib/spectatorPoll";
 import type { Category, Match, Player, PlayerCategory, Team } from "../types";
 
 function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T & { cancel(): void } {
@@ -89,16 +90,25 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
     await Promise.all([loadPlayers(), loadTeams(), loadMatches(), loadCategories(), loadPlayerCategories()]);
   }, [loadPlayers, loadTeams, loadMatches, loadCategories, loadPlayerCategories]);
 
+  // Numbers each snapshot request, so an answer that arrives after a newer
+  // request has gone out is dropped (the poll stops waiting on a stalled
+  // request and sends another; see lib/spectatorPoll.ts).
+  const snapshotSeqRef = useRef(0);
+
   // Single-RPC snapshot for spectators. Falls back to legacy multi-fetch
   // if the live_snapshot RPC isn't deployed yet.
   const loadAllSnapshot = useCallback(async () => {
-    if (!tidRef.current) return;
+    const tid = tidRef.current;
+    if (!tid) return;
     if (snapshotUnavailableRef.current) {
       await loadAllLegacy();
       return;
     }
+    const seq = ++snapshotSeqRef.current;
     try {
-      const snap = await db.liveSnapshot(tidRef.current);
+      const snap = await db.liveSnapshot(tid);
+      // Superseded by a newer request, or the page moved to another tournament.
+      if (seq !== snapshotSeqRef.current || tidRef.current !== tid) return;
       if (snap === null) {
         snapshotUnavailableRef.current = true;
         await loadAllLegacy();
@@ -136,10 +146,8 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
     setLoading(true);
     const retries = refresher;
 
-    const initialLoad = isAdmin ? loadAllLegacy : loadAllSnapshot;
-    initialLoad().then(() => { if (!cancelled) setLoading(false); });
-
     if (isAdmin) {
+      loadAllLegacy().then(() => { if (!cancelled) setLoading(false); });
       // Admin: realtime (1 connection) for instant updates
       const pgChannel = supabase
         .channel(`pg:${tournamentId}`)
@@ -214,38 +222,27 @@ export function useTournamentData(tournamentId: string | null, isAdmin = false) 
       // are live (scores need to feel real-time); 15s when nothing's live
       // (between matches / pre-event / post-event); 30s while the endpoint
       // is down and polls hit the RPC directly. Skips ticks while
-      // the tab is hidden to save bandwidth. setTimeout chain (not interval)
-      // so we can adjust the delay between cycles.
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      const scheduleNext = (delay: number) => {
-        if (cancelled) return;
-        timeoutId = setTimeout(async () => {
-          if (cancelled) return;
-          if (!document.hidden) {
-            await loadAllSnapshot();
-          }
-          if (cancelled) return;
-          scheduleNext(db.liveSnapshotPollDelay(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS));
-        }, delay);
-      };
-      scheduleNext(SPECTATOR_POLL_LIVE_MS); // first cycle always 5s in case something is live now
-      // Visibility flip → force an immediate tick so coming back to the tab
-      // gives a fresh snapshot. Reset the cycle so the next interval honours
-      // the current live state.
-      const onVisibility = () => {
-        if (cancelled || document.hidden) return;
-        if (timeoutId) clearTimeout(timeoutId);
-        void loadAllSnapshot().finally(() => {
-          if (!cancelled) {
-            scheduleNext(db.liveSnapshotPollDelay(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS));
-          }
-        });
-      };
-      document.addEventListener("visibilitychange", onVisibility);
+      // the tab is hidden to save bandwidth, and refreshes at once when it's
+      // shown again. One loop at a time, however often the phone is locked
+      // and unlocked (see lib/spectatorPoll.ts).
+      const poll = startSpectatorPoll({
+        fetch: loadAllSnapshot,
+        firstDelay: SPECTATOR_POLL_LIVE_MS, // first cycle always 5s in case something is live now
+        nextDelay: () => db.liveSnapshotPollDelay(hasLiveRef.current ? SPECTATOR_POLL_LIVE_MS : SPECTATOR_POLL_IDLE_MS),
+        isHidden: () => document.hidden,
+        onVisibilityChange: cb => {
+          document.addEventListener("visibilitychange", cb);
+          return () => document.removeEventListener("visibilitychange", cb);
+        },
+      });
+      poll.fetchNow().then(() => { if (!cancelled) setLoading(false); });
+      const requests = snapshotSeqRef;
       return () => {
         cancelled = true;
-        if (timeoutId) clearTimeout(timeoutId);
-        document.removeEventListener("visibilitychange", onVisibility);
+        poll.stop();
+        // Drop any answer still on its way: it mustn't land after another
+        // tournament, or the admin's full player rows, have loaded.
+        requests.current++;
         retries.reset();
       };
     }
