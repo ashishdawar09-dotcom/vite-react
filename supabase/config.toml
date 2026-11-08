@@ -418,6 +418,11 @@ enabled = true
 [functions.stripe-webhook]
 verify_jwt = false
 
+# Resend delivery events; the function checks the Svix signature
+# (RESEND_WEBHOOK_SECRET) itself.
+[functions.resend-webhook]
+verify_jwt = false
+
 # Called by the database (pg_net) with a shared secret, or by an admin;
 # the function checks both itself.
 [functions.registration-email]

@@ -23,6 +23,7 @@ import * as db from "../lib/db";
 import { applyPlan, confirmKnockoutPlan, stageTag, type KnockoutPlan } from "../lib/knockout";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
+import { CourtCallEmailStatus } from "../features/raceEmails/CourtCallEmailStatus";
 import { MatchHistoryModal } from "./MatchHistoryModal";
 import { toast } from "./Toast";
 import { fmtClock } from "../hooks/useScheduling";
@@ -515,6 +516,16 @@ export function MatchesTab({
           <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 0.5 }}>{fmtClock(m.projected_start_at)}</div>
           <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: deltaColor, letterSpacing: 1 }}>{m.delta_label}</div>
         </div>
+
+        {/* Did the court-call email reach every player? (admin, while warming up) */}
+        {isAdmin && isWarming && (
+          <CourtCallEmailStatus
+            tone="dark"
+            matchId={m.id}
+            allocatedAt={m.court_allocated_at}
+            names={[ta?.p1, ta?.p2, tb?.p1, tb?.p2].filter((p): p is NonNullable<typeof p> => !!p).map((p) => [p.id, p.name])}
+          />
+        )}
 
         {/* Admin actions */}
         {isAdmin && (

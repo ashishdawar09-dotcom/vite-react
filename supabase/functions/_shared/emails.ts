@@ -318,7 +318,7 @@ function layout(o: {
   details: [string, string][];
   stepsHeading: string;
   steps: Step[];
-  data: EmailData;
+  data: Pick<EmailData, "tournament" | "assetBase" | "privacyUrl">;
 }): string {
   const t = o.data.tournament;
   const base = o.data.assetBase;
@@ -1179,6 +1179,126 @@ export function adminNewEntry(d: AdminEntryData): RenderedEmail {
     "",
     admin && `Admin app: ${admin}`,
     "Reply to this email to write to the player directly.",
+  ]);
+  return { subject, html, text };
+}
+
+// ---------- player briefings: the day before, and the morning of ----------
+//
+// Sent from the admin app's Emails tab (player-briefing). One per player,
+// with their own events and partners, and their first match only when a
+// director has given it a time: the live page's projection treats each event
+// as if it had every court, so it isn't promised by email.
+
+export type BriefingData = {
+  tournament: EmailTournament;
+  kind: "day_before" | "morning_of";
+  player: { name: string };
+  entries: { category: string; partner: string | null }[];
+  firstMatch: { at: string; category: string; court: number | null; opponent: string | null } | null;
+  notes: string | null;            // from the directors, plain text
+  liveUrl: string;
+  profileUrl: string | null;       // the player's own page
+  assetBase: string;
+  privacyUrl?: string | null;
+};
+
+// "10:12 am", at the venue.
+function venueClock(iso: string): string | null {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString("en-US", { timeZone: VENUE_CLOCK, hour: "numeric", minute: "2-digit" }).toLowerCase();
+}
+
+export function playerBriefing(d: BriefingData): RenderedEmail {
+  const t = d.tournament;
+  const name = firstName(d.player.name);
+  const morning = d.kind === "morning_of";
+  const start = clockTime(t.event_time);
+  const live = safeUrl(d.liveUrl);
+  const profile = safeUrl(d.profileUrl);
+  const first = d.firstMatch;
+  const firstAt = first ? venueClock(first.at) : null;
+
+  const subject = morning
+    ? `Today: ${t.name}${start ? ` starts at ${start}` : ""}`
+    : `Tomorrow: your plan for ${t.name}`;
+
+  const entriesHtml = d.entries.length
+    ? d.entries.map((e) => `${esc(e.category)}${e.partner ? ` <span style="color:${C.mute}">with</span> ${esc(e.partner)}` : ""}`).join("<br>")
+    : "Your events are on your player page.";
+  const firstHtml = first && firstAt
+    ? `<strong style="color:${C.volt}">About ${esc(firstAt)}</strong> · ${esc(first.category)}` +
+      (first.court ? ` · Court ${first.court}` : "") +
+      (first.opponent ? `<br><span style="color:${C.mute}">vs</span> ${esc(first.opponent)}` : "")
+    : "Watch the live page: each court is called there, and by email, when it's yours.";
+  const notes = d.notes?.trim()
+    ? esc(d.notes.trim()).replace(/\r?\n/g, "<br>")
+    : null;
+
+  const details: [string, string][] = [
+    [d.entries.length > 1 ? "Your events" : "Your event", entriesHtml],
+    ["First match", firstHtml],
+    ...(start ? [["First serve", esc(start)] as [string, string]] : []),
+    ...(t.venue_name ? [["Venue", esc(t.venue_name)] as [string, string]] : []),
+    ...(notes ? [["From the directors", notes] as [string, string]] : []),
+    ...(profile
+      ? [["Your matches", `<a href="${esc(profile)}" style="color:${C.bone}">Your player page</a>`] as [string, string]]
+      : []),
+  ];
+
+  const intro = morning
+    ? `It's game day. ${start ? `First serve is at <strong style="color:${C.bone}">${esc(start)}</strong>. ` : ""}` +
+      "Check in at the desk when you arrive, then keep your phone handy: your court is called by email the moment it's yours."
+    : `${esc(t.name)} is tomorrow. Here's your day in one place: your events, when to arrive, and where to follow your matches.`;
+
+  const rules = safeUrl(t.rules_url);
+  const steps: Step[] = [
+    {
+      n: 1,
+      gif: "step-arrive.gif",
+      alt: "Shuttle flying over the net",
+      title: first && firstAt ? "Arrive 30 minutes before your first match" : "Arrive 30 minutes early",
+      html: `Check in at the desk, warm up, and bring non-marking court shoes. ${NO_SHOW_RULE}`,
+      cta: rules ? [rules, "Read the rules"] : undefined,
+    },
+    {
+      n: 2,
+      gif: "step-draw.gif",
+      alt: "Draw bracket filling in",
+      title: "Follow your matches live",
+      html: "The live page shows every court, the draw and the scores as they happen. " +
+        "When a court is yours you get an email straight away. Running late or can't play? Reply to any of our emails.",
+      cta: live ? [live, "Open the live page"] : undefined,
+      wideCta: true,
+    },
+  ];
+
+  const html = layout({
+    title: subject,
+    preheader: morning
+      ? `Game day. ${first && firstAt ? `Your first match is about ${firstAt}.` : "Check in at the desk when you arrive."}`
+      : `Your events, when to arrive, and where to follow your matches.`,
+    hero: { gif: "hero.gif", alt: `${t.name}. ${morning ? "Game day." : "See you tomorrow."}` },
+    kicker: morning ? "Game day" : "See you tomorrow",
+    heading: morning ? `Game day, ${esc(name)}.` : `See you tomorrow, ${esc(name)}.`,
+    intro,
+    details,
+    stepsHeading: morning ? "Today" : "Tomorrow",
+    steps,
+    data: d,
+  });
+
+  const text = textBlock([
+    `Hi ${name},`,
+    "",
+    strip(intro),
+    "",
+    ...details.map(([k, v]) => k === "Your matches" && profile ? `${k}: ${profile}` : `${k}: ${strip(v.replace(/<br>/g, "\n  "))}`),
+    "",
+    (morning ? "TODAY" : "TOMORROW"),
+    ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
+    textFooter(t),
   ]);
   return { subject, html, text };
 }

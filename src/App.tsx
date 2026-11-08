@@ -49,6 +49,7 @@ const RegisterTab = lazyWithReload(() => import("./features/registration/Registe
 const TeamsTab = lazyWithReload(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
 const AdminManager = lazyWithReload(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
 const TvTab = lazyWithReload(() => import("./features/venueTv/TvTab").then(m => ({ default: m.TvTab })));
+const PlayerEmailsTab = lazyWithReload(() => import("./features/raceEmails/PlayerEmailsTab").then(m => ({ default: m.PlayerEmailsTab })));
 
 // GroupsTab/KnockoutTab take a card component. It used to be declared inside
 // App's render, so every App render (any realtime update) gave it a new type
@@ -1015,6 +1016,7 @@ export default function App() {
             {tabBtn("scoreboard", "Scoreboard", "🏅")}
             {isAdmin && tabBtn("categories", "Categories", "🏷️")}
             {isAdmin && tabBtn("tv", "TV", "📺")}
+            {isAdmin && tabBtn("emails", "Emails", "✉️")}
           </>
         )}
       </nav>
@@ -1078,6 +1080,12 @@ export default function App() {
         {current && tab === "tv" && isAdmin && (
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
             <TvTab tournament={current} />
+          </Suspense>
+        )}
+
+        {current && tab === "emails" && isAdmin && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
+            <PlayerEmailsTab tournament={current} players={players} />
           </Suspense>
         )}
 

@@ -45,6 +45,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      briefing_emails: {
+        Row: {
+          created_at: string
+          delivery_at: string | null
+          delivery_detail: string | null
+          delivery_status: string | null
+          email: string
+          error_message: string | null
+          id: string
+          kind: string
+          player_id: string
+          provider_message_id: string | null
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
+          email: string
+          error_message?: string | null
+          id?: string
+          kind: string
+          player_id: string
+          provider_message_id?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status: string
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
+          email?: string
+          error_message?: string | null
+          id?: string
+          kind?: string
+          player_id?: string
+          provider_message_id?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "briefing_emails_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "briefing_emails_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           age_band: string | null
@@ -275,28 +344,40 @@ export type Database = {
       notification_log: {
         Row: {
           channel: string
+          delivery_at: string | null
+          delivery_detail: string | null
+          delivery_status: string | null
           error_message: string | null
           id: string
           match_id: string
           player_id: string
+          provider_message_id: string | null
           sent_at: string
           status: string
         }
         Insert: {
           channel: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
           error_message?: string | null
           id?: string
           match_id: string
           player_id: string
+          provider_message_id?: string | null
           sent_at?: string
           status: string
         }
         Update: {
           channel?: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
           error_message?: string | null
           id?: string
           match_id?: string
           player_id?: string
+          provider_message_id?: string | null
           sent_at?: string
           status?: string
         }
