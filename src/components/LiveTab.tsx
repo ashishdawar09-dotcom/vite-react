@@ -24,6 +24,34 @@ const LIVE_BACKDROP =
 const BACKDROP_ENTER = { opacity: 0, scale: 1.5 };
 const BACKDROP_SHOW = { opacity: 1, scale: 1, transition: { duration: 2, ease: [0.25, 0.1, 0.25, 1] as const } };
 
+// The LIVE badge's pulsing dot. Constant objects, so a refresh never restarts it.
+const LIVE_DOT_PULSE = { opacity: [1, 0.4, 1] };
+const LIVE_DOT_TIMING = { duration: 1.4, repeat: Infinity, ease: "easeInOut" as const };
+
+// Defined here rather than inside LiveTab: a component made inside another
+// one is a new component on every render, so React rebuilt these (and the
+// pulsing LIVE dot in a header badge) from scratch on every score refresh.
+function SectionHeader({ accent, children, badge }: { accent: string; children: React.ReactNode; badge?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ width: 4, height: 22, background: accent, borderRadius: 1 }} />
+      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{children}</h3>
+      {badge}
+    </div>
+  );
+}
+
+function StatTile({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) {
+  return (
+    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 10, padding: "18px 20px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
+      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 10 }}>{label}</div>
+      {/* MAKEOVER: 26 -> 40 px Oswald numeral with tabular-nums for broadcast-quality alignment */}
+      <div className="font-display" style={{ fontSize: 40, fontWeight: 700, color: "#fff", lineHeight: 1, letterSpacing: 0.5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, fontWeight: 500 }}>{sub}</div>}
+    </div>
+  );
+}
+
 export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches, players, playerCategories, onShowProfile }: {
   teamsView: TeamView[];
   allTeamById: Record<string, TeamView | undefined>;
@@ -154,23 +182,6 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       </div>
     );
   }
-
-  const SectionHeader = ({ accent, children, badge }: { accent: string; children: React.ReactNode; badge?: React.ReactNode }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-      <div style={{ width: 4, height: 22, background: accent, borderRadius: 1 }} />
-      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{children}</h3>
-      {badge}
-    </div>
-  );
-
-  const StatTile = ({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) => (
-    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 10, padding: "18px 20px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 10 }}>{label}</div>
-      {/* MAKEOVER: 26 -> 40 px Oswald numeral with tabular-nums for broadcast-quality alignment */}
-      <div className="font-display" style={{ fontSize: 40, fontWeight: 700, color: "#fff", lineHeight: 1, letterSpacing: 0.5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, fontWeight: 500 }}>{sub}</div>}
-    </div>
-  );
 
   const stageBadge = (m: Match) => m.stage === "group" ? `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : m.stage === "knockout" ? `ROUND ${(m.round_idx ?? 0) + 1}` : "";
 
@@ -369,7 +380,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         <SectionReveal>
         <div style={{ marginBottom: 32 }}>
           {/* MAKEOVER: replaced broken `pulse-strong` CSS keyframe (was never defined) with Framer Motion */}
-          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><motion.span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
+          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><motion.span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} animate={reduceMotion ? undefined : LIVE_DOT_PULSE} transition={LIVE_DOT_TIMING} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
             {live.map(m => {
               const ta = m.team_a_id ? teamById[m.team_a_id] : null;
@@ -384,7 +395,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050", position: "relative", zIndex: 1 }}>
                     <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
-                      <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} />LIVE
+                      <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : LIVE_DOT_PULSE} transition={LIVE_DOT_TIMING} />LIVE
                     </span>
                   </div>
                   <div style={{ padding: isMobile ? "12px 14px" : "16px 18px", position: "relative", zIndex: 1 }}>
