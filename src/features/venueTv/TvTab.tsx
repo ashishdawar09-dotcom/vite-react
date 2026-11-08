@@ -26,7 +26,8 @@ const DURATIONS: { label: string; minutes: number | null }[] = [
 ];
 const MAX = 120;
 
-const card: React.CSSProperties = { background: "#0a1628", border: "1px solid #1a3050", borderRadius: 14, padding: 18, marginBottom: 16 };
+// Explicit text colours: the admin shell's own text colour is dark, which disappears on these navy cards.
+const card: React.CSSProperties = { background: "#0a1628", border: "1px solid #1a3050", borderRadius: 14, padding: 18, marginBottom: 16, color: "#e2e8f0" };
 const label: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 700, letterSpacing: 0.4, color: "#94a3b8", marginBottom: 6 };
 const segBtn = (on: boolean): React.CSSProperties => ({ padding: "8px 12px", borderRadius: 8, border: `1px solid ${on ? "#00d4ff" : "#1a3050"}`, background: on ? "rgba(0,212,255,0.12)" : "#070F1F", color: on ? "#e0f9ff" : "#cbd5e1", fontSize: 13, fontWeight: 700, cursor: "pointer" });
 const primary: React.CSSProperties = { padding: "10px 16px", borderRadius: 10, border: "none", background: "#00d4ff", color: "#00131A", fontSize: 14, fontWeight: 800, cursor: "pointer" };
@@ -97,10 +98,10 @@ export function TvTab({ tournament }: { tournament: Tournament }) {
   }
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div style={{ maxWidth: 820, color: "#e2e8f0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
         <span style={{ fontSize: 28 }} aria-hidden="true">📺</span>
-        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Venue TV</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#f8fafc" }}>Venue TV</h2>
       </div>
 
       <section style={card} aria-labelledby="tv-link-h">
