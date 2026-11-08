@@ -130,7 +130,11 @@ export function TvShowPage() {
   const snap = feed.snap;
   const scheduling = useScheduling(snap?.matches ?? [], snap?.categories ?? [], snap?.tournament?.num_courts ?? 4);
 
-  const siteUrl = `${window.location.host}/t/${slug ?? ""}`;
+  // Shown under the scan code and in the strip. A preview's long vercel.app
+  // host would wrap onto several lines, so long hosts are shortened.
+  const host = window.location.host;
+  const shownHost = host.length > 28 ? `${host.slice(0, 12)}…${host.slice(-14)}` : host;
+  const siteUrl = `${shownHost}/t/${slug ?? ""}`;
   const qrSvg = useMemo(() => renderSVG(`${window.location.origin}/t/${slug ?? ""}`, { ecc: "M", border: 1, pixelSize: 8 }), [slug]);
 
   // Start the show once the first snapshot is in, then feed it every new one.
