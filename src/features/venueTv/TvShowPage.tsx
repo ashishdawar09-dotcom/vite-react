@@ -114,6 +114,7 @@ export function TvShowPage() {
   const showRef = useRef<TvShow | null>(null);
   const skewRef = useRef(0);
   const [idle, setIdle] = useState(false);
+  const [fullscreen, setFullscreen] = useState(() => typeof document !== "undefined" && !!document.fullscreenElement);
 
   // Resolve the slug, retrying through Wi-Fi drops (5 s, 10 s, 20 s, then every 30 s).
   useEffect(() => {
@@ -197,16 +198,30 @@ export function TvShowPage() {
     return () => { cancelled = true; document.removeEventListener("visibilitychange", acquire); if (lock) void lock.release().catch(() => {}); };
   }, []);
 
-  // A laptop on HDMI: hide the pointer after a few seconds; one click or key goes full screen.
+  // A laptop on HDMI: hide the pointer after a few seconds; one click or key goes full screen
+  // (no tabs, address bar or border) and Esc always leaves it.
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null;
     const wake = () => { setIdle(false); if (t) clearTimeout(t); t = setTimeout(() => setIdle(true), 3_000); };
     const full = () => { if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen().catch(() => {}); };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}); return; }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      full();
+    };
+    const onFs = () => setFullscreen(!!document.fullscreenElement);
     wake();
     window.addEventListener("mousemove", wake);
     window.addEventListener("click", full);
-    window.addEventListener("keydown", full);
-    return () => { if (t) clearTimeout(t); window.removeEventListener("mousemove", wake); window.removeEventListener("click", full); window.removeEventListener("keydown", full); };
+    window.addEventListener("keydown", key);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => {
+      if (t) clearTimeout(t);
+      window.removeEventListener("mousemove", wake);
+      window.removeEventListener("click", full);
+      window.removeEventListener("keydown", key);
+      document.removeEventListener("fullscreenchange", onFs);
+    };
   }, []);
 
   useEffect(() => { document.title = snap?.tournament?.name ? `${snap.tournament.name} · TV` : "Venue TV"; }, [snap?.tournament?.name]);
@@ -215,7 +230,8 @@ export function TvShowPage() {
   return (
     <div ref={pageRef} className={`tvs-page${options.colours === "navy" ? " navy" : ""}${idle ? " idle" : ""}`} aria-label="Venue TV">
       <div ref={stageRef} className="tvs-stage" data-theme={options.colours} />
-      {!snap && <div className="tvs-msg"><p><b>Getting the latest scores</b>{feed.failures > 0 ? "Still connecting. This screen keeps trying by itself." : "One moment."}</p></div>}
+      {!fullscreen && !idle && snap && <p className="tvs-fs-hint">Click anywhere for full screen</p>}
+      {!snap &&<div className="tvs-msg"><p><b>Getting the latest scores</b>{feed.failures > 0 ? "Still connecting. This screen keeps trying by itself." : "One moment."}</p></div>}
     </div>
   );
 }

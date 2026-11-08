@@ -560,3 +560,6 @@
 @media (prefers-reduced-motion: reduce){
   .tvs-stage .show.leaving,.tvs-stage .show.arriving{animation:none}
 }
+
+/* setup hint while a mouse moves and the page isn't full screen yet */
+.tvs-fs-hint{position:fixed;left:50%;bottom:24px;z-index:10;margin:0;transform:translateX(-50%);padding:10px 18px;border-radius:9999px;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.78);color:#fff;font:600 16px/22px "Geist Variable",ui-sans-serif,system-ui,sans-serif;white-space:nowrap;pointer-events:none}
