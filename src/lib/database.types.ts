@@ -752,6 +752,50 @@ export type Database = {
         }
         Relationships: []
       }
+      // Added by hand (PR: admin waitlist panel) to match migration
+      // 20261107080000_entry_cap_and_waitlist.sql; the rest of this file was
+      // generated earlier and is not regenerated here.
+      registration_waitlist: {
+        Row: {
+          admin_email_status: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          phone: string
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          admin_email_status?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          phone: string
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          admin_email_status?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          phone?: string
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registration_waitlist_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_deletions: {
         Row: {
           category_id: string | null

@@ -9,6 +9,7 @@ import { toast } from "../../components/Toast";
 import type { Category, Player, Tournament } from "../../types";
 import { LiveVisitors } from "./LiveVisitors";
 import { PendingRegistrationsPanel } from "./PendingRegistrationsPanel";
+import { WaitlistPanel } from "./WaitlistPanel";
 
 /**
  * Player roster + management. Admins can add players with category
@@ -104,6 +105,7 @@ export function RegisterTab({
   return (
     <div>
       <LiveVisitors key={tournament?.id ?? "none"} tournament={tournament} isAdmin={isAdmin} />
+      <WaitlistPanel key={`waitlist-${tournament?.id ?? "none"}`} tournament={tournament} isAdmin={isAdmin} />
       <PendingRegistrationsPanel tournament={tournament} categories={categories} isAdmin={isAdmin} />
 
       <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />

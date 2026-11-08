@@ -1007,6 +1007,28 @@ export type WaitlistEntry = {
   website?: string; // honeypot, left empty by people
 };
 
+// Everyone on a tournament's waitlist, first to join first (admin only: RLS
+// lets admins read the table and nobody else). Joining again with the same
+// email keeps the person's place, because created_at never changes.
+export async function listRegistrationWaitlist(tournament_id: string): Promise<WaitlistRow[]> {
+  const { data, error } = await supabase
+    .from("registration_waitlist")
+    .select("id, name, email, phone, created_at, admin_email_status")
+    .eq("tournament_id", tournament_id)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as WaitlistRow[];
+}
+
+export type WaitlistRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string; // digits only, as join-waitlist stores it
+  created_at: string;
+  admin_email_status: string | null;
+};
+
 // Puts someone on a full tournament's waitlist (join-waitlist Edge Function,
 // no sign-in). The directors get an email for each new name.
 export async function joinRegistrationWaitlist(
