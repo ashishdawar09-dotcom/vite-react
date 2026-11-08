@@ -819,6 +819,7 @@ export type Database = {
           student_label: string | null
           student_price: number | null
           terms_text: string | null
+          tv_film_on: boolean
           tv_messages: Json
           venue_address: string | null
           venue_map_url: string | null
@@ -852,6 +853,7 @@ export type Database = {
           student_label?: string | null
           student_price?: number | null
           terms_text?: string | null
+          tv_film_on?: boolean
           tv_messages?: Json
           venue_address?: string | null
           venue_map_url?: string | null
@@ -885,6 +887,7 @@ export type Database = {
           student_label?: string | null
           student_price?: number | null
           terms_text?: string | null
+          tv_film_on?: boolean
           tv_messages?: Json
           venue_address?: string | null
           venue_map_url?: string | null
@@ -1022,6 +1025,10 @@ export type Database = {
       remove_tv_message: {
         Args: { p_id: string; p_tournament_id: string }
         Returns: Json
+      }
+      set_tv_film: {
+        Args: { p_on: boolean; p_tournament_id: string }
+        Returns: boolean
       }
       live_snapshot: { Args: { p_tournament_id: string }; Returns: Json }
       my_player: { Args: { p_tournament_id: string }; Returns: Json }
