@@ -5,6 +5,7 @@ import * as db from "../../lib/db";
 import { useScheduling } from "../../hooks/useScheduling";
 import { buildTvModel, type TvSnapshot } from "./tvModel";
 import { createTvShow, type DesignKey, type TvShow } from "./tvEngine";
+import { startTvFeed } from "./tvFeed";
 import { clockSkewMs } from "./tvTime";
 
 /**
@@ -30,8 +31,6 @@ if (typeof AbortSignal !== "undefined" && typeof (AbortSignal as unknown as { ti
   };
 }
 
-const POLL_LIVE_MS = 5_000;
-const POLL_IDLE_MS = 15_000;
 const STAGE_W = 1920;
 const STAGE_H = 1080;
 /** Small shifts every few minutes so nothing stays on exactly the same pixels all day. */
@@ -52,53 +51,26 @@ function readOptions(search: string) {
 type Feed = { snap: TvSnapshot | null; receivedAt: number; failures: number };
 
 /**
- * One poll loop for the TV: the cached /api/snapshot feed (RPC fallback, see
- * db.liveSnapshot) every 5 s while anything is on court, 15 s otherwise. A
- * single timer, never two requests at once, so a TV that sleeps and wakes
- * cannot multiply its polling.
+ * The TV's score feed (tvFeed.ts): every 5 s while anything is on court, 15 s
+ * otherwise, one loop however often the TV sleeps and wakes, and a request
+ * that never answers is given up after 60 s instead of freezing the screen.
  */
 function useTvFeed(tournamentId: string | null): Feed {
   const [feed, setFeed] = useState<Feed>({ snap: null, receivedAt: 0, failures: 0 });
   useEffect(() => {
     if (!tournamentId) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let inFlight = false;
-    const schedule = (ms: number) => {
-      if (cancelled) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(tick, ms);
-    };
-    async function tick() {
-      timer = null;
-      if (cancelled || inFlight) return;
-      if (document.hidden) { schedule(POLL_IDLE_MS); return; }
-      inFlight = true;
-      let busy = false;
-      try {
-        const snap = (await db.liveSnapshot(tournamentId!)) as TvSnapshot | null;
-        if (cancelled) return;
-        if (snap && snap.tournament) {
-          busy = snap.matches.some(m => m.status === "live" || (m.status === "pending" && m.court_number != null && !!m.court_allocated_at));
-          setFeed({ snap, receivedAt: Date.now(), failures: 0 });
-        } else {
-          setFeed(f => ({ ...f, failures: f.failures + 1 }));
-        }
-      } catch {
-        if (!cancelled) setFeed(f => ({ ...f, failures: f.failures + 1 }));
-      } finally {
-        inFlight = false;
-      }
-      schedule(db.liveSnapshotPollDelay(busy ? POLL_LIVE_MS : POLL_IDLE_MS));
-    }
-    const onVisible = () => { if (!document.hidden && !inFlight) schedule(0); };
-    void tick();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    const loop = startTvFeed<TvSnapshot>({
+      load: () => db.liveSnapshot(tournamentId),
+      pollDelay: db.liveSnapshotPollDelay,
+      onSnapshot: (snap, receivedAt) => setFeed({ snap, receivedAt, failures: 0 }),
+      onFailure: () => setFeed(f => ({ ...f, failures: f.failures + 1 })),
+      isHidden: () => document.hidden,
+      onVisibilityChange: cb => {
+        document.addEventListener("visibilitychange", cb);
+        return () => document.removeEventListener("visibilitychange", cb);
+      },
+    });
+    return () => loop.stop();
   }, [tournamentId]);
   return feed;
 }
