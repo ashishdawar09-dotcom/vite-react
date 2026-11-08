@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { CourtStatus } from "./CourtStatus";
 import { Av, ShuttleSVG } from "./ui";
-import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient (page-level) */
 import { SectionReveal } from "./ui/section-reveal"; /* NEW: scroll-triggered fade-up wrapper */
 import { BorderBeam } from "./ui/border-beam"; /* NEW: animated sweep on live cards */
 import { LiveMarquee } from "./ui/live-marquee"; /* NEW: broadcast-style LIVE ticker */
@@ -14,6 +13,16 @@ import { isCancelledMatch } from "../lib/matchOutcome";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
+
+// Full-tab backdrop. It used to be AnimatedGradientBackground, which redrew
+// this gradient on every animation frame all day so it could slowly
+// "breathe". Its colour props were new arrays on every render, so the
+// breathing restarted on each 5 s score refresh and barely showed. This is
+// its first frame, kept still; the 2 s fade-in on arrival stays.
+const LIVE_BACKDROP =
+  "radial-gradient(130% 130% at 50% 20%, #070F1F 15%, #0F1A2E 35%, #3A86FF 55%, #00d4ff 70%, #FF80AB 85%, #070F1F 100%)";
+const BACKDROP_ENTER = { opacity: 0, scale: 1.5 };
+const BACKDROP_SHOW = { opacity: 1, scale: 1, transition: { duration: 2, ease: [0.25, 0.1, 0.25, 1] as const } };
 
 export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches, players, playerCategories, onShowProfile }: {
   teamsView: TeamView[];
@@ -189,18 +198,15 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 
   return (
     /* MAKEOVER: page-level gradient backdrop. Outer wrapper now position:relative + overflow:hidden
-       so the absolutely-positioned AnimatedGradientBackground fills the entire LIVE tab area, not
+       so the absolutely-positioned backdrop fills the entire LIVE tab area, not
        just the small hero block. Content sits in normal flow above it. */
     <div style={{ position: "relative", overflow: "hidden", background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
-      {/* NEW: 21st.dev AnimatedGradientBackground — full LIVE tab backdrop, breathing on. Palette
-          stays inside the Broadcast Minimalism tokens; range bumped to 8% so the breathing reads. */}
-      <AnimatedGradientBackground
-        startingGap={130}
-        Breathing={true}
-        breathingRange={8}
-        animationSpeed={0.02}
-        gradientColors={["#070F1F", "#0F1A2E", "#3A86FF", "#00d4ff", "#FF80AB", "#070F1F"]}
-        gradientStops={[15, 35, 55, 70, 85, 100]}
+      {/* Full LIVE tab backdrop (see LIVE_BACKDROP). */}
+      <motion.div
+        aria-hidden
+        initial={BACKDROP_ENTER}
+        animate={BACKDROP_SHOW}
+        style={{ position: "absolute", inset: 0, overflow: "hidden", background: LIVE_BACKDROP }}
       />
 
       {/* Existing content — wrapped in `position:relative; zIndex:1` so it sits above the
