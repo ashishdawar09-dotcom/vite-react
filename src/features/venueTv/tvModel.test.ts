@@ -4,6 +4,7 @@ import { bracketOf, buildTvModel, FINAL_SCORE_HOLD_MS, parseMessages, projectQue
 import { annList } from "./tvAnnouncements";
 import { teamName } from "./tvNames";
 import { ampm, clockSkewMs, hm } from "./tvTime";
+import { projectSchedule } from "../../lib/projection";
 
 const NOW = Date.parse("2026-11-21T21:12:00Z"); // 2:12 pm in Abbotsford (UTC-7)
 const MIN = 60_000;
@@ -199,6 +200,44 @@ describe("venue TV model", () => {
 
   it("returns nothing without a tournament row", () => {
     expect(buildTvModel({ ...fixture(), tournament: null }, NOW)).toBeNull();
+  });
+
+  it("takes the venue-wide order from the app projection, so events take turns on the courts", () => {
+    pid = 0;
+    const cats = [category("e1", "Men's Doubles 35+", 1), category("e2", "Mixed Doubles 35+", 2)];
+    const teams: Team[] = [];
+    const matches: Match[] = [];
+    for (const c of cats) {
+      for (let i = 0; i < 3; i++) {
+        const a = team(`${c.id}-a${i}`, c.id, player(`${c.id} A${i}`), player(`${c.id} A${i}'`));
+        const b = team(`${c.id}-b${i}`, c.id, player(`${c.id} B${i}`), player(`${c.id} B${i}'`));
+        teams.push(a, b);
+        matches.push(match(`${c.id}-${i}`, c.id, { slot_idx: i, team_a_id: a.id, team_b_id: b.id }));
+      }
+    }
+    const snap: TvSnapshot = { tournament: tournament({ num_courts: 2 }), players: [], teams, matches, categories: cats, generated_at: NOW / 1000 };
+    const m = buildTvModel(snap, NOW, projectSchedule(matches, cats, 2, NOW).byId)!;
+    expect(m.queue.map(x => x.id)).toEqual(["e1-0", "e2-0", "e1-1", "e2-1", "e1-2", "e2-2"]);
+    // Two courts, each match 12 minutes plus the TV's 2 minute changeover.
+    expect(m.queue.map(x => (x.eta! - NOW) / MIN)).toEqual([2, 2, 16, 16, 30, 30]);
+  });
+
+  it("waits for the events' start time on race morning, also for events with none of their own", () => {
+    pid = 0;
+    const nineThirty = Date.parse("2026-11-21T16:30:00Z");
+    const early = nineThirty - 45 * MIN;
+    const cats = [category("e1", "Men's Doubles 35+", 1, { starts_at: iso(nineThirty) }), category("e2", "Mixed Doubles 35+", 2)];
+    const teams: Team[] = [];
+    const matches: Match[] = [];
+    for (const c of cats) {
+      const a = team(`${c.id}-a`, c.id, player(`${c.id} A`), player(`${c.id} A'`));
+      const b = team(`${c.id}-b`, c.id, player(`${c.id} B`), player(`${c.id} B'`));
+      teams.push(a, b);
+      matches.push(match(`${c.id}-0`, c.id, { team_a_id: a.id, team_b_id: b.id }));
+    }
+    const snap: TvSnapshot = { tournament: tournament(), players: [], teams, matches, categories: cats, generated_at: early / 1000 };
+    const m = buildTvModel(snap, early, projectSchedule(matches, cats, 4, early).byId)!;
+    expect(m.queue.map(x => x.eta)).toEqual([nineThirty, nineThirty]);
   });
 });
 
