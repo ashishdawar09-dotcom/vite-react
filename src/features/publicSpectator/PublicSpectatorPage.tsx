@@ -50,7 +50,10 @@ export function PublicSpectatorPage() {
     );
   }
 
-  if (!derived) {
+  // Until the first scores arrive. With the tournament remembered from an
+  // earlier visit the page gets here at once, and an empty draw would read
+  // "Tournament hasn't started" for a moment.
+  if (!derived || (ctx.dataLoading && ctx.teams.length === 0)) {
     return <LottieLoader fullScreen label="Loading scores…" />;
   }
 

@@ -8,6 +8,8 @@ import { useTournamentData } from "./hooks/useTournamentData";
 import { useTournamentDerived } from "./hooks/useTournamentDerived";
 import * as db from "./lib/db";
 import { supabase } from "./lib/supabase";
+import { closeChannel, openChannel } from "./lib/realtimeChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Login } from "./components/Login";
 import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
@@ -128,26 +130,60 @@ export default function App() {
 
   useEffect(() => { reloadTournaments(); }, []);
 
+  // Admins hear about tournament changes instantly over realtime. Everyone
+  // else re-reads the short list once a minute while the page is visible, and
+  // as soon as it's shown again. A realtime socket per visitor counted against
+  // Supabase's 200-connection limit, which the admins' screens share, and the
+  // "court ready" notification opens this page for every player it reaches.
   useEffect(() => {
-    const ch = supabase.channel("tournaments-list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, reloadTournaments);
-    // subscribe() can throw synchronously if the runtime's WebSocket is
-    // unusable (browser extension monkey-patching, blocked CSP, etc.). Catch
-    // and degrade gracefully — page still works, realtime updates just don't.
-    try {
-      ch.subscribe();
-    } catch (err) {
-      Sentry.addBreadcrumb({
-        category: "realtime",
-        level: "warning",
-        message: "tournaments-list subscribe failed",
-        data: { error: String(err) },
-      });
-      // eslint-disable-next-line no-console
-      console.warn("[realtime] tournaments-list subscribe failed; manual refresh required for live updates", err);
+    if (!isAdmin) {
+      const refresh = () => {
+        if (document.hidden) return;
+        // On failure keep the list we have; the next minute tries again.
+        reloadTournaments().catch(() => {});
+      };
+      const id = setInterval(refresh, 60_000);
+      document.addEventListener("visibilitychange", refresh);
+      return () => {
+        clearInterval(id);
+        document.removeEventListener("visibilitychange", refresh);
+      };
     }
-    return () => { supabase.removeChannel(ch); };
-  }, []);
+    // This effect now re-runs when isAdmin changes, so it opens the channel
+    // through openChannel (waits out an old one of the same name still leaving).
+    const stop = new AbortController();
+    let ch: RealtimeChannel | null = null;
+    void (async () => {
+      const opened = await openChannel("tournaments-list", { config: {} }, stop.signal);
+      if (!opened) return;
+      if (stop.signal.aborted) { closeChannel("tournaments-list", opened); return; }
+      ch = opened;
+      opened.on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, reloadTournaments);
+      // subscribe() can throw synchronously if the runtime's WebSocket is
+      // unusable (browser extension monkey-patching, blocked CSP, etc.). Catch
+      // and degrade gracefully — page still works, realtime updates just don't.
+      try {
+        // Re-read on every (re)join: changes made between the first load and
+        // the join, or while a phone slept with its socket closed, still show.
+        opened.subscribe((status) => {
+          if (status === "SUBSCRIBED") reloadTournaments().catch(() => {});
+        });
+      } catch (err) {
+        Sentry.addBreadcrumb({
+          category: "realtime",
+          level: "warning",
+          message: "tournaments-list subscribe failed",
+          data: { error: String(err) },
+        });
+        // eslint-disable-next-line no-console
+        console.warn("[realtime] tournaments-list subscribe failed; manual refresh required for live updates", err);
+      }
+    })();
+    return () => {
+      stop.abort();
+      if (ch) closeChannel("tournaments-list", ch);
+    };
+  }, [isAdmin]);
 
   const current = tournaments.find(t => t.id === currentId) ?? null;
   const { players, teams, matches, categories, playerCategories, loading: dataLoading, stale: dataStale } = useTournamentData(currentId, isAdmin); /* NEW: dataLoading for the cat loader during tournament switch / data refetch */
@@ -1000,7 +1036,7 @@ export default function App() {
         )}
         {!current && (
           <div style={{ position: "relative", textAlign: "center", padding: 80, color: "#64748b", background: "#0a1628", borderRadius: 14, border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
+            <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.webp)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.7) 0%, rgba(10,22,40,0.95) 100%)" }} />
             <div style={{ position: "relative", zIndex: 1 }}>
               <ShuttleSVG sz={80} color="#00b8ff" opacity={0.5} style={{ margin: "0 auto 14px", display: "block" }} />

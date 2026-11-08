@@ -49,7 +49,28 @@ export default defineConfig({
         // /shuttlestorm (~1.7 MB) show only once a tournament is full.
         // The venue TV page (its chunk, styles and Geist fonts) runs on one
         // hall TV, so phones don't precache it; the TV loads it on demand.
-        globIgnores: ['**/apple-splash-*.png', 'fonts/**', 'shuttlestorm/**', 'assets/TvShowPage-*', 'assets/geist-*'],
+        //
+        // Also left out, so a phone's first visit downloads ~0.8 MB less
+        // (perf audit, Nov 7 2026): the background photos in /images (shown
+        // on the Live tab and header, cached when first shown by the
+        // image rule in sw.ts) and the Inter/Oswald subsets for other
+        // alphabets (Cyrillic, Greek, Vietnamese, extended Latin). A browser
+        // fetches those subsets only when a name on screen needs one of
+        // their letters, and the same rule caches them.
+        globIgnores: [
+          '**/apple-splash-*.png',
+          'fonts/**',
+          'shuttlestorm/**',
+          'assets/TvShowPage-*',
+          'assets/geist-*',
+          'images/**',
+          'assets/*-cyrillic-*.woff2',
+          'assets/*-cyrillic-ext-*.woff2',
+          'assets/*-greek-*.woff2',
+          'assets/*-greek-ext-*.woff2',
+          'assets/*-vietnamese-*.woff2',
+          'assets/*-latin-ext-*.woff2',
+        ],
       },
     }),
   ],

@@ -81,7 +81,7 @@ export function AppHeader({
     }}>
       {/* Athlete photo on the right with diagonal cutout */}
       <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "55%", clipPath: "polygon(20% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden", zIndex: 0 }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B6.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B6.webp)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #050d1a 0%, rgba(5,13,26,0.85) 22%, rgba(5,13,26,0.4) 50%, rgba(5,13,26,0.05) 100%)" }} />
       </div>
 

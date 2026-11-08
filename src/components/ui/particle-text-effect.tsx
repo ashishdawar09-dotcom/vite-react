@@ -181,6 +181,14 @@ export interface ParticleTextEffectProps {
    * @default "rgba(0, 0, 0, 0.1)"
    */
   backgroundFade?: string;
+  /**
+   * Play the usual animation of the first word for ~10 s (until it has
+   * formed a third time), then stop drawing and leave that frame on the
+   * canvas, instead of re-forming every ~4 s forever. Right-click-drag still
+   * scatters it, and it plays again on release.
+   * @default false
+   */
+  holdWhenFormed?: boolean;
   /** Optional extra class names for the canvas. */
   className?: string;
   /** Optional inline style overrides for the canvas. */
@@ -209,6 +217,7 @@ export function ParticleTextEffect({
   pixelSteps = 6,
   pointSize = 2,
   backgroundFade = "rgba(0, 0, 0, 0.1)",
+  holdWhenFormed = false,
   className,
   style,
 }: ParticleTextEffectProps) {
@@ -321,7 +330,40 @@ export function ParticleTextEffect({
       }
     };
 
+    // The loop runs only while the canvas is on screen, and with
+    // holdWhenFormed it stops for good once the word has formed. Run forever,
+    // the app footer's loop took ~14% of a mid-range phone's CPU all day on
+    // the admins' phones (perf audit, Nov 7 2026).
+    let running = false;
+    let held = false;
+    let frames = 0; // frames drawn since the word last started forming
+
+    // holdWhenFormed plays the same animation as without it (the word
+    // re-forms every 240 frames) and freezes it 2.5 s into its third
+    // formation, when the word reads boldly: the dots' fading trails fill
+    // the gaps between them. Waiting for the dots to settle doesn't work
+    // (they never quite stop, circling their spot by a pixel or two), and
+    // the first formation looks thin and dotted. The canvas is left exactly
+    // as that frame drew it.
+    const HOLD_AT_FRAME = 2 * 240 + 150;
+
+    const start = () => {
+      if (running || held) return;
+      running = true;
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    const pause = () => {
+      running = false;
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+    const reform = () => {
+      held = false;
+      frames = 0;
+      start();
+    };
+
     const animate = () => {
+      if (!running) return;
       const ctx = canvas.getContext("2d")!;
       const particles = particlesRef.current;
 
@@ -360,7 +402,15 @@ export function ParticleTextEffect({
       }
 
       frameCountRef.current++;
-      if (frameCountRef.current % 240 === 0) {
+      if (holdWhenFormed) {
+        frames++;
+        if (frames % 240 === 0) nextWord(words[0]);
+        if (frames >= HOLD_AT_FRAME && !mouseRef.current.isPressed) {
+          held = true;
+          running = false;
+          return;
+        }
+      } else if (frameCountRef.current % 240 === 0) {
         wordIndexRef.current = (wordIndexRef.current + 1) % words.length;
         nextWord(words[wordIndexRef.current]);
       }
@@ -368,9 +418,19 @@ export function ParticleTextEffect({
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    // Initialize with first word, then start the loop.
+    // Initialize with the first word. The loop starts when the canvas is on
+    // screen and pauses when it scrolls away.
     nextWord(words[0]);
-    animate();
+    let observer: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver === "function") {
+      observer = new IntersectionObserver((entries) => {
+        if (entries[entries.length - 1]?.isIntersecting) start();
+        else pause();
+      });
+      observer.observe(canvas);
+    } else {
+      start();
+    }
 
     const handleMouseDown = (e: MouseEvent) => {
       mouseRef.current.isPressed = true;
@@ -378,10 +438,16 @@ export function ParticleTextEffect({
       const rect = canvas.getBoundingClientRect();
       mouseRef.current.x = e.clientX - rect.left;
       mouseRef.current.y = e.clientY - rect.top;
+      if (holdWhenFormed && mouseRef.current.isRightClick) reform();
     };
     const handleMouseUp = () => {
+      const scattered = mouseRef.current.isRightClick;
       mouseRef.current.isPressed = false;
       mouseRef.current.isRightClick = false;
+      if (holdWhenFormed && scattered) {
+        nextWord(words[0]); // bring the scattered particles back
+        reform();
+      }
     };
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -396,14 +462,15 @@ export function ParticleTextEffect({
     canvas.addEventListener("contextmenu", handleContextMenu);
 
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      observer?.disconnect();
+      pause();
       canvas.removeEventListener("mousedown", handleMouseDown);
       canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("contextmenu", handleContextMenu);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [words, width, height, fontSize, fontFamily, color, pixelSteps, pointSize, backgroundFade]);
+  }, [words, width, height, fontSize, fontFamily, color, pixelSteps, pointSize, backgroundFade, holdWhenFormed]);
 
   return (
     <canvas

@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"; /* NEW: makeover motion */
 import { CourtStatus } from "./CourtStatus";
 import { Av, ShuttleSVG } from "./ui";
-import AnimatedGradientBackground from "./ui/animated-gradient-background"; /* NEW: 21st.dev gradient (page-level) */
 import { SectionReveal } from "./ui/section-reveal"; /* NEW: scroll-triggered fade-up wrapper */
 import { BorderBeam } from "./ui/border-beam"; /* NEW: animated sweep on live cards */
 import { LiveMarquee } from "./ui/live-marquee"; /* NEW: broadcast-style LIVE ticker */
@@ -14,6 +13,44 @@ import { isCancelledMatch } from "../lib/matchOutcome";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
+
+// Full-tab backdrop. It used to be AnimatedGradientBackground, which redrew
+// this gradient on every animation frame all day so it could slowly
+// "breathe". Its colour props were new arrays on every render, so the
+// breathing restarted on each 5 s score refresh and barely showed. This is
+// its first frame, kept still; the 2 s fade-in on arrival stays.
+const LIVE_BACKDROP =
+  "radial-gradient(130% 130% at 50% 20%, #070F1F 15%, #0F1A2E 35%, #3A86FF 55%, #00d4ff 70%, #FF80AB 85%, #070F1F 100%)";
+const BACKDROP_ENTER = { opacity: 0, scale: 1.5 };
+const BACKDROP_SHOW = { opacity: 1, scale: 1, transition: { duration: 2, ease: [0.25, 0.1, 0.25, 1] as const } };
+
+// The LIVE badge's pulsing dot. Constant objects, so a refresh never restarts it.
+const LIVE_DOT_PULSE = { opacity: [1, 0.4, 1] };
+const LIVE_DOT_TIMING = { duration: 1.4, repeat: Infinity, ease: "easeInOut" as const };
+
+// Defined here rather than inside LiveTab: a component made inside another
+// one is a new component on every render, so React rebuilt these (and the
+// pulsing LIVE dot in a header badge) from scratch on every score refresh.
+function SectionHeader({ accent, children, badge }: { accent: string; children: React.ReactNode; badge?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ width: 4, height: 22, background: accent, borderRadius: 1 }} />
+      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{children}</h3>
+      {badge}
+    </div>
+  );
+}
+
+function StatTile({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) {
+  return (
+    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 10, padding: "18px 20px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
+      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 10 }}>{label}</div>
+      {/* MAKEOVER: 26 -> 40 px Oswald numeral with tabular-nums for broadcast-quality alignment */}
+      <div className="font-display" style={{ fontSize: 40, fontWeight: 700, color: "#fff", lineHeight: 1, letterSpacing: 0.5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, fontWeight: 500 }}>{sub}</div>}
+    </div>
+  );
+}
 
 export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches, players, playerCategories, onShowProfile }: {
   teamsView: TeamView[];
@@ -134,7 +171,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   if (teamsView.length === 0) {
     return (
       <div style={{ position: "relative", background: "#0a1628", borderRadius: 14, padding: 80, color: "#64748b", textAlign: "center", border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.webp)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.6) 0%, rgba(10,22,40,0.95) 100%)" }} />
         <div style={{ position: "relative", zIndex: 1 }}>
           {/* MAKEOVER: 🏸 emoji -> custom ShuttleSVG */}
@@ -145,23 +182,6 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       </div>
     );
   }
-
-  const SectionHeader = ({ accent, children, badge }: { accent: string; children: React.ReactNode; badge?: React.ReactNode }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-      <div style={{ width: 4, height: 22, background: accent, borderRadius: 1 }} />
-      <h3 className="font-display" style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>{children}</h3>
-      {badge}
-    </div>
-  );
-
-  const StatTile = ({ label, value, sub, color }: { label: string; value: React.ReactNode; sub?: string; color: string }) => (
-    <div style={{ flex: "1 1 200px", background: "#0f1e36", borderRadius: 10, padding: "18px 20px", border: "1px solid #1a3050", borderLeft: `3px solid ${color}`, position: "relative", overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 2, fontWeight: 700, marginBottom: 10 }}>{label}</div>
-      {/* MAKEOVER: 26 -> 40 px Oswald numeral with tabular-nums for broadcast-quality alignment */}
-      <div className="font-display" style={{ fontSize: 40, fontWeight: 700, color: "#fff", lineHeight: 1, letterSpacing: 0.5, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, fontWeight: 500 }}>{sub}</div>}
-    </div>
-  );
 
   const stageBadge = (m: Match) => m.stage === "group" ? `GROUP ${String.fromCharCode(65 + (m.group_idx ?? 0))}` : m.stage === "knockout" ? `ROUND ${(m.round_idx ?? 0) + 1}` : "";
 
@@ -189,18 +209,15 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 
   return (
     /* MAKEOVER: page-level gradient backdrop. Outer wrapper now position:relative + overflow:hidden
-       so the absolutely-positioned AnimatedGradientBackground fills the entire LIVE tab area, not
+       so the absolutely-positioned backdrop fills the entire LIVE tab area, not
        just the small hero block. Content sits in normal flow above it. */
     <div style={{ position: "relative", overflow: "hidden", background: "#0a1628", borderRadius: 14, padding: 24, border: "1px solid #1a3050", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
-      {/* NEW: 21st.dev AnimatedGradientBackground — full LIVE tab backdrop, breathing on. Palette
-          stays inside the Broadcast Minimalism tokens; range bumped to 8% so the breathing reads. */}
-      <AnimatedGradientBackground
-        startingGap={130}
-        Breathing={true}
-        breathingRange={8}
-        animationSpeed={0.02}
-        gradientColors={["#070F1F", "#0F1A2E", "#3A86FF", "#00d4ff", "#FF80AB", "#070F1F"]}
-        gradientStops={[15, 35, 55, 70, 85, 100]}
+      {/* Full LIVE tab backdrop (see LIVE_BACKDROP). */}
+      <motion.div
+        aria-hidden
+        initial={BACKDROP_ENTER}
+        animate={BACKDROP_SHOW}
+        style={{ position: "absolute", inset: 0, overflow: "hidden", background: LIVE_BACKDROP }}
       />
 
       {/* Existing content — wrapped in `position:relative; zIndex:1` so it sits above the
@@ -327,7 +344,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           (Previous iteration mounted the gradient INSIDE this block; moved to the outer wrapper now.) */}
       <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.webp)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #0a1628 0%, rgba(10,22,40,0.7) 30%, rgba(10,22,40,0.1) 100%)" }} />
         </div>
         <div style={{ position: "absolute", top: -40, left: -40, width: 200, height: 200, background: "radial-gradient(circle, rgba(0,184,255,0.25) 0%, transparent 70%)", pointerEvents: "none" }} />
@@ -363,7 +380,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         <SectionReveal>
         <div style={{ marginBottom: 32 }}>
           {/* MAKEOVER: replaced broken `pulse-strong` CSS keyframe (was never defined) with Framer Motion */}
-          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><motion.span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
+          <SectionHeader accent="#ef4444" badge={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", padding: "4px 10px", borderRadius: 4 }}><motion.span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 6px #ef4444" }} animate={reduceMotion ? undefined : LIVE_DOT_PULSE} transition={LIVE_DOT_TIMING} /><span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>LIVE</span><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{live.length}</span></span>}>Now Playing</SectionHeader>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(360px,1fr))", gap: 14 }}>
             {live.map(m => {
               const ta = m.team_a_id ? teamById[m.team_a_id] : null;
@@ -378,7 +395,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050", position: "relative", zIndex: 1 }}>
                     <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
-                      <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : { opacity: [1, 0.4, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} />LIVE
+                      <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : LIVE_DOT_PULSE} transition={LIVE_DOT_TIMING} />LIVE
                     </span>
                   </div>
                   <div style={{ padding: isMobile ? "12px 14px" : "16px 18px", position: "relative", zIndex: 1 }}>
@@ -552,7 +569,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
               {groups.map((g, gi) => {
                 const st = getStandings(g, gi);
-                const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];
+                const groupBgs = ["/images/B5.webp", "/images/B4.webp", "/images/B1.webp", "/images/B6.webp"];
                 const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
                 const accent = groupAccents[gi % groupAccents.length];
                 const fmt = g[0]?.category_id ? formatForCategory(g[0].category_id) : null;
@@ -612,7 +629,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 
       {live.length === 0 && upcoming.length === 0 && recent.length === 0 && (
         <div style={{ position: "relative", textAlign: "center", padding: 60, color: "#64748b", background: "#0f1e36", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", minHeight: 220 }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.webp)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(15,30,55,0.6) 0%, rgba(15,30,55,0.95) 100%)" }} />
           <div style={{ position: "relative", zIndex: 1 }}>
             {/* MAKEOVER: 🏸 emoji -> custom ShuttleSVG */}
