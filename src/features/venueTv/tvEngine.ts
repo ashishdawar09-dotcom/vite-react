@@ -138,8 +138,10 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   const courtsHTML = () => Array.from({ length: N() }, (_, i) => tileHTML(i + 1)).join("");
 
   /* ---------- up next ---------- */
+  /** Whole minutes between the clock times shown on screen, so two matches at "1:17" never say different things. */
+  const minsUntil = (t: number) => Math.floor(t / MIN) - Math.floor(now() / MIN);
   function qRowHTML(m: TvMatch, isNext: boolean, max: number) {
-    const mins = m.eta != null ? Math.round((m.eta - now()) / MIN) : null;
+    const mins = m.eta != null ? minsUntil(m.eta) : null;
     const rel = isNext ? "Next" : mins == null ? "" : mins <= 1 ? "Soon" : `in ${mins} min`;
     return `<div class="q-row${isNext ? " is-next" : ""}"><div class="q-when"><span class="q-time">${m.eta != null ? hm(m.eta) : ""}</span><span class="q-rel">${rel}</span></div>
       <div class="q-what"><p class="q-cat">${esc(shortStage(M!, m))}</p><p class="q-team">${esc(sideLabel(M!, m, "a", "fit", max))}</p><p class="q-team">${esc(sideLabel(M!, m, "b", "fit", max))}</p></div></div>`;
@@ -358,7 +360,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   function nextboardHTML(ctx: Ctx) {
     const per = N() <= 4 ? 4 : 3, q = M!.queue, pages = Math.max(1, Math.ceil(q.length / per)), page = ctx.v.dep % pages;
     const rows = q.slice(page * per, page * per + per).map((m, i) => {
-      const pos = page * per + i, mins = m.eta != null ? Math.round((m.eta - now()) / MIN) : 99;
+      const pos = page * per + i, mins = m.eta != null ? minsUntil(m.eta) : 99;
       const status = pos === 0 ? ["next", "Next to be called"] : mins <= 10 ? ["soon", "Get ready"] : ["", `In ${mins} min`];
       return `<div class="d-row${ctx.enter ? " flip" : ""}" style="animation-delay:${i * 60}ms"><span class="d-time">${m.eta != null ? hm(m.eta) : ""}</span><span class="d-event">${esc(shortStage(M!, m))}</span><span class="d-players">${esc(sideLabel(M!, m, "a", "fit", 20))}<span class="vs">vs</span>${esc(sideLabel(M!, m, "b", "fit", 20))}</span><span class="d-status ${status[0]}">${status[1]}</span></div>`;
     }).join("");
@@ -510,7 +512,21 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
 
   /* ---------- the moving score strip ---------- */
   const SPEED = 130; // stage pixels a second
-  const TK = { sig: "", w: 0, x0: 0, anim: null as Animation | null, track: null as HTMLElement | null, prev: {} as Record<string, string> };
+  const TK = { sig: "", w: 0, x0: 0, anim: null as Animation | null, track: null as HTMLElement | null, prev: {} as Record<string, string>, carry: null as null | { anchor: string | null; rel: number; x: number } };
+  /** The item showing most in the strip and where it is, so a new frame's strip carries on from the same spot. */
+  function tkCapture(): { anchor: string | null; rel: number; x: number } | null {
+    const view = $("[data-tk]"), track = view?.firstElementChild;
+    if (!view || !track || !TK.w) return null;
+    const x = tkX(), vw = view.clientWidth;
+    let anchor: string | null = null, rel = 0, best = -1;
+    for (const el of $$(".ti", track)) {
+      const L = el.offsetLeft, R = L + el.offsetWidth;
+      if (R <= x || L >= x + vw) continue;
+      const shown = Math.min(R, x + vw) - Math.max(L, x);
+      if (shown > best) { best = shown; anchor = el.dataset.key ?? null; rel = L - x; }
+    }
+    return { anchor, rel, x };
+  }
   function tkCourtHTML(c: number) {
     const m = courtMatch(c);
     const open = `<span class="ti" data-key="c${c}" data-court="${c}" data-kind="tk"`;
@@ -559,7 +575,11 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
         const score = Math.min(R, xOld + vw) - Math.max(L, xOld) + (TK.prev[key] === newSig[key] ? 1e5 : 0);
         if (score > best) { best = score; anchor = key; rel = L - xOld; }
       }
+    } else if (TK.carry) {
+      // A new design just took over: carry on from where the last frame's strip was.
+      ({ anchor, rel, x: xOld } = TK.carry);
     }
+    TK.carry = null;
     TK.prev = newSig;
     if (TK.anim) { TK.anim.cancel(); TK.anim = null; }
     let run = items.map(i => i.html()).join("");
@@ -750,6 +770,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   }
   function renderFrame(arriving: boolean) {
     if (!M) return;
+    TK.carry = tkCapture();
     if (TK.anim) { TK.anim.cancel(); TK.anim = null; }
     TK.sig = ""; TK.w = 0; TK.track = null; TO = null; morphing = false; curView = null;
     stageEl.dataset.courts = String(layoutCourts());
