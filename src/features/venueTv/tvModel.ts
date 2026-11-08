@@ -7,6 +7,7 @@
 import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "../../types";
 import { buildGroups, groupLetter, groupStandings, isRoundRobinOnly, roundRobinPodium } from "../../lib/groups";
 import { isCancelledMatch } from "../../lib/matchOutcome";
+import { eventStarts } from "../../lib/projection";
 
 const MIN = 60_000;
 /** A finished match stays on its court as "Final score" this long, unless the next match is called there first. */
@@ -177,10 +178,12 @@ const LOOKAHEAD = 8;
 /**
  * Venue wide estimate, the way the desk works: whichever court frees first
  * takes the next match in the queue whose players are all free (someone
- * still on another court can't start). The app's own projection treats each
- * category as if it had every court, so it only decides the order the desk
- * works through; the times come from here. Returns the queue in the order
- * the matches should start.
+ * still on another court can't start). The app's projection (lib/projection.ts)
+ * shares the courts too and decides the order the desk works through, but it
+ * only knows teams, not players entered in two events, and leaves out the
+ * changeover, the call-to-serve time and best of 3; so the TV's times come
+ * from here. A match also waits for its event's start time (`notBefore`).
+ * Returns the queue in the order the matches should start.
  */
 export function projectQueue(
   queued: TvMatch[],
@@ -188,6 +191,7 @@ export function projectQueue(
   now: number,
   minutesOf: (m: TvMatch) => number,
   playersOf: (m: TvMatch) => string[] = () => [],
+  notBefore: (m: TvMatch) => number = () => now,
 ): { order: TvMatch[]; finish: number | null } {
   const free = courts.map(m => {
     if (!m || m.status === "done") return now;
@@ -201,7 +205,7 @@ export function projectQueue(
   courts.forEach((m, i) => { if (m && m.status !== "done") for (const p of playersOf(m)) busy.set(p, Math.max(busy.get(p) ?? 0, free[i])); });
   for (let i = 0; i < free.length; i++) free[i] += CHANGEOVER_MIN * MIN;
   if (!free.length) free.push(now);
-  const ready = (m: TvMatch) => playersOf(m).reduce((t, p) => Math.max(t, busy.get(p) ?? 0), now);
+  const ready = (m: TvMatch) => playersOf(m).reduce((t, p) => Math.max(t, busy.get(p) ?? 0), Math.max(now, notBefore(m)));
 
   const waiting = [...queued], order: TvMatch[] = [];
   while (waiting.length) {
@@ -292,8 +296,9 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
   }
   for (const m of courts) if (m && m.status === "done") m.ending = true;
 
-  // Queue: matches waiting for a court, in the order the app projects them
-  // (group stage before knockout within a category, admin's queue order).
+  // Queue: matches waiting for a court, in the venue-wide order the app
+  // projects them (events interleaved; inside an event group stage before
+  // knockout, then the admin's queue order).
   const rawById = new Map(snap.matches.map(m => [m.id, m]));
   const orderKey = new Map<string, number[]>();
   for (const m of matches) {
@@ -321,7 +326,9 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
     return (m.bestOf3 ? base * 2 : base) + (m.status === "live" ? extra : 0);
   };
   const playersOf = (m: TvMatch) => [m.a, m.b].flatMap(id => (id ? snapTeamPlayers.get(id) ?? [] : []));
-  const { order: started, finish } = projectQueue([...known, ...later], courts, now, minutesOf, playersOf);
+  // Events start at their own time; the rest with the day's first event until play is underway.
+  const starts = eventStarts(snap.matches, snap.categories, now);
+  const { order: started, finish } = projectQueue([...known, ...later], courts, now, minutesOf, playersOf, m => starts.get(m.cat) ?? now);
   const queue = started.filter(m => m.a && m.b);
 
   const results = matches.filter(m => m.status === "done" && m.winner && !m.cancelled).sort((x, y) => (y.doneAt ?? 0) - (x.doneAt ?? 0));

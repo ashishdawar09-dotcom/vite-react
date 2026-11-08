@@ -144,9 +144,11 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   /* ---------- up next ---------- */
   /** Whole minutes between the clock times shown on screen, so two matches at "1:17" never say different things. */
   const minsUntil = (t: number) => Math.floor(t / MIN) - Math.floor(now() / MIN);
+  /** Beyond this (say, before the first serve on race morning), "in 300 min" reads worse than "Later" next to the clock time. */
+  const LATER_MIN = 120;
   function qRowHTML(m: TvMatch, isNext: boolean, max: number) {
     const mins = m.eta != null ? minsUntil(m.eta) : null;
-    const rel = isNext ? "Next" : mins == null ? "" : mins <= 1 ? "Soon" : `in ${mins} min`;
+    const rel = isNext ? "Next" : mins == null ? "" : mins <= 1 ? "Soon" : mins > LATER_MIN ? "Later" : `in ${mins} min`;
     return `<div class="q-row${isNext ? " is-next" : ""}"><div class="q-when"><span class="q-time">${m.eta != null ? hm(m.eta) : ""}</span><span class="q-rel">${rel}</span></div>
       <div class="q-what"><p class="q-cat">${esc(shortStage(M!, m))}</p><p class="q-team">${esc(sideLabel(M!, m, "a", "fit", max))}</p><p class="q-team">${esc(sideLabel(M!, m, "b", "fit", max))}</p></div></div>`;
   }
@@ -365,7 +367,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     const per = N() <= 4 ? 4 : 3, q = M!.queue, pages = Math.max(1, Math.ceil(q.length / per)), page = ctx.v.dep % pages;
     const rows = q.slice(page * per, page * per + per).map((m, i) => {
       const pos = page * per + i, mins = m.eta != null ? minsUntil(m.eta) : 99;
-      const status = pos === 0 ? ["next", "Next to be called"] : mins <= 10 ? ["soon", "Get ready"] : ["", `In ${mins} min`];
+      const status = pos === 0 ? ["next", "Next to be called"] : mins <= 10 ? ["soon", "Get ready"] : mins > LATER_MIN ? ["", "Later"] : ["", `In ${mins} min`];
       return `<div class="d-row${ctx.enter ? " flip" : ""}" style="animation-delay:${i * 60}ms"><span class="d-time">${m.eta != null ? hm(m.eta) : ""}</span><span class="d-event">${esc(shortStage(M!, m))}</span><span class="d-players">${esc(sideLabel(M!, m, "a", "fit", 20))}<span class="vs">vs</span>${esc(sideLabel(M!, m, "b", "fit", 20))}</span><span class="d-status ${status[0]}">${status[1]}</span></div>`;
     }).join("");
     return `<div class="panel-h"><h2>Next to play</h2><span>Page ${page + 1} of ${pages} · times are estimates</span></div>
