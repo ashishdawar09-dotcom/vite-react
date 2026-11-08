@@ -8,7 +8,8 @@ import { hm, ampm } from "./tvTime";
  * Admin TV tab: the link for the hall TV and the announcement box. A posted
  * message reaches every TV within a few seconds through the live feed and
  * comes round in the announcement line until it ends; "Full screen first"
- * also fills the TV for 15 seconds when it first arrives.
+ * also fills the TV for 15 seconds when it first arrives. The film switch plays
+ * the Shuttle Storm film full screen on every TV until it's switched off.
  */
 
 const PICKS = [
@@ -44,6 +45,8 @@ export function TvTab({ tournament }: { tournament: Tournament }) {
   const [minutes, setMinutes] = useState<number | null>(30);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [filmOn, setFilmOn] = useState(false);
+  const [filmUnavailable, setFilmUnavailable] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +56,13 @@ export function TvTab({ tournament }: { tournament: Tournament }) {
       const code = (e as { code?: string })?.code;
       // 42703: the column isn't there yet (the database update hasn't been applied).
       if (code === "42703" || code === "PGRST204") setUnavailable(true);
+    }
+    try {
+      setFilmOn(await db.getTvFilm(tournament.id));
+      setFilmUnavailable(false);
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === "42703" || code === "PGRST204") setFilmUnavailable(true);
     }
   }, [tournament.id]);
 
@@ -93,6 +103,18 @@ export function TvTab({ tournament }: { tournament: Tournament }) {
     }
   }
 
+  async function switchFilm(on: boolean) {
+    setBusy(true);
+    try {
+      setFilmOn(await db.setTvFilm(tournament.id, on));
+      toast(on ? "The film starts on the TVs within a few seconds." : "Film stopped. The TVs go back to the live boards.", on ? "success" : "info");
+    } catch (e) {
+      toast((e as Error)?.message || "Couldn't switch the film.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copy(url: string) {
     try { await navigator.clipboard.writeText(url); toast("Link copied.", "success"); } catch { toast(url, "info"); }
   }
@@ -113,6 +135,26 @@ export function TvTab({ tournament }: { tournament: Tournament }) {
           <a href={tvUrl} target="_blank" rel="noreferrer" style={{ ...ghost, textDecoration: "none" }}>Open</a>
         </div>
         <p style={{ margin: "12px 0 0", color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>A second TV can show one design only: add <code>?design=floor</code>, <code>?design=rotation</code>, <code>?design=pinned</code> or <code>?design=sports</code> to the link.</p>
+      </section>
+
+      <section style={card} aria-labelledby="tv-film-h" aria-live="polite">
+        <h3 id="tv-film-h" style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 800 }}>Shuttle Storm film</h3>
+        {filmUnavailable ? (
+          <p style={{ margin: 0, color: "#fbbf24", fontSize: 14 }}>The film switch needs a database update that isn't live yet.</p>
+        ) : (
+          <>
+            <p style={{ margin: "0 0 12px", color: "#94a3b8", fontSize: 14, lineHeight: 1.5 }}>A 66-second film with the rules, the official shuttle, the founders and the sponsors. Play it before the first match or in a break: every TV shows it full screen on a loop until you stop it. A court call or match point still cuts in, and the film comes back a minute later.</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: filmOn ? "#D4FF3A" : "#94a3b8" }}>
+                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 999, background: filmOn ? "#D4FF3A" : "#475569" }} />
+                {filmOn ? "Playing on the TVs" : "Off: the TVs show the live boards"}
+              </span>
+              {filmOn
+                ? <button type="button" style={{ ...ghost, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => switchFilm(false)}>Stop the film</button>
+                : <button type="button" style={{ ...primary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => switchFilm(true)}>Play the film on the TVs</button>}
+            </div>
+          </>
+        )}
       </section>
 
       <section style={card} aria-labelledby="tv-ann-h">

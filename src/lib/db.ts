@@ -793,6 +793,19 @@ export async function removeTvMessage(tournament_id: string, id: string): Promis
   return toTvMessages(data);
 }
 
+/** Whether the venue TVs are playing the Shuttle Storm film (admin TV tab switch). */
+export async function getTvFilm(tournament_id: string): Promise<boolean> {
+  const { data, error } = await supabase.from("tournaments").select("tv_film_on").eq("id", tournament_id).maybeSingle();
+  if (error) throw error;
+  return (data as { tv_film_on?: unknown } | null)?.tv_film_on === true;
+}
+
+export async function setTvFilm(tournament_id: string, on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc("set_tv_film", { p_tournament_id: tournament_id, p_on: on });
+  if (error) throw error;
+  return data === true;
+}
+
 // TOURNAMENT ADMINS ------------------------------------------------------------
 
 export type TournamentAdmin = {
