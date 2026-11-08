@@ -94,6 +94,8 @@ export type TvModel = {
   results: TvMatch[];
   players: TvPlayer[];
   messages: TvMessage[];
+  /** The admin switched the Shuttle Storm film on (before play starts, or in a break). */
+  film: boolean;
   played: number;
   total: number;
   /** Estimated end of the last match, when anything is still to play. */
@@ -103,7 +105,7 @@ export type TvModel = {
 };
 
 export type TvSnapshot = {
-  tournament: (Tournament & { tv_messages?: unknown }) | null;
+  tournament: (Tournament & { tv_messages?: unknown; tv_film_on?: unknown }) | null;
   players: Player[];
   teams: Team[];
   matches: Match[];
@@ -393,6 +395,7 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
     results,
     players: playerList,
     messages: parseMessages(t.tv_messages, now),
+    film: t.tv_film_on === true,
     played,
     total: matches.filter(m => !m.cancelled).length,
     finish,

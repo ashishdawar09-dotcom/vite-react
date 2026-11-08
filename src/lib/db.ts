@@ -793,6 +793,19 @@ export async function removeTvMessage(tournament_id: string, id: string): Promis
   return toTvMessages(data);
 }
 
+/** Whether the venue TVs are playing the Shuttle Storm film (admin TV tab switch). */
+export async function getTvFilm(tournament_id: string): Promise<boolean> {
+  const { data, error } = await supabase.from("tournaments").select("tv_film_on").eq("id", tournament_id).maybeSingle();
+  if (error) throw error;
+  return (data as { tv_film_on?: unknown } | null)?.tv_film_on === true;
+}
+
+export async function setTvFilm(tournament_id: string, on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc("set_tv_film", { p_tournament_id: tournament_id, p_on: on });
+  if (error) throw error;
+  return data === true;
+}
+
 // TOURNAMENT ADMINS ------------------------------------------------------------
 
 export type TournamentAdmin = {
@@ -994,6 +1007,28 @@ export type WaitlistEntry = {
   website?: string; // honeypot, left empty by people
 };
 
+// Everyone on a tournament's waitlist, first to join first (admin only: RLS
+// lets admins read the table and nobody else). Joining again with the same
+// email keeps the person's place, because created_at never changes.
+export async function listRegistrationWaitlist(tournament_id: string): Promise<WaitlistRow[]> {
+  const { data, error } = await supabase
+    .from("registration_waitlist")
+    .select("id, name, email, phone, created_at, admin_email_status")
+    .eq("tournament_id", tournament_id)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as WaitlistRow[];
+}
+
+export type WaitlistRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string; // digits only, as join-waitlist stores it
+  created_at: string;
+  admin_email_status: string | null;
+};
+
 // Puts someone on a full tournament's waitlist (join-waitlist Edge Function,
 // no sign-in). The directors get an email for each new name.
 export async function joinRegistrationWaitlist(
@@ -1084,4 +1119,85 @@ export async function submitPublicRegistration(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+// ---------- race-day emails (court calls, player briefings) ----------
+
+export type CourtCallEmailRow = {
+  player_id: string; status: string; error_message: string | null;
+  delivery_status: string | null; delivery_detail: string | null; sent_at: string;
+};
+
+/** The court-call emails logged for a match, oldest first (admin only). */
+export async function getCourtCallEmails(match_id: string): Promise<CourtCallEmailRow[]> {
+  const { data, error } = await supabase
+    .from("notification_log")
+    .select("player_id, status, error_message, delivery_status, delivery_detail, sent_at")
+    .eq("match_id", match_id)
+    .eq("channel", "email")
+    .order("sent_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export type BriefingEmailRow = {
+  player_id: string; kind: string; status: string; error_message: string | null;
+  scheduled_at: string | null; delivery_status: string | null; delivery_detail: string | null; email: string;
+};
+
+export async function getBriefingEmails(tournament_id: string): Promise<BriefingEmailRow[]> {
+  const { data, error } = await supabase
+    .from("briefing_emails")
+    .select("player_id, kind, status, error_message, scheduled_at, delivery_status, delivery_detail, email")
+    .eq("tournament_id", tournament_id);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export type BriefingProblemRow = {
+  match_id: string; player_id: string; status: string; error_message: string | null;
+  delivery_status: string | null; delivery_detail: string | null; sent_at: string;
+};
+
+/** Court-call emails for this tournament that never reached the player. */
+export async function getCourtCallProblems(tournament_id: string): Promise<BriefingProblemRow[]> {
+  const { data, error } = await supabase
+    .from("notification_log")
+    .select("match_id, player_id, status, error_message, delivery_status, delivery_detail, sent_at, matches!inner(tournament_id)")
+    .eq("matches.tournament_id", tournament_id)
+    .eq("channel", "email")
+    .or("status.eq.failed,delivery_status.in.(bounced,complained,failed,suppressed)")
+    .order("sent_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    match_id: r.match_id, player_id: r.player_id, status: r.status, error_message: r.error_message,
+    delivery_status: r.delivery_status, delivery_detail: r.delivery_detail, sent_at: r.sent_at,
+  }));
+}
+
+export type BriefingAction = "preview" | "test" | "send" | "cancel";
+export type BriefingResponse = {
+  subject?: string; html?: string; text?: string; player?: string;
+  eligible?: number; already?: number; no_email?: number; sent_to?: string;
+  sent?: number; scheduled?: number; failed?: number; cancelled?: number;
+  remaining?: number; stop?: boolean; errors?: string[]; error?: string;
+};
+
+/** Calls the player-briefing function; a refusal comes back as `error`, never thrown. */
+export async function playerBriefing(body: {
+  action: BriefingAction; tournament_id: string; kind: "day_before" | "morning_of";
+  notes?: string | null; scheduled_at?: string | null; player_id?: string;
+}): Promise<BriefingResponse> {
+  const { data, error } = await supabase.functions.invoke("player-briefing", { body });
+  if (error) {
+    // FunctionsHttpError carries the response; read its { error } message.
+    const ctx = (error as { context?: Response }).context;
+    try {
+      const parsed = ctx ? await ctx.json() as BriefingResponse : null;
+      if (parsed?.error) return { error: parsed.error };
+    } catch { /* not JSON */ }
+    return { error: error.message || "The email service didn't answer." };
+  }
+  return data as BriefingResponse;
 }

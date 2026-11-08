@@ -7,6 +7,7 @@ import { Av } from "./ui";
 import type { Match, Player, Team } from "../types";
 import { isCancelledMatch } from "../lib/matchOutcome";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
+import { CourtCallEmailStatus } from "../features/raceEmails/CourtCallEmailStatus";
 
 // MatchCard's "team view" — a Team enriched with its player objects.
 // Identical to the TeamView type used in App.tsx (kept in sync; if it
@@ -304,6 +305,14 @@ export function MatchCard({
         {teamRow(ta, "a", isEditing && draft ? draft.a : inlineMode ? onScreen.a : m.score_a ?? 0, winA)}
         <div style={{ height: 1, background: "#f1f5f9", margin: "2px 0" }} />
         {teamRow(tb, "b", isEditing && draft ? draft.b : inlineMode ? onScreen.b : m.score_b ?? 0, winB)}
+
+        {isAdmin && isWarming && (
+          <CourtCallEmailStatus
+            matchId={m.id}
+            allocatedAt={m.court_allocated_at}
+            names={[ta?.p1, ta?.p2, tb?.p1, tb?.p2].filter((p): p is Player => !!p).map((p) => [p.id, p.name])}
+          />
+        )}
 
         {editable && ta && tb && isAdmin && (
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>

@@ -12,6 +12,7 @@ import { bracketOf, standingsOf, type TvCategory, type TvMatch, type TvModel } f
 import { annList, callItem, deskItem, matchPointItem, CALL_WINDOW_MIN, type AnnItem } from "./tvAnnouncements";
 import { catStage, shortStage, sideLabel, sideNames, teamName, type NameMode } from "./tvNames";
 import { ampm, hm } from "./tvTime";
+import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
 
 export type DesignKey = "rotation" | "pinned" | "floorhome" | "sportstv";
 export const DESIGN_ORDER: DesignKey[] = ["rotation", "pinned", "floorhome", "sportstv"];
@@ -41,6 +42,9 @@ export type TvShow = {
     turn(k: string): Record<string, number>;
     state(): Record<string, unknown>;
     setInstant(v: boolean): void;
+    /** Play the film now (true if it started). */
+    film(): boolean;
+    filmStop(): void;
     check(): string[][];
   };
 };
@@ -662,6 +666,21 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   const SC = { i: 0, start: Date.now() };
   const resume: Partial<Record<DesignKey, number>> = {};
   let designStart = Date.now();
+  // The film loops full screen while an admin has it switched on (TV tab). Anything
+  // live (a call, a match point, a full-screen desk post) stops it, and it comes
+  // back a minute later if it's still switched on.
+  const film = filmAllowed(window.location.search)
+    ? createTvFilm(stageEl.parentElement ?? stageEl, FILM_SRC, () => instant || RM.matches) : null;
+  const FILM_HOLD_MS = 60_000;
+  let filmHoldUntil = 0;
+  const afterFilm = () => { if (!destroyed) { SC.start = Date.now(); lastFull = 0; } };
+  function filmCheck() {
+    if (!film) return;
+    if (!M?.film) { if (film.playing()) film.stop(); return; }
+    if (!film.playing() && Date.now() >= filmHoldUntil) film.play(afterFilm);
+  }
+  /** Something live needs the screen: stop the film and keep it off for a minute. */
+  function filmYield() { if (film?.playing()) { filmHoldUntil = Date.now() + FILM_HOLD_MS; film.stop(); } }
   let lastRot: Partial<Record<keyof Counters, number>> = {};
   let lastFull = 0;
 
@@ -816,6 +835,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     else if (k === "dep") renderPart("nextboard", true);
   }
   function rotate(t: number) {
+    if (film?.playing()) return;
     if (t - SC.start >= curScene().dur) {
       if (order.length > 1 && t - designStart >= opts.eachMs) nextDesign();
       else advanceScene();
@@ -840,16 +860,16 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     // Calls and match points go to the front of the announcement line.
     for (const m of model.courts) {
       if (!m) continue;
-      if (m.status === "called" && !ANN.calls.has(m.id)) { ANN.calls.add(m.id); if (prev.courts.every(x => x?.id !== m.id || x.status !== "called")) annForce(callItem(model, m)); }
+      if (m.status === "called" && !ANN.calls.has(m.id)) { ANN.calls.add(m.id); if (prev.courts.every(x => x?.id !== m.id || x.status !== "called")) { filmYield(); annForce(callItem(model, m)); } }
       const b = pointBadge(m);
-      if (b && b.text === "Match point" && !ANN.mp.has(m.id)) { ANN.mp.add(m.id); annForce(matchPointItem(model, m)); cutTo(m.court!, m); }
+      if (b && b.text === "Match point" && !ANN.mp.has(m.id)) { ANN.mp.add(m.id); filmYield(); annForce(matchPointItem(model, m)); cutTo(m.court!, m); }
     }
     // Desk posts marked full screen take over once, when they are new.
     for (const d of model.messages) {
       if (takeoverSeen.has(d.id)) continue;
       takeoverSeen.add(d.id);
       if (!prev.messages.some(x => x.id === d.id)) {
-        if (d.style === "full" && now() - d.postedAt < 120_000) takeover(d.text, d.postedAt, d.id);
+        if (d.style === "full" && now() - d.postedAt < 120_000) { filmYield(); takeover(d.text, d.postedAt, d.id); }
         annForce(deskItem(d));
       }
     }
@@ -876,6 +896,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (destroyed || !M) return;
     const t = Date.now();
     if (t - ANN.at >= 7000) { ANN.at = t; annStep(true); }
+    filmCheck();
     rotate(t);
     if (t - lastFull >= 20_000) refreshParts();
     takeoverTick();
@@ -890,6 +911,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       destroyed = true;
       window.clearInterval(timer);
       if (TK.anim) TK.anim.cancel();
+      film?.destroy();
       stageEl.innerHTML = "";
     },
     debug: {
@@ -905,6 +927,8 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       turn(k: string) { if (k in VIEW) step(k as keyof Counters); return { ...VIEW }; },
       state: () => ({ show, scene: SC.i, board: sceneName(curScene()), live: M?.courts.filter(m => m?.status === "live").length ?? 0, queued: M?.queue.length ?? 0, results: M?.results.length ?? 0, messages: M?.messages.length ?? 0 }),
       setInstant(v: boolean) { instant = v; },
+      film: () => !!film && film.play(afterFilm),
+      filmStop: () => { film?.stop(); },
       check() {
         const R0 = stageEl.getBoundingClientRect(), out: string[][] = [];
         const BOX = ".scene,.panel,.court,.chip,.mcourt,.board,.feature,.bd-hero,.ann,.st,.takeover,.d-row,.q-row,.cl-row,.b-match,.res,.pl,.call-item,.ch-champ,.cl-mini,.channel,.hall,.fh-court,.sh-h,.ti";

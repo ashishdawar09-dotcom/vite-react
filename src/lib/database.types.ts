@@ -45,6 +45,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      briefing_emails: {
+        Row: {
+          created_at: string
+          delivery_at: string | null
+          delivery_detail: string | null
+          delivery_status: string | null
+          email: string
+          error_message: string | null
+          id: string
+          kind: string
+          player_id: string
+          provider_message_id: string | null
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
+          email: string
+          error_message?: string | null
+          id?: string
+          kind: string
+          player_id: string
+          provider_message_id?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status: string
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
+          email?: string
+          error_message?: string | null
+          id?: string
+          kind?: string
+          player_id?: string
+          provider_message_id?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "briefing_emails_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "briefing_emails_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           age_band: string | null
@@ -275,28 +344,40 @@ export type Database = {
       notification_log: {
         Row: {
           channel: string
+          delivery_at: string | null
+          delivery_detail: string | null
+          delivery_status: string | null
           error_message: string | null
           id: string
           match_id: string
           player_id: string
+          provider_message_id: string | null
           sent_at: string
           status: string
         }
         Insert: {
           channel: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
           error_message?: string | null
           id?: string
           match_id: string
           player_id: string
+          provider_message_id?: string | null
           sent_at?: string
           status: string
         }
         Update: {
           channel?: string
+          delivery_at?: string | null
+          delivery_detail?: string | null
+          delivery_status?: string | null
           error_message?: string | null
           id?: string
           match_id?: string
           player_id?: string
+          provider_message_id?: string | null
           sent_at?: string
           status?: string
         }
@@ -671,6 +752,50 @@ export type Database = {
         }
         Relationships: []
       }
+      // Added by hand (PR: admin waitlist panel) to match migration
+      // 20261107080000_entry_cap_and_waitlist.sql; the rest of this file was
+      // generated earlier and is not regenerated here.
+      registration_waitlist: {
+        Row: {
+          admin_email_status: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          phone: string
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          admin_email_status?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          phone: string
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          admin_email_status?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          phone?: string
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registration_waitlist_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_deletions: {
         Row: {
           category_id: string | null
@@ -819,6 +944,7 @@ export type Database = {
           student_label: string | null
           student_price: number | null
           terms_text: string | null
+          tv_film_on: boolean
           tv_messages: Json
           venue_address: string | null
           venue_map_url: string | null
@@ -852,6 +978,7 @@ export type Database = {
           student_label?: string | null
           student_price?: number | null
           terms_text?: string | null
+          tv_film_on?: boolean
           tv_messages?: Json
           venue_address?: string | null
           venue_map_url?: string | null
@@ -885,6 +1012,7 @@ export type Database = {
           student_label?: string | null
           student_price?: number | null
           terms_text?: string | null
+          tv_film_on?: boolean
           tv_messages?: Json
           venue_address?: string | null
           venue_map_url?: string | null
@@ -1022,6 +1150,10 @@ export type Database = {
       remove_tv_message: {
         Args: { p_id: string; p_tournament_id: string }
         Returns: Json
+      }
+      set_tv_film: {
+        Args: { p_on: boolean; p_tournament_id: string }
+        Returns: boolean
       }
       live_snapshot: { Args: { p_tournament_id: string }; Returns: Json }
       my_player: { Args: { p_tournament_id: string }; Returns: Json }
