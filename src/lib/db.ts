@@ -762,6 +762,37 @@ async function liveSnapshotRpc(tournament_id: string): Promise<LiveSnapshot | nu
   return data as LiveSnapshot;
 }
 
+// VENUE TV ANNOUNCEMENTS --------------------------------------------------------
+//
+// Stored on the tournament row (tv_messages) so they reach every TV through
+// the cached live feed. Written only through the admin-checked RPCs, which
+// validate, drop expired entries and lock the row.
+
+export type TvMessageRow = { id: string; text: string; style: "line" | "full"; posted_at: string; until: string | null };
+
+function toTvMessages(raw: unknown): TvMessageRow[] {
+  return Array.isArray(raw) ? (raw as TvMessageRow[]).filter(m => m && typeof m.id === "string" && typeof m.text === "string") : [];
+}
+
+export async function getTvMessages(tournament_id: string): Promise<TvMessageRow[]> {
+  const { data, error } = await supabase.from("tournaments").select("tv_messages").eq("id", tournament_id).maybeSingle();
+  if (error) throw error;
+  return toTvMessages((data as { tv_messages?: unknown } | null)?.tv_messages);
+}
+
+/** minutes = null keeps it up until an admin takes it down. */
+export async function postTvMessage(tournament_id: string, text: string, style: "line" | "full", minutes: number | null): Promise<TvMessageRow[]> {
+  const { data, error } = await supabase.rpc("post_tv_message", { p_tournament_id: tournament_id, p_text: text, p_style: style, p_minutes: minutes });
+  if (error) throw error;
+  return toTvMessages(data);
+}
+
+export async function removeTvMessage(tournament_id: string, id: string): Promise<TvMessageRow[]> {
+  const { data, error } = await supabase.rpc("remove_tv_message", { p_tournament_id: tournament_id, p_id: id });
+  if (error) throw error;
+  return toTvMessages(data);
+}
+
 // TOURNAMENT ADMINS ------------------------------------------------------------
 
 export type TournamentAdmin = {

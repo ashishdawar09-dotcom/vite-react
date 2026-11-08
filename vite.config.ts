@@ -47,7 +47,9 @@ export default defineConfig({
         // The Shuttle Storm fonts in /fonts (~400 KB) are only used by the
         // public registration form, which loads them on demand. The GIFs in
         // /shuttlestorm (~1.7 MB) show only once a tournament is full.
-        globIgnores: ['**/apple-splash-*.png', 'fonts/**', 'shuttlestorm/**'],
+        // The venue TV page (its chunk, styles and Geist fonts) runs on one
+        // hall TV, so phones don't precache it; the TV loads it on demand.
+        globIgnores: ['**/apple-splash-*.png', 'fonts/**', 'shuttlestorm/**', 'assets/TvShowPage-*', 'assets/geist-*'],
       },
     }),
   ],
