@@ -22,6 +22,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
 import { isUuid, json, serveWithCors } from "../_shared/http.ts";
 import { enqueue, joinNames, optedInChats, whatsappConfig } from "../_shared/whatsapp.ts";
+import { sendEmailDetailed } from "../_shared/mailer.ts";
+import { courtCallKey } from "../_shared/raceday.ts";
 import webpush from "npm:web-push@3.6.7";
 
 
@@ -55,7 +57,7 @@ async function handle(req: Request): Promise<Response> {
     // 1. Match
     const { data: match, error: matchErr } = await supabase
       .from("matches")
-      .select("id, court_number, tournament_id, team_a_id, team_b_id")
+      .select("id, court_number, court_allocated_at, tournament_id, team_a_id, team_b_id")
       .eq("id", matchId)
       .single();
     if (matchErr || !match) {
@@ -65,7 +67,7 @@ async function handle(req: Request): Promise<Response> {
     // 2. Tournament name
     const { data: tournament } = await supabase
       .from("tournaments")
-      .select("name, whatsapp_enabled")
+      .select("name, whatsapp_enabled, reply_to_email")
       .eq("id", match.tournament_id)
       .single();
     const tournamentName: string = tournament?.name ?? "Tournament";
@@ -130,10 +132,11 @@ async function handle(req: Request): Promise<Response> {
       }
     }
 
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
     const RESEND_FROM_EMAIL =
       Deno.env.get("RESEND_FROM_EMAIL") ?? "onboarding@resend.dev";
     const courtNumber = match.court_number ?? "?";
+    // Replies ("running late", "injured") reach the directors, not no-reply.
+    const replyTo: string | null = tournament?.reply_to_email?.trim() || null;
 
     let sent = 0, skipped = 0, failed = 0;
 
@@ -166,7 +169,7 @@ What's next:
 
 Good luck out there!
 — Tournament Admin
-`;
+${replyTo ? "\nRunning late or can't play? Reply to this email and it reaches the tournament directors.\n" : ""}`;
       const safePlayer = esc(player.name);
       const safeTournament = esc(tournamentName);
       const safeOpponent = esc(opponentLabel);
@@ -264,7 +267,8 @@ Good luck out there!
           <tr>
             <td style="background:#1a1a2e;padding:22px 32px;text-align:center;">
               <div style="color:#fbbf24;font-size:11px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;line-height:1.3;">🏸 ${safeTournament}</div>
-              <div style="color:#64748b;font-size:11px;margin-top:8px;letter-spacing:0.5px;">Sent automatically by Tournament Admin</div>
+              <div style="color:#64748b;font-size:11px;margin-top:8px;letter-spacing:0.5px;">Sent automatically by Tournament Admin</div>${replyTo ? `
+              <div style="color:#94a3b8;font-size:12px;margin-top:8px;line-height:1.5;">Running late or can't play? Reply to this email and it reaches the tournament directors.</div>` : ""}
             </td>
           </tr>
 
@@ -276,32 +280,23 @@ Good luck out there!
 </html>`;
 
       try {
-        if (!RESEND_API_KEY) {
-          throw new Error("RESEND_API_KEY not configured");
-        }
-        const resp = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        const result = await sendEmailDetailed(
+          { to: player.email, subject, text, html, fromName: "Tournament", replyTo },
+          {
             from: RESEND_FROM_EMAIL,
-            to: [player.email],
-            subject,
-            text,
-            html,
-          }),
-        });
-        if (!resp.ok) {
-          const respBody = await resp.text();
-          throw new Error(`Resend ${resp.status}: ${respBody.slice(0, 300)}`);
-        }
+            // One email per player per allocation: a double tap or a retried
+            // call within 24 hours reuses the first send.
+            idempotencyKey: courtCallKey(matchId, courtNumber, match.court_allocated_at, player.id),
+            tags: [{ name: "app", value: "badminton" }, { name: "kind", value: "court_call" }],
+          },
+        );
+        if (result.error) throw new Error(`Resend ${result.error}`);
         await supabase.from("notification_log").insert({
           match_id: matchId,
           player_id: player.id,
           channel: "email",
           status: "sent",
+          provider_message_id: result.id,
         });
         sent++;
       } catch (e) {
