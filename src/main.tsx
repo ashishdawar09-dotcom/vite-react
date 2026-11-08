@@ -56,6 +56,12 @@ const VenueTvPage = lazyWithReload(() =>
     default: m.VenueTvPage,
   })),
 )
+// The venue TV show: four designs taking turns on the hall TV (features/venueTv).
+const TvShowPage = lazyWithReload(() =>
+  import('./features/venueTv/TvShowPage').then((m) => ({
+    default: m.TvShowPage,
+  })),
+)
 const ResultsPage = lazyWithReload(() =>
   import('./features/publicSpectator/ResultsPage').then((m) => ({
     default: m.ResultsPage,
@@ -128,7 +134,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/waiver/:token" element={<PartnerWaiverPage />} />
               {/* Public share surfaces — anonymous read of tournament state.
                   Specific sub-paths must come BEFORE the bare /t/:slug match. */}
-              <Route path="/t/:slug/tv" element={<VenueTvPage />} />
+              <Route path="/t/:slug/tv" element={<TvShowPage />} />
+              <Route path="/t/:slug/tv/classic" element={<VenueTvPage />} />
               <Route path="/t/:slug/results" element={<ResultsPage />} />
               <Route path="/t/:slug" element={<PublicSpectatorPage />} />
               <Route path="/p/:id" element={<PublicPlayerProfilePage />} />
