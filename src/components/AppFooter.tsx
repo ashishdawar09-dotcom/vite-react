@@ -8,7 +8,13 @@ const ParticleTextEffect = lazyWithReload(() =>
   import("./ui/particle-text-effect").then((m) => ({ default: m.ParticleTextEffect })),
 );
 
+// One array for the life of the app. A new array on every render restarted
+// the animation each time the app re-rendered (every live update).
+const FOOTER_WORDS = ["Built by Ashish Dawar"];
+
 // Branded particle-canvas footer used by the admin/spectator shell. The
+// words animate as before once the footer comes into view, for ~10 s, then
+// hold still (holdWhenFormed). The
 // fallback is a zero-content spacer at the canvas's natural height so the
 // page doesn't shift when the chunk arrives.
 export function AppFooter() {
@@ -29,7 +35,7 @@ export function AppFooter() {
     >
       <Suspense fallback={<div style={{ height: 110, width: "100%" }} />}>
         <ParticleTextEffect
-          words={["Built by Ashish Dawar"]}
+          words={FOOTER_WORDS}
           width={800}
           height={110}
           fontSize={36}
@@ -37,6 +43,7 @@ export function AppFooter() {
           pixelSteps={4}
           pointSize={2}
           backgroundFade="rgba(5, 13, 26, 0.1)"
+          holdWhenFormed
         />
       </Suspense>
     </footer>
