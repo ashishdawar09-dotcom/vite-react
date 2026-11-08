@@ -171,7 +171,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   if (teamsView.length === 0) {
     return (
       <div style={{ position: "relative", background: "#0a1628", borderRadius: 14, padding: 80, color: "#64748b", textAlign: "center", border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.webp)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.35 }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.6) 0%, rgba(10,22,40,0.95) 100%)" }} />
         <div style={{ position: "relative", zIndex: 1 }}>
           {/* MAKEOVER: 🏸 emoji -> custom ShuttleSVG */}
@@ -344,7 +344,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
           (Previous iteration mounted the gradient INSIDE this block; moved to the outer wrapper now.) */}
       <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 28, minHeight: 180, background: "linear-gradient(135deg,#0d1f3a 0%,#0a1628 100%)", border: "1px solid #1a3050" }}>
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: "60%", clipPath: "polygon(25% 0, 100% 0, 100% 100%, 0 100%)", overflow: "hidden" }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.jpg)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B2.webp)", backgroundSize: "cover", backgroundPosition: "center 30%", opacity: 0.95 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, #0a1628 0%, rgba(10,22,40,0.7) 30%, rgba(10,22,40,0.1) 100%)" }} />
         </div>
         <div style={{ position: "absolute", top: -40, left: -40, width: 200, height: 200, background: "radial-gradient(circle, rgba(0,184,255,0.25) 0%, transparent 70%)", pointerEvents: "none" }} />
@@ -569,7 +569,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
               {groups.map((g, gi) => {
                 const st = getStandings(g, gi);
-                const groupBgs = ["/images/B5.jpg", "/images/B4.jpg", "/images/B1.jpg", "/images/B6.jpg"];
+                const groupBgs = ["/images/B5.webp", "/images/B4.webp", "/images/B1.webp", "/images/B6.webp"];
                 const groupAccents = ["#00d4ff", "#22c55e", "#f59e0b", "#a855f7"];
                 const accent = groupAccents[gi % groupAccents.length];
                 const fmt = g[0]?.category_id ? formatForCategory(g[0].category_id) : null;
@@ -629,7 +629,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 
       {live.length === 0 && upcoming.length === 0 && recent.length === 0 && (
         <div style={{ position: "relative", textAlign: "center", padding: 60, color: "#64748b", background: "#0f1e36", borderRadius: 10, border: "1px solid #1a3050", overflow: "hidden", minHeight: 220 }}>
-          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.webp)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(15,30,55,0.6) 0%, rgba(15,30,55,0.95) 100%)" }} />
           <div style={{ position: "relative", zIndex: 1 }}>
             {/* MAKEOVER: 🏸 emoji -> custom ShuttleSVG */}

@@ -1036,7 +1036,7 @@ export default function App() {
         )}
         {!current && (
           <div style={{ position: "relative", textAlign: "center", padding: 80, color: "#64748b", background: "#0a1628", borderRadius: 14, border: "1px solid #1a3050", overflow: "hidden", minHeight: 280 }}>
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.jpg)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
+            <div style={{ position: "absolute", inset: 0, backgroundImage: "url(/images/B3.webp)", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3 }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(10,22,40,0.7) 0%, rgba(10,22,40,0.95) 100%)" }} />
             <div style={{ position: "relative", zIndex: 1 }}>
               <ShuttleSVG sz={80} color="#00b8ff" opacity={0.5} style={{ margin: "0 auto 14px", display: "block" }} />
