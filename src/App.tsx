@@ -20,6 +20,7 @@ import { byeAdvances, defaultFormat, recommendFormats, seedBracket, type FormatP
 import { planSinglesDraw } from "./lib/pairing";
 import { finalOnlyRows, hasStageRows, isStageAlreadyStarted, planStart } from "./lib/stageStart";
 import { finalScorePatch } from "./lib/scoring";
+import { editedGamesPatch, endGamePatch, gamesOf, stopEarlyPatch, undoGamePatch } from "./lib/bestOf3";
 import { scoreTaps } from "./hooks/useScoreTaps";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { AppFooter } from "./components/AppFooter";
@@ -27,7 +28,7 @@ import { MoreDrawer, type TabId } from "./components/MoreDrawer";
 import { PartnerPickerModal } from "./components/PartnerPickerModal";
 import { MatchCard as ExtractedMatchCard, type MatchCardActions, type ShownScores } from "./components/MatchCard";
 import { AppHeader } from "./components/AppHeader";
-import type { Match, Player, Team, Tournament } from "./types";
+import type { GameScore, Match, Player, Team, Tournament } from "./types";
 import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
 import { courtTakenMessage, isCourtTaken } from "./lib/courts";
 import { groupKeyOf, groupLetter, groupStandings, groupTies, groupsAllConfirmed, isRoundRobinOnly, roundRobinPodium } from "./lib/groups";
@@ -836,6 +837,42 @@ export default function App() {
     setEditingMatchId(null);
   };
 
+  // Best of 3 (src/lib/bestOf3.ts). End Game writes the game and puts the
+  // boxes back to 0–0; the game that decides the match confirms it in the same
+  // write, then the bracket moves on exactly as for a one-game match.
+  const endGame = async (m: Match, shown: ShownScores, force = false): Promise<"saved" | "not-over" | null> => {
+    if (!guard()) return null;
+    const r = endGamePatch(m, shown.a, shown.b, new Date().toISOString(), force);
+    if (!r.ok) {
+      if (r.reason === "not-over") return "not-over";
+      toast(r.reason === "tie" ? "A game can't end in a tie." : r.reason === "no-score" ? "Enter the game's score first." : "This match is already decided.", "warn");
+      return null;
+    }
+    const plan = r.decided ? planBracket(m, r.winnerId) : null;
+    if (r.decided && !plan) return null;
+    if (!(await writeResult(m, r.patch, r.decided ? "Not confirmed" : "Game not saved"))) return null;
+    if (plan) await applyBracket(plan);
+    return "saved";
+  };
+  const undoGame = async (m: Match) => {
+    if (!guard()) return;
+    const patch = undoGamePatch(m);
+    if (!patch) return;
+    const n = gamesOf(m).length;
+    const a = scoreTaps.shown(m, "a"), b = scoreTaps.shown(m, "b");
+    if (!confirm(`Undo game ${n}? Its ${patch.score_a}–${patch.score_b} goes back into the score boxes${a || b ? `, and game ${n + 1}'s ${a}–${b} is cleared` : ""}.`)) return;
+    await writeResult(m, patch, "Not undone");
+  };
+  const saveEditedGames = async (m: Match, games: GameScore[]) => {
+    if (!guard()) return;
+    const r = editedGamesPatch(m, games, new Date().toISOString());
+    if (!r.ok) { toast(r.reason, "warn"); return; }
+    const plan = planBracket(m, r.winnerId); if (!plan) return;
+    if (!(await writeResult(m, r.patch, "Not saved"))) return;
+    await applyBracket(plan);
+    setEditingMatchId(null);
+  };
+
   useEffect(() => { if (currentCategory) setPendingRounds(currentCategory.rounds_per_pair || 1); }, [currentCategory?.id, currentCategory?.rounds_per_pair]);
 
   // Sync selected format card to whatever the category has saved (or default
@@ -906,15 +943,18 @@ export default function App() {
     saveEditedMatch,
     selectWinner: async (m, winnerId) => {
       const plan = planBracket(m, winnerId); if (!plan) return;
-      await db.selectMatchWinner(m.id, winnerId);
+      await db.selectMatchWinner(m.id, winnerId, stopEarlyPatch(m));
       await applyBracket(plan);
     },
     markWalkover: async (m, winnerId) => {
       const plan = planBracket(m, winnerId); if (!plan) return;
-      await db.markWalkover(m.id, winnerId);
+      await db.markWalkover(m.id, winnerId, { extra: stopEarlyPatch(m) });
       await applyBracket(plan);
     },
     recordSitOutWalkover,
+    endGame,
+    undoGame,
+    saveEditedGames,
   };
 
   // What every card on the Groups/Knockout tabs needs from App. The cards

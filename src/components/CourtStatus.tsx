@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: live-court pulse */
 import type { Category, ProjectedMatch, Team, Player } from "../types";
+import { currentGame, isBestOf3 } from "../lib/bestOf3";
 import { fmtElapsed } from "../hooks/useScheduling";
 
 /**
@@ -63,7 +64,8 @@ export const CourtStatus = React.memo(function CourtStatus({
           const cat = m ? catById[m.category_id] : null;
           const ta = m?.team_a_id ? teamById[m.team_a_id] : null;
           const tb = m?.team_b_id ? teamById[m.team_b_id] : null;
-          const matchMin = cat?.match_minutes ?? 12;
+          // A best-of-3 match gets two matches' time (src/lib/bestOf3.ts).
+          const matchMin = (cat?.match_minutes ?? 12) * (m && isBestOf3(m) ? 2 : 1);
           const elapsed = isLive && m?.started_at ? (now - new Date(m.started_at).getTime()) / 60000 : 0;
           const over = isLive && elapsed > matchMin;
           const wayOver = isLive && elapsed > matchMin + 3;
@@ -116,7 +118,7 @@ export const CourtStatus = React.memo(function CourtStatus({
                   </div>
                   {isLive && (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-                      <span className="font-display" style={{ fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: 1 }}>{m.score_a ?? 0}–{m.score_b ?? 0}</span>
+                      <span className="font-display" style={{ fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: 1 }}>{m.score_a ?? 0}–{m.score_b ?? 0}{isBestOf3(m) && <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 6, letterSpacing: 1.5 }}>GAME {currentGame(m)}</span>}</span>
                       {wayOver && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#ef4444", letterSpacing: 1.5 }}>OVERTIME</span>}
                       {over && !wayOver && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: 1.5 }}>OVER {Math.round(elapsed - matchMin)}M</span>}
                     </div>

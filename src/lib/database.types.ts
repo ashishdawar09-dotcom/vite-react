@@ -118,6 +118,7 @@ export type Database = {
         Row: {
           age_band: string | null
           allow_solo_signup: boolean
+          best_of_3_from: string | null
           created_at: string
           groups_count: number
           has_bronze_match: boolean
@@ -138,6 +139,7 @@ export type Database = {
         Insert: {
           age_band?: string | null
           allow_solo_signup?: boolean
+          best_of_3_from?: string | null
           created_at?: string
           groups_count?: number
           has_bronze_match?: boolean
@@ -158,6 +160,7 @@ export type Database = {
         Update: {
           age_band?: string | null
           allow_solo_signup?: boolean
+          best_of_3_from?: string | null
           created_at?: string
           groups_count?: number
           has_bronze_match?: boolean
@@ -224,6 +227,8 @@ export type Database = {
       matches: {
         Row: {
           category_id: string
+          best_of: number
+          games: Json | null
           confirmed: boolean
           confirmed_at: string | null
           court_allocated_at: string | null
@@ -251,6 +256,8 @@ export type Database = {
         }
         Insert: {
           category_id: string
+          best_of?: number
+          games?: Json | null
           confirmed?: boolean
           confirmed_at?: string | null
           court_allocated_at?: string | null
@@ -278,6 +285,8 @@ export type Database = {
         }
         Update: {
           category_id?: string
+          best_of?: number
+          games?: Json | null
           confirmed?: boolean
           confirmed_at?: string | null
           court_allocated_at?: string | null
@@ -1176,6 +1185,10 @@ export type Database = {
         Returns: undefined
       }
       slugify: { Args: { input: string }; Returns: string }
+      set_knockout_format: {
+        Args: { p_category_id: string; p_from: string | null }
+        Returns: number
+      }
       start_category_stage: {
         Args: {
           p_category_id: string

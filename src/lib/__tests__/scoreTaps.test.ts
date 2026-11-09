@@ -201,3 +201,36 @@ describe("score taps (QA review item 6)", () => {
     off();
   });
 });
+
+describe("score taps in a best-of-3 match", () => {
+  it("shows 0–0 when a game ends, not the last game's points", async () => {
+    const { taps, calls } = harness();
+    const m = live();
+    for (let i = 0; i < 15; i++) taps.step(m, "a", 1);
+    calls[0].land();
+    await settle();
+    calls[1].land();
+    await settle();
+    expect(calls[1].patch).toEqual({ score_a: 15 });
+    // The 15's echo hasn't come back yet, so a 0 from the server still reads
+    // as an old number of ours on the way: within one game the screen keeps 15.
+    expect(taps.shown(live(), "a")).toBe(15);
+    // End game: the server now has game 1 in `games` and 0–0 in the boxes.
+    const game2 = live({ games: [[15, 0]] });
+    taps.serverSaw(game2);
+    expect([taps.shown(game2, "a"), taps.shown(game2, "b")]).toEqual([0, 0]);
+    // The next tap starts game 2 from 0.
+    taps.step(game2, "b", 1);
+    expect(taps.shown(game2, "b")).toBe(1);
+    expect(calls[2].patch).toEqual({ score_b: 1 });
+  });
+
+  it("puts the last game's points back when a game is undone", () => {
+    const { taps } = harness();
+    const game2 = live({ games: [[15, 9]] });
+    taps.step(game2, "a", 1);
+    const undone = live({ games: null, score_a: 15, score_b: 9 });
+    taps.serverSaw(undone);
+    expect([taps.shown(undone, "a"), taps.shown(undone, "b")]).toEqual([15, 9]);
+  });
+});

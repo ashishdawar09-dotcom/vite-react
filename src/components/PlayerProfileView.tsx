@@ -6,6 +6,7 @@ import { confirmPlayerDelete, requestPlayerDeleteCode, updatePlayer } from "../l
 import type { Category, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 import { groupKeyOf, groupLetter } from "../lib/groups";
 import { isCancelledMatch } from "../lib/matchOutcome";
+import { gamesLine, isBestOf3 } from "../lib/bestOf3";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -635,6 +636,9 @@ function MatchRow({
           <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_b_id)}</span>
           {variant === "recent" && <span style={{ fontSize: 18, fontWeight: 800, color: m.winner_id === m.team_b_id ? "#22c55e" : "#94a3b8", minWidth: 24, textAlign: "right" }}>{m.score_b ?? 0}</span>}
         </div>
+        {variant === "recent" && isBestOf3(m) && gamesLine(m) && !isCancelledMatch(m) && (
+          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginTop: 4 }}>Games {gamesLine(m)}</div>
+        )}
       </div>
 
       {/* Right side meta */}

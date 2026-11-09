@@ -76,7 +76,13 @@ export type Category = {
   // Minimum age on tournament day for every player in an entry (e.g. 35 for
   // "Men's Doubles 35+"). Null = no minimum beyond the age band.
   min_age?: number | null;
+  // First knockout round played best of 3 games ("qf", "sf" or "final"; null =
+  // every match is one game). The bronze match follows the final. Changed only
+  // through db.setKnockoutFormat, which restamps matches that haven't started.
+  best_of_3_from?: BestOf3From | null;
 };
+
+export type BestOf3From = "qf" | "sf" | "final";
 
 export type Player = {
   id: string;
@@ -132,7 +138,17 @@ export type Match = {
   // v15: true on the extra match generated for the 3rd-place playoff. Lives in
   // the same round_idx as the Final (last round) at slot_idx=1; Final is slot 0.
   is_bronze: boolean;
+  // 1 or 3 games. Set from the category's best_of_3_from when the bracket is
+  // made and when that setting changes, on matches that haven't started.
+  // Optional: rows cached before the column existed don't have it.
+  best_of?: number;
+  // Best of 3 only: finished games in order. While live, score_a/score_b are
+  // the current game's points; once confirmed they are games won (2-0, 2-1).
+  games?: GameScore[] | null;
 };
+
+/** One game's points, [team A, team B]. */
+export type GameScore = [number, number];
 
 export type PlayerCategory = {
   id: string;

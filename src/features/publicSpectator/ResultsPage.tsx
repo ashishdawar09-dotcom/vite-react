@@ -6,6 +6,7 @@ import { derivePublicTournamentState, type TeamView } from "./publicDerive";
 import type { Category } from "../../types";
 import { formatLocalDate } from "../../lib/dates";
 import { isCancelledMatch } from "../../lib/matchOutcome";
+import { gamesLine, isBestOf3 } from "../../lib/bestOf3";
 import { isRoundRobinOnly, roundRobinPodium } from "../../lib/groups";
 
 /**
@@ -197,7 +198,11 @@ export function ResultsPage() {
                                   : `Round ${ri + 1}`}
                         </td>
                         <td style={tdStyle}>{teamName(derived.allTeamById, m.team_a_id)} vs {teamName(derived.allTeamById, m.team_b_id)}</td>
-                        <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{isCancelledMatch(m) ? "Cancelled" : `${m.score_a ?? 0} – ${m.score_b ?? 0}`}</td>
+                        <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{isCancelledMatch(m) ? "Cancelled" : `${m.score_a ?? 0} – ${m.score_b ?? 0}`}
+                          {!isCancelledMatch(m) && isBestOf3(m) && gamesLine(m) && (
+                            <div style={{ fontSize: 11, fontWeight: 500, color: "#64748b", whiteSpace: "nowrap" }}>{gamesLine(m)}</div>
+                          )}
+                        </td>
                         <td style={{ ...tdStyle, fontWeight: 700 }}>{teamName(derived.allTeamById, m.winner_id)}</td>
                       </tr>
                     )),

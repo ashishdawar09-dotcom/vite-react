@@ -16,7 +16,7 @@ import type { Match } from "../types";
 
 export type Side = "a" | "b";
 export type ScorePatch = { score_a?: number; score_b?: number };
-export type ScoredMatch = Pick<Match, "id" | "score_a" | "score_b" | "status" | "confirmed" | "started_at">;
+export type ScoredMatch = Pick<Match, "id" | "score_a" | "score_b" | "status" | "confirmed" | "started_at"> & { games?: Match["games"] };
 
 type SideState = {
   /** Number on screen. */
@@ -41,7 +41,12 @@ type MatchState = {
   server: ScoredMatch;
 };
 
-const sessionOf = (m: ScoredMatch) => `${m.status}|${m.confirmed ? 1 : 0}|${m.started_at ?? ""}`;
+// A best-of-3 match starts a new run at every game: ending (or undoing) a game
+// sets the boxes to the new game's numbers, and the old game's taps must not
+// hold the screen. Without this the server's 0 after "End game" read as an
+// old echo of ours ("passing"), so the boxes kept showing 15.
+const gameNo = (m: ScoredMatch) => (Array.isArray(m.games) ? m.games.length : 0);
+const sessionOf = (m: ScoredMatch) => `${m.status}|${m.confirmed ? 1 : 0}|${m.started_at ?? ""}|${gameNo(m)}`;
 const serverScore = (m: ScoredMatch, side: Side) => (side === "a" ? m.score_a : m.score_b) ?? 0;
 
 export class ScoreTaps {
