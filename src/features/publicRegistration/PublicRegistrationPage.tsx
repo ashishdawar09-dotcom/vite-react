@@ -43,7 +43,7 @@ const TOURNAMENT_HIGHLIGHTS: Record<string, Highlight[]> = {
   // Shuttle Storm '26
   "e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb": [
     { title: "Badminton BC registered club", sub: "Run to Badminton BC standards", href: "https://www.badmintonbc.com" },
-    { title: "Feather shuttles", sub: "Tournament grade, on every court" },
+    { title: "Victor NCS Max shuttles", sub: "The official shuttle, on every court" },
     { title: "Prizes", sub: "For first and second place in every category" },
   ],
 };
