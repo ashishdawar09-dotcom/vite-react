@@ -225,6 +225,47 @@ describe("score taps in a best-of-3 match", () => {
     expect(calls[2].patch).toEqual({ score_b: 1 });
   });
 
+  it("ignores a tap between End Game and the screen getting game 2 (it saved 16–0 as game 2)", () => {
+    const { taps, calls } = harness();
+    const g1 = live({ score_a: 15, score_b: 10 });
+    // End Game: the write's lock, the write, then wait for game 2 before letting go.
+    const release = taps.lock(g1);
+    taps.waitForGames(g1, 1);
+    release();
+    // The scorer taps the first rally of game 2 while the screen still has game 1.
+    taps.step(g1, "a", 1);
+    expect(calls).toHaveLength(0);
+    expect(taps.shown(g1, "a")).toBe(15);
+    // The server copy with game 2 arrives: taps work again, from 0.
+    const g2 = live({ games: [[15, 10]] });
+    taps.serverSaw(g2);
+    taps.step(g2, "a", 1);
+    expect(calls.map((c) => c.patch)).toEqual([{ score_a: 1 }]);
+  });
+
+  it("lets taps through again if the new game hasn't reached the screen after a while", async () => {
+    const { taps, calls } = harness();
+    const g1 = live({ score_a: 15, score_b: 10 });
+    taps.waitForGames(g1, 1, 10);
+    taps.step(g1, "a", 1);
+    expect(calls).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, 25));
+    taps.step(g1, "a", 1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("holds taps after Undo Game until the restored game shows", () => {
+    const { taps, calls } = harness();
+    const g2 = live({ games: [[15, 9]], score_a: 0, score_b: 0 });
+    taps.waitForGames(g2, 0);
+    taps.step(g2, "a", 1); // would have written 1 over the restored 15
+    expect(calls).toHaveLength(0);
+    const back = live({ games: null, score_a: 15, score_b: 9 });
+    taps.serverSaw(back);
+    taps.step(back, "b", 1);
+    expect(calls.map((c) => c.patch)).toEqual([{ score_b: 10 }]);
+  });
+
   it("puts the last game's points back when a game is undone", () => {
     const { taps } = harness();
     const game2 = live({ games: [[15, 9]] });

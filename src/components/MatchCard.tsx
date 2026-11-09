@@ -5,7 +5,7 @@ import { useShownScores } from "../hooks/useScoreTaps";
 import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
 import type { GameScore, Match, Player, Team } from "../types";
-import { currentGame, endGameAction, gameTarget, gamesOf, gamesWon, isBestOf3, playMinutes } from "../lib/bestOf3";
+import { currentGame, decidingScore, endGameAction, gameTarget, gamesOf, gamesWon, isBestOf3, playMinutes } from "../lib/bestOf3";
 import { isCancelledMatch } from "../lib/matchOutcome";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { CourtCallEmailStatus } from "../features/raceEmails/CourtCallEmailStatus";
@@ -382,7 +382,8 @@ export function MatchCard({
         )}
         {showNotOver && (
           <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, color: "#b45309" }}>
-            {onScreen.a}–{onScreen.b} can't end a game to {gameTarget(m)}. Check the score, or save it anyway.
+            {onScreen.a}–{onScreen.b} can't end a game to {gameTarget(m)}. Check the score, or save it anyway
+            {decidingScore(m, onScreen.a, onScreen.b) ? `: that confirms the match ${decidingScore(m, onScreen.a, onScreen.b)}.` : "."}
           </div>
         )}
 
@@ -499,7 +500,7 @@ export function MatchCard({
                 onClick={() => void runEndGame(true)}
                 style={{ ...btn("#f59e0b"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10 }}
               >
-                Save Anyway
+                {decidingScore(m, onScreen.a, onScreen.b) ? `Save Anyway, Confirm ${decidingScore(m, onScreen.a, onScreen.b)}` : "Save Anyway"}
               </button>
             )}
             {m.status === "live" && !m.confirmed && bo3 && games.length > 0 && (

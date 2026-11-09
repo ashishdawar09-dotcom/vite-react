@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  checkGames, currentGame, editedGamesPatch, endGamePatch, gameOverAt, gamesLine, gamesOf, gamesWon,
+  checkGames, currentGame, decidingScore, editedGamesPatch, endGamePatch, gameOverAt, gamesLine, gamesOf, gamesWon,
   isBestOf3, playMinutes, roundBestOf, stopEarlyPatch, undoGamePatch,
 } from "../bestOf3";
 import type { GameScore, Match } from "../../types";
@@ -118,5 +118,15 @@ describe("helpers", () => {
     expect([0, 1, 2, 3].map(d => roundBestOf(d, "qf"))).toEqual([3, 3, 3, 1]);
     expect([0, 1, 2, 3].map(d => roundBestOf(d, "final"))).toEqual([3, 1, 1, 1]);
     expect([0, 1, 2, 3].map(d => roundBestOf(d, null))).toEqual([1, 1, 1, 1]);
+  });
+});
+
+describe("saving a game that decides the match", () => {
+  it("names the result when the save would give a side its second game", () => {
+    expect(decidingScore({ games: [[15, 3]] }, 14, 12)).toBe("2–0");
+    expect(decidingScore({ games: [[15, 3], [3, 15]] }, 12, 14)).toBe("2–1");
+    expect(decidingScore({ games: [[15, 3]] }, 10, 14)).toBeNull();
+    expect(decidingScore({ games: null }, 15, 14)).toBeNull();
+    expect(decidingScore({ games: [[15, 3]] }, 9, 9)).toBeNull();
   });
 });

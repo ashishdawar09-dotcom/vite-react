@@ -32,9 +32,9 @@ import { courtTakenMessage, isCourtTaken } from "../lib/courts";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { resultLabel } from "../lib/matchOutcome";
 import { finalScorePatch } from "../lib/scoring";
-import { currentGame, endGameAction, endGamePatch, gamesOf, isBestOf3, playMinutes, stopEarlyPatch, undoGamePatch } from "../lib/bestOf3";
+import { currentGame, decidingScore, endGameAction, endGamePatch, gamesOf, isBestOf3, playMinutes, stopEarlyPatch, undoGamePatch } from "../lib/bestOf3";
 import { useScoreTaps } from "../hooks/useScoreTaps";
-import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
+import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
 
@@ -351,7 +351,8 @@ export function MatchesTab({
     const a = taps.shown(m, "a"), b = taps.shown(m, "b");
     let r = endGamePatch(m, a, b, new Date().toISOString());
     if (!r.ok && r.reason === "not-over") {
-      if (!confirm(`${a}–${b} can't end a game to 15. Save it anyway?`)) return;
+      const decides = decidingScore(m, a, b);
+      if (!confirm(`${a}–${b} can't end a game to 15. Save it anyway${decides ? ` and confirm the match ${decides}` : ""}?`)) return;
       r = endGamePatch(m, a, b, new Date().toISOString(), true);
     }
     if (!r.ok) {
@@ -364,6 +365,8 @@ export function MatchesTab({
     try {
       if (!(await taps.flush(m.id))) return;
       await db.updateMatch(m.id, r.patch);
+      // Taps stay off until the row shows the new game (scoreTaps.waitForGames).
+      taps.waitForGames(m, r.patch.games?.length ?? 0);
     } catch (e: unknown) {
       toast(`${r.decided ? "Not confirmed" : "Game not saved"}: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
       return;
@@ -386,6 +389,7 @@ export function MatchesTab({
     try {
       if (!(await taps.flush(m.id))) return;
       await db.updateMatch(m.id, patch);
+      taps.waitForGames(m, patch.games?.length ?? 0);
     } catch (e: unknown) {
       toast(`Not undone: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
     } finally {
@@ -420,11 +424,25 @@ export function MatchesTab({
     await applyBracket(plan);
   };
 
+  // A best-of-3 match stopped at time over: any score still saving lands
+  // first, then the result saves games won (src/lib/bestOf3.ts stopEarlyPatch).
+  // A one-game match writes as before.
+  const stopEarly = async (m: ProjectedMatch, write: (extra: Partial<Match>) => Promise<void>) => {
+    if (!isBestOf3(m)) return write({});
+    const release = taps.lock(m);
+    try {
+      await taps.flush(m.id);
+      await write(stopEarlyPatch(m));
+    } finally {
+      release();
+    }
+  };
+
   const markWalkover = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
-    await db.markWalkover(m.id, winnerId, { extra: stopEarlyPatch(m) });
+    await stopEarly(m, (extra) => db.markWalkover(m.id, winnerId, { extra }));
     await applyBracket(plan);
     setTimeOverPicking(null);
   };
@@ -433,7 +451,7 @@ export function MatchesTab({
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
-    await db.selectMatchWinner(m.id, winnerId, stopEarlyPatch(m));
+    await stopEarly(m, (extra) => db.selectMatchWinner(m.id, winnerId, extra));
     await applyBracket(plan);
     setTimeOverPicking(null);
   };

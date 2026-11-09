@@ -20,7 +20,7 @@ import { byeAdvances, defaultFormat, recommendFormats, seedBracket, type FormatP
 import { planSinglesDraw } from "./lib/pairing";
 import { finalOnlyRows, hasStageRows, isStageAlreadyStarted, planStart } from "./lib/stageStart";
 import { finalScorePatch } from "./lib/scoring";
-import { editedGamesPatch, endGamePatch, gamesOf, stopEarlyPatch, undoGamePatch } from "./lib/bestOf3";
+import { editedGamesPatch, endGamePatch, gamesOf, isBestOf3, stopEarlyPatch, undoGamePatch } from "./lib/bestOf3";
 import { scoreTaps } from "./hooks/useScoreTaps";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
 import { AppFooter } from "./components/AppFooter";
@@ -778,6 +778,8 @@ export default function App() {
     try {
       if (!(await scoreTaps.flush(m.id))) return false;
       await db.updateMatch(m.id, patch);
+      // Best of 3: the games changed, so taps stay off until the screen has the new game (scoreTaps.waitForGames).
+      if (patch.games !== undefined) scoreTaps.waitForGames(m, patch.games?.length ?? 0);
       return true;
     } catch (e: unknown) {
       toast(`${failed}: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
@@ -853,6 +855,19 @@ export default function App() {
     if (!(await writeResult(m, r.patch, r.decided ? "Not confirmed" : "Game not saved"))) return null;
     if (plan) await applyBracket(plan);
     return "saved";
+  };
+  // A best-of-3 match stopped at time over: any score still saving lands
+  // first, then the result saves games won (stopEarlyPatch). One-game
+  // matches write as before.
+  const stopEarly = async (m: Match, write: (extra: Partial<Match>) => Promise<void>) => {
+    if (!isBestOf3(m)) return write({});
+    const release = scoreTaps.lock(m);
+    try {
+      await scoreTaps.flush(m.id);
+      await write(stopEarlyPatch(m));
+    } finally {
+      release();
+    }
   };
   const undoGame = async (m: Match) => {
     if (!guard()) return;
@@ -943,12 +958,12 @@ export default function App() {
     saveEditedMatch,
     selectWinner: async (m, winnerId) => {
       const plan = planBracket(m, winnerId); if (!plan) return;
-      await db.selectMatchWinner(m.id, winnerId, stopEarlyPatch(m));
+      await stopEarly(m, (extra) => db.selectMatchWinner(m.id, winnerId, extra));
       await applyBracket(plan);
     },
     markWalkover: async (m, winnerId) => {
       const plan = planBracket(m, winnerId); if (!plan) return;
-      await db.markWalkover(m.id, winnerId, { extra: stopEarlyPatch(m) });
+      await stopEarly(m, (extra) => db.markWalkover(m.id, winnerId, { extra }));
       await applyBracket(plan);
     },
     recordSitOutWalkover,

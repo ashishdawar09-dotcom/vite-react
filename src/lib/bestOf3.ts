@@ -115,6 +115,18 @@ export function endGameAction(m: Pick<Match, "games" | "best_of">, a: number, b:
   return { decides: false, game: currentGame(m) };
 }
 
+/**
+ * Saving `a`–`b` as a game would give the leading side its second game, so
+ * the save confirms the match (whether or not the score can end a game).
+ * "2–1" etc., or null.
+ */
+export function decidingScore(m: Pick<Match, "games">, a: number, b: number): string | null {
+  if (a === b) return null;
+  const [wa, wb] = gamesWon(gamesOf(m));
+  const lead = a > b ? wa : wb, other = a > b ? wb : wa;
+  return lead === 1 ? `2–${other}` : null;
+}
+
 export type GamesCheck = { ok: true } | { ok: false; reason: string };
 
 /** Whether `games` is a complete best-of-3 result: no tied game, and it ends the moment a side wins its second game. */

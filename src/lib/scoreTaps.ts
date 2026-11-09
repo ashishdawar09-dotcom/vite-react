@@ -39,6 +39,8 @@ type MatchState = {
   waiters: Array<(ok: boolean) => void>;
   /** The latest server copy of the match, to settle against once the saves finish. */
   server: ScoredMatch;
+  /** Best of 3: End Game / Undo Game writes waiting for the server copy to show their game count. */
+  gameWaits: Array<{ games: number; done: () => void }>;
 };
 
 // A best-of-3 match starts a new run at every game: ending (or undoing) a game
@@ -131,11 +133,35 @@ export class ScoreTaps {
     };
   }
 
+  /**
+   * Best of 3, after End Game or Undo Game has been written: ignore taps on
+   * the match until the server copy shows `games` finished games, or `ms`
+   * passes. Until that copy arrives the screen still holds the old game, and a
+   * +/− tap would step from it: game 1 ended 15–10, then one tap, saved 16–0
+   * as game 2's score. Call it before the write's own lock is released.
+   */
+  waitForGames(m: ScoredMatch, games: number, ms = 4000): void {
+    const release = this.lock(m);
+    const st = this.matches.get(m.id)!;
+    const wait = {
+      games,
+      done: () => {
+        clearTimeout(timer); // set below, before anything can call done()
+        st.gameWaits = st.gameWaits.filter((w) => w !== wait);
+        release();
+      },
+    };
+    st.gameWaits.push(wait);
+    const timer = setTimeout(wait.done, ms);
+    if (gameNo(st.server) === games) wait.done(); // the server copy is already here
+  }
+
   /** The server's copy of a match arrived (refetch or snapshot): hand the screen back once it has caught up. */
   serverSaw(m: ScoredMatch): void {
     const st = this.matches.get(m.id);
     if (!st) return;
     st.server = m;
+    for (const w of [...st.gameWaits]) if (gameNo(m) === w.games) w.done();
     if (this.settle(m.id)) this.emit();
   }
 
@@ -144,7 +170,7 @@ export class ScoreTaps {
   private ensure(m: ScoredMatch): MatchState {
     let st = this.matches.get(m.id);
     if (!st || (st.session !== sessionOf(m) && !st.saving && st.locks === 0)) {
-      st = { session: sessionOf(m), saving: false, locks: 0, waiters: [], server: m };
+      st = { session: sessionOf(m), saving: false, locks: 0, waiters: [], server: m, gameWaits: [] };
       this.matches.set(m.id, st);
     }
     return st;
@@ -223,7 +249,7 @@ export class ScoreTaps {
         changed = true;
       }
     }
-    if (!st.a && !st.b && st.locks === 0 && st.waiters.length === 0) this.matches.delete(matchId);
+    if (!st.a && !st.b && st.locks === 0 && st.waiters.length === 0 && st.gameWaits.length === 0) this.matches.delete(matchId);
     return changed;
   }
 }
