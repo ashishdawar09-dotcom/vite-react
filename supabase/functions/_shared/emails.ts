@@ -1312,14 +1312,15 @@ export function playerBriefing(d: BriefingData): RenderedEmail {
 // Sent once to every player on the roster from the Emails tab (player-briefing,
 // kind "full_house"). The FULL HOUSE animation and the waitlist bar come from
 // the Nov 8 social posts and are served by the app (appAssetBase), frame 0 of
-// the animation being the finished stamp for Outlook. Partners who haven't
-// finished their entry are sent to the directors, not the waitlist: their
-// seat is already counted, and only a director can add someone once it's full.
+// the animation being the finished stamp for Outlook. Only a player with a
+// doubles event that has no partner yet gets the partner step, which sends
+// them to the directors, not the waitlist: that seat is already counted, and
+// only a director can add someone once it's full.
 
 export type FullHouseData = {
   tournament: EmailTournament;
   player: { name: string };
-  entries: { category: string; partner: string | null }[];
+  entries: { category: string; partner: string | null; doubles?: boolean }[];
   cap: number | null;                // the entry cap that's now reached
   notes: string | null;              // from the directors, plain text
   waitlistUrl: string;               // the registration page, which shows the waitlist when full
@@ -1341,8 +1342,13 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
   const allTaken = cap ? `all ${cap} entries are taken` : "every entry is taken";
 
   const entriesHtml = d.entries.map((e) =>
-    `${esc(e.category)}${e.partner ? ` <span style="color:${C.mute}">with</span> ${esc(e.partner)}` : ""}`
+    `${esc(e.category)}${
+      e.partner
+        ? ` <span style="color:${C.mute}">with</span> ${esc(e.partner)}`
+        : e.doubles ? ` <span style="color:${C.mute}">· partner to be confirmed</span>` : ""
+    }`
   ).join("<br>");
+  const seekingPartner = d.entries.some((e) => e.doubles && !e.partner);
   const notes = d.notes?.trim() ? esc(d.notes.trim()).replace(/\r?\n/g, "<br>") : null;
   const details: [string, string][] = [
     ...(d.entries.length ? [[d.entries.length > 1 ? "Your events" : "Your event", entriesHtml] as [string, string]] : []),
@@ -1357,26 +1363,25 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
   const intro = `We're delighted to let you know that ${esc(t.name)} is a full house: ${allTaken} and the entry form is now closed. ` +
     `Thank you so much for registering. Your place is held, and there's nothing more you need to do right now.`;
 
-  const steps: Step[] = [
+  const stepList: Omit<Step, "n">[] = [
+    ...(seekingPartner
+      ? [{
+        gif: "step-received.gif",
+        alt: "Checkmark",
+        title: "Partner not entered yet?",
+        html: "If your partner hasn't signed up yet, or you entered a doubles event without one, reply to this email or contact " +
+          "a director (details below). We'll sort it out with you, and if you don't have a partner we'll pair you with another player.",
+      }]
+      : []),
     {
-      n: 1,
-      gif: "step-received.gif",
-      alt: "Checkmark",
-      title: "Partner not entered yet?",
-      html: "If your partner hasn't signed up yet, or you entered a doubles event without one, reply to this email or contact " +
-        "a director (details below). We'll sort it out with you, and if you don't have a partner we'll pair you with another player.",
-    },
-    {
-      n: 2,
       visual: `<img src="${esc(`${app}/full-house-waitlist.gif`)}" width="536" alt="${esc(`${cap ? `${cap} of ${cap}` : "All"} entries taken. Missed out? Join the waitlist.`)}" ` +
         `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`,
       title: "Know someone who missed out?",
       html: "Point them to the waitlist. If a spot opens up, we'll contact them.",
-      cta: waitlist ? [waitlist, "Join the waitlist"] : undefined,
+      cta: waitlist ? [waitlist, "Join the waitlist"] as [string, string] : undefined,
       wideCta: true,
     },
     {
-      n: 3,
       gif: "step-draw.gif",
       alt: "Draw bracket filling in",
       title: "Watch your inbox",
@@ -1384,6 +1389,7 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
         "Thank you again for being part of it.",
     },
   ];
+  const steps: Step[] = stepList.map((s, i) => ({ ...s, n: i + 1 }));
 
   const html = layout({
     title: subject,

@@ -182,7 +182,11 @@ Deno.test("briefing email: uses the neutral event banner, not the 'You're in' on
 
 const full = (over: Partial<FullHouseData> = {}): FullHouseData => ({
   tournament: T, player: { name: "Amar Singh" },
-  entries: [{ category: "Men's Doubles 35+", partner: "Raj <Gill>" }, { category: "Men's Singles", partner: null }],
+  entries: [
+    { category: "Men's Doubles 35+", partner: "Raj <Gill>", doubles: true },
+    { category: "Mixed Doubles 35+", partner: null, doubles: true },
+    { category: "Men's Singles", partner: null, doubles: false },
+  ],
   cap: 150, notes: null, waitlistUrl: "https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb",
   appAssetBase: "https://badminton.adawar.org/email/", assetBase: "https://shuttlestorm.adawar.org/email", ...over,
 });
@@ -203,12 +207,15 @@ Deno.test("full-house email: thanks them by name, with the FULL HOUSE animation 
   assert(!e.html.includes("approved.gif"));
   assertStringIncludes(e.html, 'href="https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb"');
   assertStringIncludes(e.html, "Join the waitlist");
-  assertStringIncludes(e.html, "Partner not entered yet?");
+  assertStringIncludes(e.html, "Partner not entered yet?"); // a doubles event with no partner yet
+  assertStringIncludes(e.html, "STEP 03");
+  assertStringIncludes(e.html, "Mixed Doubles 35+ <span style=\"color:#8F97A8\">· partner to be confirmed</span>");
+  assert(!e.html.includes("Men&#39;s Singles <span")); // singles: nothing after the name
   assertStringIncludes(e.html, "Raj &lt;Gill&gt;"); // escaped
   assert(!e.html.includes("Raj <Gill>"));
   assertStringIncludes(e.html, "150 of 150 taken");
   assertStringIncludes(e.text, "Hi Amar,");
-  assertStringIncludes(e.text, "Your events: Men's Doubles 35+ with Raj <Gill>\n  Men's Singles");
+  assertStringIncludes(e.text, "Your events: Men's Doubles 35+ with Raj <Gill>\n  Mixed Doubles 35+ · partner to be confirmed\n  Men's Singles");
   assertStringIncludes(e.text, "Event day: Saturday, November 21, 2026 · first serve 9:30 am");
   assertStringIncludes(e.text, "Join the waitlist: https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb");
   assertStringIncludes(e.text, "In the coming days");
@@ -221,4 +228,20 @@ Deno.test("full-house email: no cap, no events, directors' notes", () => {
   assert(!e.html.includes("Your event"));
   assertStringIncludes(e.html, "Parking &lt;free&gt;.<br>Bring water.");
   assertStringIncludes(e.text, "From the directors: Parking <free>.\n  Bring water.");
+});
+
+Deno.test("full-house email: no partner step for singles players or full pairs", () => {
+  for (const entries of [
+    [{ category: "Youth Boys' Singles", partner: null, doubles: false }],
+    [{ category: "Men's Doubles 35+", partner: "Raj Gill", doubles: true }],
+  ]) {
+    const e = fullHouseEmail(full({ entries }));
+    assert(!e.html.includes("Partner not entered yet?"));
+    assert(!e.html.includes("partner to be confirmed"));
+    assert(/STEP 01<\/div><div[^>]*>Know someone who missed out\?/.test(e.html));
+    assertStringIncludes(e.html, "STEP 02");
+    assert(!e.html.includes("STEP 03"));
+    assertStringIncludes(e.text, "1. Know someone who missed out?");
+    assertStringIncludes(e.text, "2. Watch your inbox");
+  }
 });

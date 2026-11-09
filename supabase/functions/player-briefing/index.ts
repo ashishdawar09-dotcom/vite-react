@@ -163,6 +163,7 @@ type Ctx = {
   recipients: { id: string; name: string; email: string }[];
   activeCount: number;
   plan: (playerId: string) => ReturnType<typeof playerPlan>;
+  doublesNames: Set<string>;         // events played in pairs, by name (as playerPlan reports them)
 };
 
 async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx | null> {
@@ -170,7 +171,7 @@ async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx
   if (!t) return null;
   const [players, cats, pcs, teams, matches] = await Promise.all([
     supabase.from("players").select("id, name, email, active").eq("tournament_id", tournamentId),
-    supabase.from("categories").select("id, name, sort_order").eq("tournament_id", tournamentId).order("sort_order"),
+    supabase.from("categories").select("id, name, sort_order, team_size").eq("tournament_id", tournamentId).order("sort_order"),
     supabase.from("player_categories").select("player_id, category_id"),
     supabase.from("teams").select("id, category_id, p1_id, p2_id").eq("tournament_id", tournamentId),
     supabase.from("matches").select("id, category_id, team_a_id, team_b_id, status, scheduled_at, court_number")
@@ -197,6 +198,7 @@ async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx
     recipients: briefingRecipients(roster as { id: string; name: string; email: string | null; active: boolean }[]),
     activeCount: roster.filter((p) => p.active).length,
     plan: (playerId) => playerPlan(playerId, { ...shared, playerCategoryIds: catsByPlayer.get(playerId) ?? [] }),
+    doublesNames: new Set((cats.data ?? []).filter((c) => c.team_size === 2).map((c) => c.name as string)),
   };
 }
 
@@ -214,7 +216,7 @@ function render(ctx: Ctx, kind: BriefingKind, p: { id: string; name: string }, n
     return fullHouseEmail({
       tournament: ctx.t,
       player: { name: p.name },
-      entries: plan.entries,
+      entries: plan.entries.map((e) => ({ ...e, doubles: ctx.doublesNames.has(e.category) })),
       cap: ctx.t.entry_cap,
       notes,
       waitlistUrl: `${SITE_URL}/register/${ctx.t.id}`,
