@@ -246,7 +246,8 @@ function detailsCard(rows: [string, string][]): string {
 }
 
 // Each step leads with a GIF from the asset base, or with live HTML instead
-// (`visual`). `wideCta`: the button fills the column on phones.
+// (`visual`; an empty string makes a text-only step). `wideCta`: the button
+// fills the column on phones.
 type Step = {
   n: number;
   gif?: string;
@@ -258,13 +259,17 @@ type Step = {
   wideCta?: boolean;
 };
 
+// An image file name under the asset base, or a full https URL used as is
+// (the full-house images are served by the app, not the website; http only in local previews).
+const assetSrc = (base: string, file: string) => (/^https?:\/\//.test(file) ? file : `${base}/${file}`);
+
 function stepBlock(s: Step, assetBase: string): string {
   const visual = s.visual ??
-    `<img src="${esc(`${assetBase}/${s.gif}`)}" width="536" alt="${esc(s.alt ?? "")}" ` +
+    `<img src="${esc(assetSrc(assetBase, s.gif ?? ""))}" width="536" alt="${esc(s.alt ?? "")}" ` +
       `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`;
   return `<tr><td class="px" style="padding:0 32px 36px">` +
     visual +
-    `<div style="font-family:${MONO};font-size:12px;letter-spacing:3px;color:${C.volt};margin:20px 0 6px">STEP ${String(s.n).padStart(2, "0")}</div>` +
+    `<div style="font-family:${MONO};font-size:12px;letter-spacing:3px;color:${C.volt};margin:${visual ? 20 : 0}px 0 6px">STEP ${String(s.n).padStart(2, "0")}</div>` +
     `<div style="font-family:${SANS};font-size:24px;line-height:1.2;font-weight:700;color:${C.bone};margin:0 0 10px">${esc(s.title)}</div>` +
     p(s.html, "margin:0") +
     (s.cta ? `<div style="margin-top:14px">${button(s.cta[0], s.cta[1], true, s.wideCta ? "cta" : "")}</div>` : "") +
@@ -344,7 +349,7 @@ function layout(o: {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.ink}" style="background:${C.ink}">
 <tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.ink2}" style="width:100%;max-width:600px;background:${C.ink2};border-radius:18px;overflow:hidden">
-  <tr><td style="padding:0"><img src="${esc(`${base}/${o.hero.gif}`)}" width="600" alt="${esc(o.hero.alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0"></td></tr>
+  <tr><td style="padding:0"><img src="${esc(assetSrc(base, o.hero.gif))}" width="600" alt="${esc(o.hero.alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0"></td></tr>
   <tr><td class="px" style="padding:36px 32px 8px">
     ${kicker(o.kicker)}
     <h1 style="margin:0 0 16px;font-family:${SANS};font-size:40px;line-height:1.05;font-weight:800;letter-spacing:-0.5px;color:${C.bone}">${o.heading}</h1>
@@ -1297,6 +1302,160 @@ export function playerBriefing(d: BriefingData): RenderedEmail {
     ...details.map(([k, v]) => k === "Your matches" && profile ? `${k}: ${profile}` : `${k}: ${strip(v.replace(/<br>/g, "\n  "))}`),
     "",
     (morning ? "TODAY" : "TOMORROW"),
+    ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
+    textFooter(t),
+  ]);
+  return { subject, html, text };
+}
+
+// ---------- full house: the thank-you once every entry is taken ----------
+//
+// Sent once to every player on the roster from the Emails tab (player-briefing,
+// kind "full_house"). The FULL HOUSE animation and the waitlist bar come from
+// the Nov 8 social posts and are served by the app (appAssetBase), frame 0 of
+// the animation being the finished stamp for Outlook. Only a player with a
+// doubles event that has no partner yet gets the partner step, which sends
+// them to the directors, not the waitlist: that seat is already counted, and
+// only a director can add someone once it's full.
+//
+// The rest is the directors' Nov 9 message for Shuttle Storm 2026: friends to
+// the waitlist, more girls wanted for Youth Girls' Singles (through the
+// directors, as the form is closed), the schedule and court calls, and help.
+// EVENT_NOTES adds a step for the players in one event only.
+
+export type FullHouseData = {
+  tournament: EmailTournament;
+  player: { name: string };
+  // teams: how many teams the event has right now (doubles), for the event notes
+  entries: { category: string; partner: string | null; doubles?: boolean; teams?: number }[];
+  cap: number | null;                // the entry cap that's now reached
+  notes: string | null;              // from the directors, plain text
+  waitlistUrl: string;               // the registration page, which shows the waitlist when full
+  appAssetBase: string;              // e.g. https://badminton.adawar.org/email
+  assetBase: string;                 // the website's email images (step GIFs)
+  privacyUrl?: string | null;
+};
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+// A text-only step for the players in one event, matched by its name.
+const EVENT_NOTES: { match: RegExp; title: string; html: (teams: number | undefined) => string }[] = [
+  {
+    // Directors, Nov 9: only 2 teams; likely to be merged into the open women's doubles.
+    match: /^women['’]?s doubles 35\+$/i,
+    title: "About Women's Doubles 35+",
+    html: (teams) =>
+      `${teams ? `So far we have ${plural(teams, "team", "teams")}` : "So far we have only a few teams"} in Women's Doubles 35+. ` +
+      "We're keeping an eye on it, but we're inclined to move the group into the open women's doubles " +
+      "(Women's Doubles 18–34), as there are more teams there. If you have any questions about this, just reply to this email.",
+  },
+];
+
+export function fullHouseEmail(d: FullHouseData): RenderedEmail {
+  const t = d.tournament;
+  const name = firstName(d.player.name);
+  const cap = d.cap && d.cap > 0 ? Math.floor(d.cap) : null;
+  const start = clockTime(t.event_time);
+  const day = longDate(t.event_date);
+  const waitlist = safeUrl(d.waitlistUrl);
+  const app = d.appAssetBase.replace(/\/+$/, "");
+
+  const subject = `It's a full house! Thank you, ${name}`;
+  const allTaken = cap ? `all ${cap} entries are taken` : "every entry is taken";
+
+  const entriesHtml = d.entries.map((e) =>
+    `${esc(e.category)}${
+      e.partner
+        ? ` <span style="color:${C.mute}">with</span> ${esc(e.partner)}`
+        : e.doubles ? ` <span style="color:${C.mute}">· partner to be confirmed</span>` : ""
+    }`
+  ).join("<br>");
+  const seekingPartner = d.entries.some((e) => e.doubles && !e.partner);
+  const notes = d.notes?.trim() ? esc(d.notes.trim()).replace(/\r?\n/g, "<br>") : null;
+  const details: [string, string][] = [
+    ...(d.entries.length ? [[d.entries.length > 1 ? "Your events" : "Your event", entriesHtml] as [string, string]] : []),
+    ...(day ? [["Event day", esc([day, start && `first serve ${start}`].filter(Boolean).join(" · "))] as [string, string]] : []),
+    ...(t.venue_name ? [["Venue", esc(t.venue_name)] as [string, string]] : []),
+    ...(cap
+      ? [["Entries", `<strong style="color:${C.volt}">${cap} of ${cap} taken</strong> <span style="color:${C.mute}">· entry form closed</span>`] as [string, string]]
+      : []),
+    ...(notes ? [["From the directors", notes] as [string, string]] : []),
+  ];
+
+  const intro = `We're delighted to let you know that ${esc(t.name)} is a full house: ${allTaken} and the entry form is now closed. ` +
+    `Thank you so much for registering. Your place is held, and there's nothing more you need to do right now.`;
+
+  const eventNotes = EVENT_NOTES.flatMap((n) => {
+    const e = d.entries.find((x) => n.match.test(x.category.trim()));
+    return e ? [{ visual: "", title: n.title, html: esc(n.html(e.teams)) }] : [];
+  });
+  const events = d.entries.length;
+  const allDay = events > 1
+    ? ` You're playing ${events} events, so it will be an all-day event for you.`
+    : "";
+
+  const stepList: Omit<Step, "n">[] = [
+    ...eventNotes,
+    ...(seekingPartner
+      ? [{
+        gif: "step-received.gif",
+        alt: "Checkmark",
+        title: "Partner not entered yet?",
+        html: "If your partner hasn't signed up yet, or you entered a doubles event without one, reply to this email or contact " +
+          "a director (details below). We'll sort it out with you, and if you don't have a partner we'll pair you with another player.",
+      }]
+      : []),
+    {
+      visual: `<img src="${esc(`${app}/full-house-waitlist.gif`)}" width="536" alt="${esc(`${cap ? `${cap} of ${cap}` : "All"} entries taken. Missed out? Join the waitlist.`)}" ` +
+        `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`,
+      title: "Friends who want to play?",
+      html: "Encourage them to join the waitlist. The minute anyone withdraws, we reach out to the people on it.",
+      cta: waitlist ? [waitlist, "Join the waitlist"] as [string, string] : undefined,
+      wideCta: true,
+    },
+    {
+      visual: "",
+      title: "Girls aged 13–17: there's still room",
+      html: "We'd love more girls aged 13–17 to play. Youth Girls' Singles isn't full, so we should be able to take a few more entries there. " +
+        "If you know a girl who'd like to play, ask her or a parent to contact the organizers (details below).",
+    },
+    {
+      gif: "step-draw.gif",
+      alt: "Draw bracket filling in",
+      title: "Your schedule is coming",
+      html: "We'll send you the schedule so you can plan your day. We'll try to call you to court in the hour your matches are scheduled, " +
+        `but please be ready.${allDay} On the day, we'll be playing with Victor NCS Max shuttles.`,
+    },
+    {
+      visual: "",
+      title: "Need a hand?",
+      html: "If you need any help, please reach out to the organizers. Their details are at the bottom of this email, or just reply to it. " +
+        "Thank you again for being part of it.",
+    },
+  ];
+  const steps: Step[] = stepList.map((s, i) => ({ ...s, n: i + 1 }));
+
+  const html = layout({
+    title: subject,
+    preheader: `${t.name} is sold out: ${allTaken}. Your place is held.`,
+    hero: { gif: `${app}/full-house.gif`, alt: `${t.name}: full house${cap ? `, ${cap} of ${cap}` : ""}.` },
+    kicker: cap ? `Full house · ${cap}/${cap}` : "Full house",
+    heading: `Thank you, ${esc(name)}.<br>We're at <span style="color:${C.volt}">full capacity.</span>`,
+    intro,
+    details,
+    stepsHeading: "A few things to know",
+    steps,
+    data: d,
+  });
+
+  const text = textBlock([
+    `Hi ${name},`,
+    "",
+    strip(intro),
+    "",
+    ...details.map(([k, v]) => `${k}: ${strip(v.replace(/<br>/g, "\n  "))}`),
+    "",
+    "A FEW THINGS TO KNOW",
     ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
     textFooter(t),
   ]);
