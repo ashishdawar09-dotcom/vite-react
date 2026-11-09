@@ -164,6 +164,7 @@ type Ctx = {
   activeCount: number;
   plan: (playerId: string) => ReturnType<typeof playerPlan>;
   doublesNames: Set<string>;         // events played in pairs, by name (as playerPlan reports them)
+  teamsByEvent: Map<string, number>; // teams entered in each event right now, by name
 };
 
 async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx | null> {
@@ -199,6 +200,10 @@ async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx
     activeCount: roster.filter((p) => p.active).length,
     plan: (playerId) => playerPlan(playerId, { ...shared, playerCategoryIds: catsByPlayer.get(playerId) ?? [] }),
     doublesNames: new Set((cats.data ?? []).filter((c) => c.team_size === 2).map((c) => c.name as string)),
+    teamsByEvent: new Map((cats.data ?? []).map((c) => [
+      c.name as string,
+      (teams.data ?? []).filter((tm) => tm.category_id === c.id).length,
+    ])),
   };
 }
 
@@ -216,7 +221,7 @@ function render(ctx: Ctx, kind: BriefingKind, p: { id: string; name: string }, n
     return fullHouseEmail({
       tournament: ctx.t,
       player: { name: p.name },
-      entries: plan.entries.map((e) => ({ ...e, doubles: ctx.doublesNames.has(e.category) })),
+      entries: plan.entries.map((e) => ({ ...e, doubles: ctx.doublesNames.has(e.category), teams: ctx.teamsByEvent.get(e.category) })),
       cap: ctx.t.entry_cap,
       notes,
       waitlistUrl: `${SITE_URL}/register/${ctx.t.id}`,

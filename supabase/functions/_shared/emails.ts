@@ -246,7 +246,8 @@ function detailsCard(rows: [string, string][]): string {
 }
 
 // Each step leads with a GIF from the asset base, or with live HTML instead
-// (`visual`). `wideCta`: the button fills the column on phones.
+// (`visual`; an empty string makes a text-only step). `wideCta`: the button
+// fills the column on phones.
 type Step = {
   n: number;
   gif?: string;
@@ -268,7 +269,7 @@ function stepBlock(s: Step, assetBase: string): string {
       `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`;
   return `<tr><td class="px" style="padding:0 32px 36px">` +
     visual +
-    `<div style="font-family:${MONO};font-size:12px;letter-spacing:3px;color:${C.volt};margin:20px 0 6px">STEP ${String(s.n).padStart(2, "0")}</div>` +
+    `<div style="font-family:${MONO};font-size:12px;letter-spacing:3px;color:${C.volt};margin:${visual ? 20 : 0}px 0 6px">STEP ${String(s.n).padStart(2, "0")}</div>` +
     `<div style="font-family:${SANS};font-size:24px;line-height:1.2;font-weight:700;color:${C.bone};margin:0 0 10px">${esc(s.title)}</div>` +
     p(s.html, "margin:0") +
     (s.cta ? `<div style="margin-top:14px">${button(s.cta[0], s.cta[1], true, s.wideCta ? "cta" : "")}</div>` : "") +
@@ -1316,11 +1317,17 @@ export function playerBriefing(d: BriefingData): RenderedEmail {
 // doubles event that has no partner yet gets the partner step, which sends
 // them to the directors, not the waitlist: that seat is already counted, and
 // only a director can add someone once it's full.
+//
+// The rest is the directors' Nov 9 message for Shuttle Storm 2026: friends to
+// the waitlist, more girls wanted for Youth Girls' Singles (through the
+// directors, as the form is closed), the schedule and court calls, and help.
+// EVENT_NOTES adds a step for the players in one event only.
 
 export type FullHouseData = {
   tournament: EmailTournament;
   player: { name: string };
-  entries: { category: string; partner: string | null; doubles?: boolean }[];
+  // teams: how many teams the event has right now (doubles), for the event notes
+  entries: { category: string; partner: string | null; doubles?: boolean; teams?: number }[];
   cap: number | null;                // the entry cap that's now reached
   notes: string | null;              // from the directors, plain text
   waitlistUrl: string;               // the registration page, which shows the waitlist when full
@@ -1328,6 +1335,21 @@ export type FullHouseData = {
   assetBase: string;                 // the website's email images (step GIFs)
   privacyUrl?: string | null;
 };
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+// A text-only step for the players in one event, matched by its name.
+const EVENT_NOTES: { match: RegExp; title: string; html: (teams: number | undefined) => string }[] = [
+  {
+    // Directors, Nov 9: only 2 teams; likely to be merged into the open women's doubles.
+    match: /^women['’]?s doubles 35\+$/i,
+    title: "About Women's Doubles 35+",
+    html: (teams) =>
+      `${teams ? `So far we have ${plural(teams, "team", "teams")}` : "So far we have only a few teams"} in Women's Doubles 35+. ` +
+      "We're keeping an eye on it, but we're inclined to move the group into the open women's doubles " +
+      "(Women's Doubles 18–34), as there are more teams there. If you have any questions about this, just reply to this email.",
+  },
+];
 
 export function fullHouseEmail(d: FullHouseData): RenderedEmail {
   const t = d.tournament;
@@ -1363,7 +1385,17 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
   const intro = `We're delighted to let you know that ${esc(t.name)} is a full house: ${allTaken} and the entry form is now closed. ` +
     `Thank you so much for registering. Your place is held, and there's nothing more you need to do right now.`;
 
+  const eventNotes = EVENT_NOTES.flatMap((n) => {
+    const e = d.entries.find((x) => n.match.test(x.category.trim()));
+    return e ? [{ visual: "", title: n.title, html: esc(n.html(e.teams)) }] : [];
+  });
+  const events = d.entries.length;
+  const allDay = events > 1
+    ? ` You're playing ${events} events, so it will be an all-day event for you.`
+    : "";
+
   const stepList: Omit<Step, "n">[] = [
+    ...eventNotes,
     ...(seekingPartner
       ? [{
         gif: "step-received.gif",
@@ -1376,16 +1408,28 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
     {
       visual: `<img src="${esc(`${app}/full-house-waitlist.gif`)}" width="536" alt="${esc(`${cap ? `${cap} of ${cap}` : "All"} entries taken. Missed out? Join the waitlist.`)}" ` +
         `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`,
-      title: "Know someone who missed out?",
-      html: "Point them to the waitlist. If a spot opens up, we'll contact them.",
+      title: "Friends who want to play?",
+      html: "Encourage them to join the waitlist. The minute anyone withdraws, we reach out to the people on it.",
       cta: waitlist ? [waitlist, "Join the waitlist"] as [string, string] : undefined,
       wideCta: true,
     },
     {
+      visual: "",
+      title: "Girls aged 13–17: there's still room",
+      html: "We'd love more girls aged 13–17 to play. Youth Girls' Singles isn't full, so we should be able to take a few more entries there. " +
+        "If you know a girl who'd like to play, ask her or a parent to contact the organizers (details below).",
+    },
+    {
       gif: "step-draw.gif",
       alt: "Draw bracket filling in",
-      title: "Watch your inbox",
-      html: "In the coming days we'll send you everything for the day: when to arrive, your events and how to follow your matches live. " +
+      title: "Your schedule is coming",
+      html: "We'll send you the schedule so you can plan your day. We'll try to call you to court in the hour your matches are scheduled, " +
+        `but please be ready.${allDay} On the day, we'll be playing with Victor NCS Max shuttles.`,
+    },
+    {
+      visual: "",
+      title: "Need a hand?",
+      html: "If you need any help, please reach out to the organizers. Their details are at the bottom of this email, or just reply to it. " +
         "Thank you again for being part of it.",
     },
   ];
@@ -1399,7 +1443,7 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
     heading: `Thank you, ${esc(name)}.<br>We're at <span style="color:${C.volt}">full capacity.</span>`,
     intro,
     details,
-    stepsHeading: "What happens now",
+    stepsHeading: "A few things to know",
     steps,
     data: d,
   });
@@ -1411,7 +1455,7 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
     "",
     ...details.map(([k, v]) => `${k}: ${strip(v.replace(/<br>/g, "\n  "))}`),
     "",
-    "WHAT HAPPENS NOW",
+    "A FEW THINGS TO KNOW",
     ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
     textFooter(t),
   ]);

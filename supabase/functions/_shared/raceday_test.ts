@@ -218,7 +218,45 @@ Deno.test("full-house email: thanks them by name, with the FULL HOUSE animation 
   assertStringIncludes(e.text, "Your events: Men's Doubles 35+ with Raj <Gill>\n  Mixed Doubles 35+ · partner to be confirmed\n  Men's Singles");
   assertStringIncludes(e.text, "Event day: Saturday, November 21, 2026 · first serve 9:30 am");
   assertStringIncludes(e.text, "Join the waitlist: https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb");
-  assertStringIncludes(e.text, "In the coming days");
+  assertStringIncludes(e.text, "A FEW THINGS TO KNOW");
+  // Everyone: friends to the waitlist, girls 13–17, the schedule, help.
+  assertStringIncludes(e.html, "Friends who want to play?");
+  assertStringIncludes(e.html, "The minute anyone withdraws, we reach out to the people on it.");
+  assertStringIncludes(e.html, "Girls aged 13–17: there&#39;s still room");
+  assertStringIncludes(e.html, "Youth Girls' Singles isn't full");
+  assertStringIncludes(e.html, "We'll send you the schedule so you can plan your day.");
+  assertStringIncludes(e.html, "You're playing 3 events, so it will be an all-day event for you.");
+  assertStringIncludes(e.html, "playing with Victor NCS Max shuttles.");
+  assert(!/<(strong|b)[^>]*>[^<]*Victor/.test(e.html)); // mentioned, not highlighted
+  assertStringIncludes(e.html, "If you need any help, please reach out to the organizers.");
+  assertStringIncludes(e.html, "STEP 05"); // partner, waitlist, girls, schedule, help
+  assert(!e.html.includes("STEP 06"));
+  assert(!e.html.includes("Women&#39;s Doubles 35+")); // not their event
+});
+
+Deno.test("full-house email: Women's Doubles 35+ players get the note about moving to the open event, first", () => {
+  const e = fullHouseEmail(full({
+    entries: [
+      { category: "Women's Doubles 35+", partner: "Simran Kaur", doubles: true, teams: 2 },
+      { category: "Mixed Doubles 35+", partner: "Amar Singh", doubles: true, teams: 4 },
+    ],
+  }));
+  assert(/STEP 01<\/div><div[^>]*>About Women&#39;s Doubles 35\+/.test(e.html));
+  assertStringIncludes(e.html, "So far we have 2 teams in Women&#39;s Doubles 35+.");
+  assertStringIncludes(e.html, "inclined to move the group into the open women&#39;s doubles (Women&#39;s Doubles 18–34)");
+  assertStringIncludes(e.text, "1. About Women's Doubles 35+");
+  assertStringIncludes(e.text, "You're playing 2 events");
+  assert(!e.html.includes("Partner not entered yet?"));
+  assertStringIncludes(e.html, "STEP 05");
+  assert(!e.html.includes("STEP 06"));
+  // A count we don't know doesn't print as "0 teams"; a typographic apostrophe still matches.
+  const f = fullHouseEmail(full({ entries: [{ category: "Women’s Doubles 35+", partner: null, doubles: true }] }));
+  assertStringIncludes(f.html, "So far we have only a few teams in Women&#39;s Doubles 35+.");
+  assertStringIncludes(f.html, "Partner not entered yet?");
+  assert(/STEP 01<\/div><div[^>]*>About Women/.test(f.html) && /STEP 02<\/div><div[^>]*>Partner not entered yet\?/.test(f.html));
+  assert(!f.html.includes("You're playing")); // one event
+  const one = fullHouseEmail(full({ entries: [{ category: "Women's Doubles 35+", partner: "A", doubles: true, teams: 1 }] }));
+  assertStringIncludes(one.html, "So far we have 1 team in");
 });
 
 Deno.test("full-house email: no cap, no events, directors' notes", () => {
@@ -238,10 +276,15 @@ Deno.test("full-house email: no partner step for singles players or full pairs",
     const e = fullHouseEmail(full({ entries }));
     assert(!e.html.includes("Partner not entered yet?"));
     assert(!e.html.includes("partner to be confirmed"));
-    assert(/STEP 01<\/div><div[^>]*>Know someone who missed out\?/.test(e.html));
-    assertStringIncludes(e.html, "STEP 02");
-    assert(!e.html.includes("STEP 03"));
-    assertStringIncludes(e.text, "1. Know someone who missed out?");
-    assertStringIncludes(e.text, "2. Watch your inbox");
+    assert(/STEP 01<\/div><div[^>]*>Friends who want to play\?/.test(e.html));
+    assertStringIncludes(e.html, "STEP 04");
+    assert(!e.html.includes("STEP 05"));
+    assertStringIncludes(e.text, "1. Friends who want to play?");
+    assertStringIncludes(e.text, "2. Girls aged 13–17: there's still room");
+    assertStringIncludes(e.text, "3. Your schedule is coming");
+    assertStringIncludes(e.text, "4. Need a hand?");
+    assert(!e.html.includes("You're playing")); // one event: no all-day line
+    // Text-only steps start with the label, no gap for a missing image.
+    assertStringIncludes(e.html, "margin:0px 0 6px\">STEP 02");
   }
 });
