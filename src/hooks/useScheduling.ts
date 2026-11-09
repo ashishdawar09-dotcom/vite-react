@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Category, Match, ProjectedMatch } from "../types";
-import { projectSchedule } from "../lib/projection";
+import { projectSchedule, type TeamPlayers } from "../lib/projection";
 
 // Projected schedule for every match, enriched with `projected_start_at`,
 // `delta_min`, and a `delta_label` suitable for direct display.
 //
-// Inputs: all matches (across categories), all categories, num_courts, optional `nowMs`.
+// Inputs: all matches (across categories), all categories, num_courts, the
+// teams (so a player entered in two events is never projected on two courts at
+// once), optional `nowMs`.
 //
-// The projection itself lives in lib/projection.ts (pure, tested). It shares
-// the tournament's courts across every event: one set of court free-at
+// The projection itself lives in lib/projection.ts (pure, tested), and the
+// venue TV uses the same model, so phones and TV show the same times. It
+// shares the tournament's courts across every event: one set of court free-at
 // times, live and called matches first, then the queue interleaved event by
-// event. This hook adds:
+// event, with the call-to-serve time, changeover and best-of-3 semifinals and
+// finals counted. This hook adds:
 // - **15-second heartbeat**: an internal tick state is wired into the memo deps,
 //   so the projection re-runs every 15s even when no other state changes, and
 //   backlogged matches' wall-clocks roll forward.
@@ -19,7 +23,7 @@ import { projectSchedule } from "../lib/projection";
 //   show warm-up elapsed vs queue projection, so it leaves delta_label/delta_min
 //   tracking the queue projection while UI components do the warm-up override.
 
-export function useScheduling(matches: Match[], categories: Category[], numCourts: number, nowMs?: number): {
+export function useScheduling(matches: Match[], categories: Category[], numCourts: number, teams?: TeamPlayers[], nowMs?: number): {
   projected: ProjectedMatch[];
   byId: Record<string, ProjectedMatch>;
   tournamentDeltaMin: number;       // weighted sum of completed-match deltas across categories
@@ -37,7 +41,7 @@ export function useScheduling(matches: Match[], categories: Category[], numCourt
     // Dev-only profiling: warn if the projection compute takes longer than
     // 50ms on a single tick. Production builds strip this entirely.
     const profileStart = import.meta.env.DEV ? performance.now() : 0;
-    const schedule = projectSchedule(matches, categories, numCourts, nowMs ?? nowTick);
+    const schedule = projectSchedule(matches, categories, numCourts, nowMs ?? nowTick, { teams });
     if (import.meta.env.DEV) {
       const elapsed = performance.now() - profileStart;
       if (elapsed > 50) {
@@ -45,7 +49,7 @@ export function useScheduling(matches: Match[], categories: Category[], numCourt
       }
     }
     return schedule;
-  }, [matches, categories, numCourts, nowMs, nowTick]);
+  }, [matches, categories, numCourts, teams, nowMs, nowTick]);
 }
 
 export function fmtClock(iso: string | null): string {

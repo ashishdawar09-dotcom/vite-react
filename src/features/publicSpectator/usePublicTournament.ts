@@ -90,7 +90,7 @@ export function usePublicTournament(slug: string | undefined) {
 
   // Court scheduling projection — same hook the admin shell uses.
   const numCourts = tournament?.num_courts ?? 2;
-  const scheduling = useScheduling(matches, categories, numCourts);
+  const scheduling = useScheduling(matches, categories, numCourts, teams);
 
   return {
     tournament,

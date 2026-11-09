@@ -125,7 +125,7 @@ export function useTournamentDerived(
   // default num_courts on a new tournament) so the hook stays valid even
   // before a tournament is selected.
   const numCourts = tournament?.num_courts ?? 2;
-  const scheduling = useScheduling(matches, categories, numCourts);
+  const scheduling = useScheduling(matches, categories, numCourts, teams);
   const { projected: projectedMatches, byId: projectedById, tournamentDeltaMin, tournamentDeltaLabel, liveByCourt } = scheduling;
 
   // Groups: a 2D array of TeamView, one entry per (category, group), in
