@@ -54,7 +54,7 @@ function fixture(): TvSnapshot {
     match("g5", "md", { slot_idx: 4, team_a_id: "tA", team_b_id: "tD", status: "pending" }),
     match("g6", "md", { slot_idx: 5, team_a_id: "tB", team_b_id: "tC", status: "pending" }),
     // Men's singles knockout: semifinal 1 done a moment ago on court 3, semifinal 2 waiting, final to be decided.
-    match("k1", "ms", { stage: "knockout", group_idx: null, round_idx: 0, slot_idx: 0, team_a_id: "s1", team_b_id: "s2", score_a: 2, score_b: 1, winner_id: "s1", confirmed: true, status: "completed", court_number: 3, started_at: iso(NOW - 30 * MIN), confirmed_at: iso(NOW - 5_000) }),
+    match("k1", "ms", { stage: "knockout", group_idx: null, round_idx: 0, slot_idx: 0, team_a_id: "s1", team_b_id: "s2", score_a: 2, score_b: 1, best_of: 3, games: [[15, 12], [13, 15], [15, 9]], winner_id: "s1", confirmed: true, status: "completed", court_number: 3, started_at: iso(NOW - 30 * MIN), confirmed_at: iso(NOW - 5_000) }),
     match("k2", "ms", { stage: "knockout", group_idx: null, round_idx: 0, slot_idx: 1, team_a_id: "s3", team_b_id: "s4", status: "pending" }),
     match("k3", "ms", { stage: "knockout", group_idx: null, round_idx: 1, slot_idx: 0, team_a_id: "s1", team_b_id: null, status: "pending" }),
     match("bye", "ms", { stage: "knockout", group_idx: null, round_idx: 0, slot_idx: 2, team_a_id: "s4", is_bye: true, status: "completed", confirmed: true }),
@@ -105,10 +105,14 @@ describe("venue TV model", () => {
     expect(later.courts[2]).toBeNull();
   });
 
-  it("labels knockout rounds from the final backwards and knows best of 3", () => {
+  it("labels knockout rounds from the final backwards and reads each match's own format", () => {
     const m = buildTvModel(fixture(), NOW)!;
     expect(m.byId.k1.label).toBe("Semifinal 1");
     expect(m.byId.k1.bestOf3).toBe(true);
+    expect(m.byId.k1.games).toEqual([[15, 12], [13, 15], [15, 9]]);
+    // A semifinal is one game when its event isn't best of 3 there (matches.best_of = 1).
+    expect(m.byId.k2.label).toBe("Semifinal 2");
+    expect(m.byId.k2.bestOf3).toBe(false);
     expect(m.byId.k3.label).toBe("Final");
     expect(m.byId.g3.label).toBe("Round robin");
     expect(m.byId.g3.bestOf3).toBe(false);
@@ -126,7 +130,7 @@ describe("venue TV model", () => {
   });
 
   it("sends the next match to whichever court frees first", () => {
-    const mk = (id: string, over: Partial<TvMatch>): TvMatch => ({ id, cat: "c", kind: "group", label: "", groupIdx: 0, roundIdx: null, slot: 0, bestOf3: false, a: "x", b: "y", cur: [0, 0], status: "queued", ending: false, court: null, calledAt: null, startedAt: null, doneAt: null, winner: null, walkover: false, cancelled: false, eta: null, ...over });
+    const mk = (id: string, over: Partial<TvMatch>): TvMatch => ({ id, cat: "c", kind: "group", label: "", groupIdx: 0, roundIdx: null, slot: 0, bestOf3: false, games: [], a: "x", b: "y", cur: [0, 0], status: "queued", ending: false, court: null, calledAt: null, startedAt: null, doneAt: null, winner: null, walkover: false, cancelled: false, eta: null, ...over });
     const courts = [mk("l1", { status: "live", court: 1, startedAt: NOW - 10 * MIN }), mk("l2", { status: "live", court: 2, startedAt: NOW - 2 * MIN })];
     const q = [mk("q1", {}), mk("q2", {}), mk("q3", {})];
     projectQueue(q, courts, NOW, () => 12);
@@ -137,7 +141,7 @@ describe("venue TV model", () => {
   });
 
   it("holds back a match while one of its players is still on another court", () => {
-    const mk = (id: string, over: Partial<TvMatch>): TvMatch => ({ id, cat: "c", kind: "group", label: "", groupIdx: 0, roundIdx: null, slot: 0, bestOf3: false, a: "x", b: "y", cur: [0, 0], status: "queued", ending: false, court: null, calledAt: null, startedAt: null, doneAt: null, winner: null, walkover: false, cancelled: false, eta: null, ...over });
+    const mk = (id: string, over: Partial<TvMatch>): TvMatch => ({ id, cat: "c", kind: "group", label: "", groupIdx: 0, roundIdx: null, slot: 0, bestOf3: false, games: [], a: "x", b: "y", cur: [0, 0], status: "queued", ending: false, court: null, calledAt: null, startedAt: null, doneAt: null, winner: null, walkover: false, cancelled: false, eta: null, ...over });
     // Court 1: a match that ends in 8 minutes, with player P. Court 2 is free.
     const courts = [mk("l1", { status: "live", court: 1, startedAt: NOW - 4 * MIN, a: "tP", b: "tQ" }), null];
     const q1 = mk("q1", { a: "tP2", b: "tR" }); // P also plays in this one

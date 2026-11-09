@@ -10,6 +10,7 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
 import { groupKeyOf, groupLetter } from "../lib/groups";
 import { isCancelledMatch } from "../lib/matchOutcome";
+import { currentGame, gamesLine, isBestOf3, liveGameTag } from "../lib/bestOf3";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -235,7 +236,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
               const b = tName(m.team_b_id);
               const sa = m.score_a ?? 0;
               const sb = m.score_b ?? 0;
-              return `🔴 LIVE · COURT ${courtNum} · ${a} ${sa} – ${sb} ${b}`;
+              return `🔴 LIVE · COURT ${courtNum} · ${a} ${sa} – ${sb} ${b}${isBestOf3(m) ? ` · GAME ${currentGame(m)}` : ""}`;
             })}
             speed={45}
             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", borderRadius: 8, padding: "10px 16px", color: "#fecaca", fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", fontFamily: "'Oswald Variable', 'Inter Variable', sans-serif", marginBottom: 16 }}
@@ -393,7 +394,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                   <BorderBeam duration={3.5} color="#ef4444" strokeWidth={2} radius={10} />
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#ef4444,#f97316)" }} />
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(239,68,68,0.06)", borderBottom: "1px solid #1a3050", position: "relative", zIndex: 1 }}>
-                    <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}</span>
+                    <span className="font-display" style={{ fontSize: 11, fontWeight: 700, color: "#00d4ff", letterSpacing: 2 }}>{stageBadge(m)}{isBestOf3(m) && <span style={{ color: "#94a3b8", marginLeft: 8 }}>{liveGameTag(m).toUpperCase()}</span>}</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "#ef4444", letterSpacing: 2 }}>
                       <motion.span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} animate={reduceMotion ? undefined : LIVE_DOT_PULSE} transition={LIVE_DOT_TIMING} />LIVE
                     </span>
@@ -527,7 +528,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
                   <div style={{ flex: 1, fontWeight: m.winner_id === m.team_a_id ? 700 : 500, color: m.winner_id === m.team_a_id ? "#22c55e" : "#94a3b8", fontSize: 13 }}>{tName(m.team_a_id)}</div>
                   {isCancelledMatch(m)
                     ? <div className="font-display" style={{ fontWeight: 700, fontSize: 11, padding: "4px 10px", background: "rgba(148,163,184,0.1)", border: "1px solid rgba(148,163,184,0.3)", borderRadius: 4, color: "#94a3b8", letterSpacing: 1, textTransform: "uppercase" }}>Cancelled</div>
-                    : <div className="font-display" style={{ fontWeight: 700, fontSize: 14, padding: "4px 10px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, color: "#22c55e", letterSpacing: 1 }}>{m.score_a}–{m.score_b}</div>}
+                    : <div className="font-display" style={{ fontWeight: 700, fontSize: 14, padding: "4px 10px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, color: "#22c55e", letterSpacing: 1 }}>{m.score_a}–{m.score_b}{isBestOf3(m) && gamesLine(m) && <span style={{ fontSize: 10, fontWeight: 600, color: "#86efac", marginLeft: 6, letterSpacing: 0 }}>({gamesLine(m)})</span>}</div>}
                   <div style={{ flex: 1, fontWeight: m.winner_id === m.team_b_id ? 700 : 500, color: m.winner_id === m.team_b_id ? "#22c55e" : "#94a3b8", textAlign: "right", fontSize: 13 }}>{tName(m.team_b_id)}</div>
                 </div>
               ))}

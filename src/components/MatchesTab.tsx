@@ -32,8 +32,9 @@ import { courtTakenMessage, isCourtTaken } from "../lib/courts";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { resultLabel } from "../lib/matchOutcome";
 import { finalScorePatch } from "../lib/scoring";
+import { currentGame, decidingScore, endGameAction, endGamePatch, gamesOf, isBestOf3, playMinutes, stopEarlyPatch, undoGamePatch } from "../lib/bestOf3";
 import { useScoreTaps } from "../hooks/useScoreTaps";
-import type { Category, Player, ProjectedMatch, Team, Tournament } from "../types";
+import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
 
@@ -296,6 +297,12 @@ export function MatchesTab({
   // Each tap steps from the number on screen; saves land in order
   // (src/lib/scoreTaps.ts). Stepping from the last number the server sent
   // back lost most quick taps (QA review, Nov 4: 6 of 8).
+  // ✓ CONFIRM, or for a best-of-3 match END GAME 2 / ✓ CONFIRM 2–1.
+  const confirmLabel = (m: ProjectedMatch) => {
+    if (!isBestOf3(m)) return "✓ CONFIRM";
+    const act = endGameAction(m, taps.shown(m, "a"), taps.shown(m, "b"));
+    return act.decides ? `✓ CONFIRM ${act.score}` : `END GAME ${act.game}`;
+  };
   const inlineScore = (m: ProjectedMatch, side: "a" | "b", delta: number) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
     taps.step(m, side, delta);
@@ -304,6 +311,7 @@ export function MatchesTab({
   // Confirms the score on screen, written with the winner in one update, after
   // any tap still saving has landed. It used to read the last saved score.
   const confirmMatch = async (m: ProjectedMatch) => {
+    if (isBestOf3(m)) return endGameRow(m);
     const r = finalScorePatch(m, taps.shown(m, "a"), taps.shown(m, "b"), new Date().toISOString());
     if (!r.ok) { toast(r.reason === "no-score" ? "Enter a score before confirming" : "No ties allowed", "warn"); return; }
     const plan = confirmKnockoutPlan(matches, m, r.winnerId); if (!plan) return;
@@ -317,8 +325,13 @@ export function MatchesTab({
     } finally {
       release();
     }
-    /* Celebrate — small confetti burst from page bottom-center, brand palette.
-       Honours prefers-reduced-motion (skip the visual jolt). */
+    celebrate();
+    await applyBracket(plan);
+  };
+
+  /* Celebrate — small confetti burst from page bottom-center, brand palette.
+     Honours prefers-reduced-motion (skip the visual jolt). */
+  const celebrate = () => {
     if (!reduceMotion) {
       confetti({
         particleCount: 60,
@@ -330,7 +343,58 @@ export function MatchesTab({
         disableForReducedMotion: true,
       });
     }
-    await applyBracket(plan);
+  };
+
+  // Best of 3 (src/lib/bestOf3.ts): ✓ CONFIRM ends the game on screen; the
+  // game that decides the match confirms it in the same write.
+  const endGameRow = async (m: ProjectedMatch) => {
+    const a = taps.shown(m, "a"), b = taps.shown(m, "b");
+    let r = endGamePatch(m, a, b, new Date().toISOString());
+    if (!r.ok && r.reason === "not-over") {
+      const decides = decidingScore(m, a, b);
+      if (!confirm(`${a}–${b} can't end a game to 15. Save it anyway${decides ? ` and confirm the match ${decides}` : ""}?`)) return;
+      r = endGamePatch(m, a, b, new Date().toISOString(), true);
+    }
+    if (!r.ok) {
+      toast(r.reason === "tie" ? "A game can't end in a tie" : r.reason === "no-score" ? "Enter the game's score first" : "This match is already decided", "warn");
+      return;
+    }
+    const plan = r.decided ? confirmKnockoutPlan(matches, m, r.winnerId) : null;
+    if (r.decided && !plan) return;
+    const release = taps.lock(m);
+    try {
+      if (!(await taps.flush(m.id))) return;
+      await db.updateMatch(m.id, r.patch);
+      // Taps stay off until the row shows the new game (scoreTaps.waitForGames).
+      taps.waitForGames(m, r.patch.games?.length ?? 0);
+    } catch (e: unknown) {
+      toast(`${r.decided ? "Not confirmed" : "Game not saved"}: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    } finally {
+      release();
+    }
+    if (plan) {
+      celebrate();
+      await applyBracket(plan);
+    }
+  };
+
+  const undoGameRow = async (m: ProjectedMatch) => {
+    const patch = undoGamePatch(m);
+    if (!patch) return;
+    const n = gamesOf(m).length;
+    const a = taps.shown(m, "a"), b = taps.shown(m, "b");
+    if (!confirm(`Undo game ${n}? Its ${patch.score_a}–${patch.score_b} goes back into the score${a || b ? `, and game ${n + 1}'s ${a}–${b} is cleared` : ""}.`)) return;
+    const release = taps.lock(m);
+    try {
+      if (!(await taps.flush(m.id))) return;
+      await db.updateMatch(m.id, patch);
+      taps.waitForGames(m, patch.games?.length ?? 0);
+    } catch (e: unknown) {
+      toast(`Not undone: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+    } finally {
+      release();
+    }
   };
 
   // Knockout bracket writes, scoped to the match's own category, with the
@@ -360,11 +424,25 @@ export function MatchesTab({
     await applyBracket(plan);
   };
 
+  // A best-of-3 match stopped at time over: any score still saving lands
+  // first, then the result saves games won (src/lib/bestOf3.ts stopEarlyPatch).
+  // A one-game match writes as before.
+  const stopEarly = async (m: ProjectedMatch, write: (extra: Partial<Match>) => Promise<void>) => {
+    if (!isBestOf3(m)) return write({});
+    const release = taps.lock(m);
+    try {
+      await taps.flush(m.id);
+      await write(stopEarlyPatch(m));
+    } finally {
+      release();
+    }
+  };
+
   const markWalkover = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
-    await db.markWalkover(m.id, winnerId);
+    await stopEarly(m, (extra) => db.markWalkover(m.id, winnerId, { extra }));
     await applyBracket(plan);
     setTimeOverPicking(null);
   };
@@ -373,7 +451,7 @@ export function MatchesTab({
     const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
     if (!winnerId) return;
     const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
-    await db.selectMatchWinner(m.id, winnerId);
+    await stopEarly(m, (extra) => db.selectMatchWinner(m.id, winnerId, extra));
     await applyBracket(plan);
     setTimeOverPicking(null);
   };
@@ -408,10 +486,8 @@ export function MatchesTab({
     if (m.status !== "live" || !m.started_at) return false;
     const cat = catById[m.category_id];
     if (!cat) return false;
-    const matchMin = cat.match_minutes || 12;
-    const extended = m.extended_minutes ?? 0;
     const elapsed = (now - new Date(m.started_at).getTime()) / 60_000;
-    return elapsed > matchMin + extended;
+    return elapsed > playMinutes(m, cat.match_minutes);
   };
 
   const stageLabel = (m: ProjectedMatch) => stageTag(m, matches);
@@ -477,6 +553,7 @@ export function MatchesTab({
         {/* Stage badge (smaller now that category is the section header) */}
         <div style={{ minWidth: isMobile ? 0 : 80 }}>
           <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1 }}>{stageLabel(m)}</div>
+          {isBestOf3(m) && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#60a5fa", marginTop: 4, letterSpacing: 1.2 }}>BEST OF 3{isLive ? ` · GAME ${currentGame(m)}` : ""}</div>}
           {timeOver && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", marginTop: 4, letterSpacing: 1.2 }}>⏰ TIME OVER</div>}
           {isWarming && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", marginTop: 4, letterSpacing: 1.2 }}>🟡 WARMING UP · {fmtWarmup(m)}</div>}
         </div>
@@ -498,6 +575,11 @@ export function MatchesTab({
               isAdmin && isLive ? <ScoreStepper value={taps.shown(m, "b")} team={tName(tb)} onPlus={() => inlineScore(m, "b", 1)} onMinus={() => inlineScore(m, "b", -1)} /> : <span className="font-display" style={{ fontSize: 18, fontWeight: 800, minWidth: 28, textAlign: "right", color: winB ? "#22c55e" : "#fff" }}>{m.score_b ?? 0}</span>
             )}
           </div>
+          {isBestOf3(m) && gamesOf(m).length > 0 && (
+            <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginTop: 4 }}>
+              {gamesOf(m).map(([x, y], i) => `Game ${i + 1}: ${x}–${y}`).join(" · ")}
+            </div>
+          )}
         </div>
 
         {/* Time / court / status */}
@@ -551,12 +633,15 @@ export function MatchesTab({
               </>
             )}
             {isLive && !timeOver && (
-              <motion.button layoutId={`match-${m.id}-action`} onClick={() => confirmMatch(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>✓ CONFIRM</motion.button>
+              <motion.button layoutId={`match-${m.id}-action`} onClick={() => confirmMatch(m)} className="font-display" whileTap={reduceMotion ? undefined : { scale: 0.97 }} style={{ padding: "8px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>{confirmLabel(m)}</motion.button>
+            )}
+            {isLive && isBestOf3(m) && gamesOf(m).length > 0 && (
+              <button onClick={() => void undoGameRow(m)} className="font-display" style={{ padding: "8px 12px", borderRadius: 5, border: "1px solid #94a3b8", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>↶ UNDO GAME {gamesOf(m).length}</button>
             )}
             {isLive && timeOver && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0", borderTop: "1px solid #f59e0b33" }}>
                 <button onClick={() => handleExtend(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #3b82f6", background: "rgba(59,130,246,0.15)", color: "#60a5fa", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>+5 MIN</button>
-                <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>✓ CONFIRM</button>
+                <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>{confirmLabel(m)}</button>
                 <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "walkover" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fbbf24", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>WALKOVER</button>
                 <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "winner" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>SELECT WINNER</button>
                 <button onClick={() => handleReschedule(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #64748b", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>RESCHEDULE</button>

@@ -4,7 +4,8 @@ import { ScoreInput } from "./ScoreInput";
 import { useShownScores } from "../hooks/useScoreTaps";
 import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
-import type { Match, Player, Team } from "../types";
+import type { GameScore, Match, Player, Team } from "../types";
+import { currentGame, decidingScore, endGameAction, gameTarget, gamesOf, gamesWon, isBestOf3, playMinutes } from "../lib/bestOf3";
 import { isCancelledMatch } from "../lib/matchOutcome";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { CourtCallEmailStatus } from "../features/raceEmails/CourtCallEmailStatus";
@@ -35,6 +36,16 @@ export type MatchCardActions = {
   /** After picking a walkover/winner; should also propagate the winner forward. */
   selectWinner: (match: Match, winnerId: string) => Promise<void>;
   markWalkover: (match: Match, winnerId: string) => Promise<void>;
+  /**
+   * Best of 3: end the game on screen; when it decides the match this
+   * confirms it. "not-over" = the score can't end a game to 15: the card asks,
+   * then calls again with `force`.
+   */
+  endGame: (match: Match, shown: ShownScores, force?: boolean) => Promise<"saved" | "not-over" | null>;
+  /** Best of 3: put the last finished game back into the score boxes. */
+  undoGame: (match: Match) => Promise<void>;
+  /** Best of 3: Save on Edit Score, with every game's points. */
+  saveEditedGames: (match: Match, games: GameScore[]) => Promise<void>;
   /** Unplayed match, one team sitting out: the other team wins, no court needed. */
   recordSitOutWalkover: (match: Match) => Promise<void>;
 };
@@ -87,7 +98,12 @@ export function MatchCard({
   const ta = teamFromId(m.team_a_id);
   const tb = teamFromId(m.team_b_id);
   const isEditing = m.confirmed && editingMatchId === m.id;
-  const inlineMode = isAdmin && editable && (m.status === "live" || isEditing);
+  // Best of 3 (src/lib/bestOf3.ts): while live the boxes hold the current
+  // game; finished games are in `games`. Editing a result edits the games.
+  const bo3 = isBestOf3(m);
+  const games = gamesOf(m);
+  const [gwA, gwB] = gamesWon(games);
+  const inlineMode = isAdmin && editable && (m.status === "live" || (isEditing && !bo3));
   const showStaticScore = m.confirmed || (m.score_a != null || m.score_b != null);
   const winA = m.confirmed && m.winner_id === ta?.id;
   const winB = m.confirmed && m.winner_id === tb?.id;
@@ -110,6 +126,20 @@ export function MatchCard({
   const [draft, setDraft] = useState<{ a: number; b: number } | null>(null);
   if (isEditing && !draft) setDraft({ a: m.score_a ?? 0, b: m.score_b ?? 0 });
   if (!isEditing && draft) setDraft(null);
+  // Edit Score on a best-of-3 result: three game rows, as typed text.
+  const [gamesDraft, setGamesDraft] = useState<string[][] | null>(null);
+  if (isEditing && bo3 && !gamesDraft) setGamesDraft([0, 1, 2].map(i => (games[i] ? games[i].map(String) : ["", ""])));
+  if (!isEditing && gamesDraft) setGamesDraft(null);
+  const editGame = (row: number, col: number, text: string) =>
+    setGamesDraft(d => d && d.map((r, i) => (i === row ? r.map((c, j) => (j === col ? text.replace(/[^0-9]/g, "") : c)) : r)));
+  const draftGames = (): GameScore[] => {
+    const out: GameScore[] = [];
+    for (const [x, y] of gamesDraft ?? []) {
+      if (x === "" && y === "") break;
+      out.push([Number(x) || 0, Number(y) || 0]);
+    }
+    return out;
+  };
   const editDraft = (side: "a" | "b", next: number | ((cur: number) => number)) =>
     setDraft(d => (d ? { ...d, [side]: Math.max(0, typeof next === "function" ? next(d[side]) : next) } : d));
   const onShownA = useCallback((n: number) => { shown.current.a = n; }, []);
@@ -128,6 +158,20 @@ export function MatchCard({
   const [pickFor, setPickFor] = useState(matchState);
   if (pickFor !== matchState) { setPickFor(matchState); setTimeOverPick(null); }
   const pickerOpen = timeOverPickerOpen(m, timeOverPick);
+  // "15–14 can't end a game to 15": shown for the score it was about, until
+  // the score changes or the scorer saves it anyway.
+  const [notOverAt, setNotOverAt] = useState<string | null>(null);
+  const showNotOver = bo3 && m.status === "live" && !m.confirmed && notOverAt === `${onScreen.a}-${onScreen.b}`;
+  const runEndGame = async (force: boolean) => {
+    const s = shownScores();
+    const r = await actions.endGame(m, s, force);
+    setNotOverAt(r === "not-over" ? `${s.a ?? 0}-${s.b ?? 0}` : null);
+  };
+  // "End Game 2", or "✓ Confirm Match 2–1" once the score on screen ends the game that decides it.
+  const endGameLabel = () => {
+    const act = endGameAction(m, onScreen.a, onScreen.b);
+    return act.decides ? `✓ Confirm Match ${act.score}` : `End Game ${act.game}`;
+  };
   useEffect(() => {
     // Tick both for live (play clock) AND warming (warm-up elapsed timer).
     if (m.status !== "live" && !isWarming) return;
@@ -135,7 +179,8 @@ export function MatchCard({
     return () => clearInterval(id);
   }, [m.status, isWarming]);
 
-  const totalMin = (matchMinutes ?? 12) + (m.extended_minutes ?? 0);
+  // A best-of-3 match gets two matches' time before TIME OVER.
+  const totalMin = playMinutes(m, matchMinutes);
   const cardTimeOver = m.status === "live" && m.started_at
     ? (cardNow - new Date(m.started_at).getTime()) / 60_000 > totalMin
     : false;
@@ -195,6 +240,11 @@ export function MatchCard({
               whiteSpace: "nowrap",
             }}>
               {tLabel(team)}
+            </span>
+          )}
+          {bo3 && !m.confirmed && (m.status === "live" || games.length > 0) && (
+            <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, padding: "2px 7px", borderRadius: 6, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+              {side === "a" ? gwA : gwB} {(side === "a" ? gwA : gwB) === 1 ? "game" : "games"}
             </span>
           )}
           {unplayed && teamSittingOut(team) && (
@@ -276,6 +326,10 @@ export function MatchCard({
       }}>
         <span style={{ color: "#64748b" }}>
           Match{m.court_number != null && (isWarming || m.status === "live") ? ` · Court ${m.court_number}` : ""}
+          {/* Non-breaking spaces: a narrow card wraps between the parts, never inside "Game 2". */}
+          {bo3
+            ? ` · Best\u00a0of\u00a03${m.status === "live" && !m.confirmed ? ` · Game\u00a0${currentGame(m)}` : ""}`
+            : m.stage === "knockout" && !m.is_bye ? " · 1\u00a0game" : ""}
         </span>
         {cardTimeOver && (
           <span style={{ color: "#d97706", fontWeight: 800, display: "flex", alignItems: "center", gap: 4 }}>
@@ -305,6 +359,33 @@ export function MatchCard({
         {teamRow(ta, "a", isEditing && draft ? draft.a : inlineMode ? onScreen.a : m.score_a ?? 0, winA)}
         <div style={{ height: 1, background: "#f1f5f9", margin: "2px 0" }} />
         {teamRow(tb, "b", isEditing && draft ? draft.b : inlineMode ? onScreen.b : m.score_b ?? 0, winB)}
+
+        {bo3 && games.length > 0 && !isEditing && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+            {games.map(([x, y], i) => (
+              <span key={i} style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 8, background: "#f1f5f9", color: "#334155" }}>
+                Game {i + 1} · {x}–{y}
+              </span>
+            ))}
+          </div>
+        )}
+        {isEditing && bo3 && gamesDraft && (
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "auto 1fr auto 1fr", gap: 8, alignItems: "center" }}>
+            <span />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tLabel(ta)}</span>
+            <span />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tLabel(tb)}</span>
+            {gamesDraft.map((row, i) => (
+              <GameRow key={i} n={i + 1} row={row} onChange={(col, text) => editGame(i, col, text)} />
+            ))}
+          </div>
+        )}
+        {showNotOver && (
+          <div style={{ marginTop: 10, fontSize: 13, fontWeight: 600, color: "#b45309" }}>
+            {onScreen.a}–{onScreen.b} can't end a game to {gameTarget(m)}. Check the score, or save it anyway
+            {decidingScore(m, onScreen.a, onScreen.b) ? `: that confirms the match ${decidingScore(m, onScreen.a, onScreen.b)}.` : "."}
+          </div>
+        )}
 
         {isAdmin && isWarming && (
           <CourtCallEmailStatus
@@ -353,14 +434,21 @@ export function MatchCard({
                 </button>
               </>
             )}
-            {m.status === "live" && !m.confirmed && !cardTimeOver && (
+            {m.status === "live" && !m.confirmed && !cardTimeOver && (bo3 ? (
+              <button
+                onClick={() => void runEndGame(false)}
+                style={{ ...btn("#16a34a"), flex: "1 1 100%", padding: "14px", fontSize: 15, borderRadius: 10, fontWeight: 800 }}
+              >
+                {endGameLabel()}
+              </button>
+            ) : (
               <button
                 onClick={() => void actions.confirmFinalScore(m, shownScores())}
                 style={{ ...btn("#16a34a"), flex: "1 1 100%", padding: "14px", fontSize: 15, borderRadius: 10, fontWeight: 800 }}
               >
                 ✓ Confirm Final Score
               </button>
-            )}
+            ))}
             {/* Time-over actions */}
             {m.status === "live" && !m.confirmed && cardTimeOver && (
               <>
@@ -371,10 +459,10 @@ export function MatchCard({
                   +5 Min
                 </button>
                 <button
-                  onClick={() => void actions.confirmFinalScore(m, shownScores())}
+                  onClick={() => void (bo3 ? runEndGame(false) : actions.confirmFinalScore(m, shownScores()))}
                   style={{ ...btn("#16a34a"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}
                 >
-                  ✓ Confirm
+                  {bo3 ? endGameLabel() : "✓ Confirm"}
                 </button>
                 <button
                   onClick={() => setTimeOverPick("walkover")}
@@ -405,6 +493,23 @@ export function MatchCard({
                   Cancel
                 </button>
               </>
+            )}
+            {/* Best of 3, after the main buttons (and the time-over ones). */}
+            {m.status === "live" && !m.confirmed && bo3 && showNotOver && (
+              <button
+                onClick={() => void runEndGame(true)}
+                style={{ ...btn("#f59e0b"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10 }}
+              >
+                {decidingScore(m, onScreen.a, onScreen.b) ? `Save Anyway, Confirm ${decidingScore(m, onScreen.a, onScreen.b)}` : "Save Anyway"}
+              </button>
+            )}
+            {m.status === "live" && !m.confirmed && bo3 && games.length > 0 && (
+              <button
+                onClick={() => void actions.undoGame(m)}
+                style={{ ...btn("#e2e8f0", "#475569"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}
+              >
+                ↶ Undo Game {games.length}
+              </button>
             )}
             {/* Team picker for walkover/winner in time-over */}
             {pickerOpen && (
@@ -452,7 +557,7 @@ export function MatchCard({
                   Cancel
                 </button>
                 <button
-                  onClick={() => void actions.saveEditedMatch(m, shownScores())}
+                  onClick={() => void (bo3 ? actions.saveEditedGames(m, draftGames()) : actions.saveEditedMatch(m, shownScores()))}
                   style={{ ...btn("#16a34a"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}
                 >
                   💾 Save Changes
@@ -463,5 +568,33 @@ export function MatchCard({
         )}
       </div>
     </div>
+  );
+}
+
+/** One game's row on Edit Score for a best-of-3 result. */
+function GameRow({ n, row, onChange }: { n: number; row: string[]; onChange: (col: number, text: string) => void }) {
+  const box = (col: number) => (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      value={row[col]}
+      placeholder="–"
+      onChange={(e) => onChange(col, e.target.value)}
+      onFocus={(e) => e.target.select()}
+      aria-label={`Game ${n}, ${col === 0 ? "first" : "second"} team's points`}
+      style={{
+        width: "100%", minWidth: 0, height: 44, textAlign: "center", fontSize: 22, fontWeight: 900,
+        borderRadius: 10, border: "2px solid #3A86FF", outline: "none", color: "#1a1a2e", background: "#eff6ff", padding: 0,
+      }}
+    />
+  );
+  return (
+    <>
+      <span style={{ fontSize: 12, fontWeight: 800, color: "#475569", whiteSpace: "nowrap" }}>Game {n}</span>
+      {box(0)}
+      <span style={{ fontWeight: 900, color: "#94a3b8" }}>–</span>
+      {box(1)}
+    </>
   );
 }

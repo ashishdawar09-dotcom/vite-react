@@ -4,7 +4,8 @@ import { toast } from "./Toast";
 import { Modal } from "./ui/Modal";
 import { recommendFormats, describeFormat, type FormatPlan } from "../lib/formatPlanner";
 import { categoryStarted, categoryUpdatePatch, savedFormatText } from "../lib/categoryEdit";
-import type { AgeBand, Category, Player, PlayerCategory, PriceBasis } from "../types";
+import type { AgeBand, BestOf3From, Category, Player, PlayerCategory, PriceBasis } from "../types";
+import { BEST_OF_3_OPTIONS } from "../lib/bestOf3";
 
 export function CategoryEditor({
   tournamentId,
@@ -29,6 +30,9 @@ export function CategoryEditor({
   const [minAge, setMinAge] = useState<string>(category?.min_age != null ? String(category.min_age) : "");
   const [allowSolo, setAllowSolo] = useState<boolean>(category?.allow_solo_signup ?? false);
   const [hasBronze, setHasBronze] = useState<boolean>(category?.has_bronze_match ?? false);
+  // New events start on the published rule (semifinals on); the database default matches.
+  const savedBestOf3: BestOf3From | null = category ? category.best_of_3_from ?? null : "sf";
+  const [bestOf3From, setBestOf3From] = useState<BestOf3From | null>(savedBestOf3);
   const [price, setPrice] = useState<string>(category?.price != null ? String(category.price) : "");
   const [priceBasis, setPriceBasis] = useState<PriceBasis>(category?.price_basis ?? "per_player");
   const [busy, setBusy] = useState(false);
@@ -112,8 +116,15 @@ export function CategoryEditor({
           price_basis: basis,
         }, formatTouched ? selectedPlan ?? null : null);
         await db.updateCategory(category.id, patch);
+        // Through its own call, which also restamps knockout matches that
+        // haven't started (never part of the plain category update).
+        if (bestOf3From !== savedBestOf3) {
+          const changed = await db.setKnockoutFormat(category.id, bestOf3From);
+          if (changed > 0) toast(`${changed} knockout ${changed === 1 ? "match" : "matches"} now ${changed === 1 ? "follows" : "follow"} the new best-of-3 setting.`, "success");
+        }
       } else {
         const created = await db.createCategory(tournamentId, name.trim(), teamSize, startsIso, matchMin);
+        if (bestOf3From !== "sf") await db.setKnockoutFormat(created.id, bestOf3From);
         if (ageBand !== null || minAgeNum !== null || allowSolo || hasBronze || priceNum !== null || basis !== "per_player") {
           await db.updateCategory(created.id, {
             age_band: ageBand, min_age: minAgeNum, allow_solo_signup: allowSolo, has_bronze_match: hasBronze,
@@ -226,6 +237,17 @@ export function CategoryEditor({
           </label>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
             Only takes effect once the bracket has semi-finals (4 or more qualifiers).
+          </div>
+        </Field>
+
+        <Field label="Best of 3 games from">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {BEST_OF_3_OPTIONS.map(o => (
+              <FormatBtn key={o.label} active={bestOf3From === o.value} onClick={() => setBestOf3From(o.value)}>{o.label.toUpperCase()}</FormatBtn>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
+            {bestOf3Help(bestOf3From)} A change applies to knockout matches that haven't started. Live and finished matches keep their format.
           </div>
         </Field>
 
@@ -375,4 +397,12 @@ function pricePreview(raw: string, teamSize: 1 | 2, basis: PriceBasis): string {
   if (teamSize === 1) return `Registrants see: ${amt(n)} per player.`;
   if (basis === "per_team") return `Registrants see: ${amt(n)} per team — one payment covers both players.`;
   return `Registrants see: ${amt(n)} per player (${amt(n * 2)} per team) — each player pays their own share, or one pays for both.`;
+}
+
+/** Which knockout rounds the setting makes best of 3, for the hint under it. */
+function bestOf3Help(v: BestOf3From | null): string {
+  if (v === "qf") return "Quarterfinals, semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 21.";
+  if (v === "sf") return "Semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 21.";
+  if (v === "final") return "Final and bronze match: best of 3 games to 15. Earlier rounds: one game to 21.";
+  return "Every match is one game to 21.";
 }

@@ -27,6 +27,7 @@ export const RESET_MATCH: Partial<Match> = {
   confirmed_at: null,
   score_a: null,
   score_b: null,
+  games: null,
   status: "pending",
   is_walkover: false,
   started_at: null,
@@ -41,7 +42,8 @@ type Side = "team_a_id" | "team_b_id";
 function hasProgress(m: Match): boolean {
   return !!(
     m.winner_id || m.confirmed || m.status !== "pending" || m.started_at ||
-    m.court_allocated_at || m.court_number != null || m.score_a != null || m.score_b != null
+    m.court_allocated_at || m.court_number != null || m.score_a != null || m.score_b != null ||
+    (Array.isArray(m.games) && m.games.length > 0)
   );
 }
 

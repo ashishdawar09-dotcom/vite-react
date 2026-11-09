@@ -12,7 +12,7 @@ import {
 } from "./snapshotSource";
 import type { Database } from "./database.types";
 import type { RegistrationLead } from "../features/publicRegistration/registrationLead";
-import type { Category, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
+import type { BestOf3From, Category, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
 
 // Bridge alias: the generated Insert type the typed Supabase client expects
 // for `matches`. Different from `Partial<Match>` because the DB requires the
@@ -469,6 +469,17 @@ export async function startCategoryStage(category_id: string, stage: "group" | "
   throw error;
 }
 
+/**
+ * Edit Event's "Best of 3 games from" setting. Saves it and restamps the
+ * event's knockout matches that haven't started (live and finished matches
+ * keep their format), in one transaction. Returns how many matches changed.
+ */
+export async function setKnockoutFormat(category_id: string, from: BestOf3From | null): Promise<number> {
+  const { data, error } = await supabase.rpc("set_knockout_format", { p_category_id: category_id, p_from: from });
+  if (error) throw error;
+  return data ?? 0;
+}
+
 export async function updateMatch(id: string, patch: Partial<Match>) {
   const { error } = await supabase.from("matches").update(patch).eq("id", id);
   if (error) throw error;
@@ -627,9 +638,11 @@ export async function extendMatch(id: string, extraMinutes: number) {
   }
 }
 
-export async function selectMatchWinner(id: string, winner_id: string) {
+// `extra`: a best-of-3 match stopped early also writes games won into the
+// score (src/lib/bestOf3.ts stopEarlyPatch), in the same update as the winner.
+export async function selectMatchWinner(id: string, winner_id: string, extra: Partial<Match> = {}) {
   const { error } = await supabase.from("matches").update({
-    winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString(),
+    ...extra, winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) throw error;
 }
@@ -639,7 +652,7 @@ export async function selectMatchWinner(id: string, winner_id: string) {
 // made a live match with no court.
 export async function rescheduleMatch(id: string) {
   const { error } = await supabase.from("matches").update({
-    status: "pending", started_at: null, court_number: null, court_allocated_at: null, score_a: null, score_b: null,
+    status: "pending", started_at: null, court_number: null, court_allocated_at: null, score_a: null, score_b: null, games: null,
     extended_minutes: 0, confirmed: false, winner_id: null, is_walkover: false, confirmed_at: null,
   }).eq("id", id);
   if (error) throw error;
@@ -656,11 +669,12 @@ export async function cancelMatch(id: string) {
 
 // freeCourt: the match was warming up on a court (Sit Out); clear it, or the
 // admin screens keep showing that court as busy.
-export async function markWalkover(id: string, winner_id: string, opts: { freeCourt?: boolean } = {}) {
+export async function markWalkover(id: string, winner_id: string, opts: { freeCourt?: boolean; extra?: Partial<Match> } = {}) {
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("matches")
     .update({
+      ...opts.extra,
       winner_id, confirmed: true, status: "completed", is_walkover: true, confirmed_at: now,
       ...(opts.freeCourt ? { court_number: null, court_allocated_at: null } : {}),
     })

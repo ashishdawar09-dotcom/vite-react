@@ -136,7 +136,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     const side = (s: "a" | "b") => `<div class="side${lead === s ? " lead" : ""}"><div class="who">${namesHTML(m, s, mode)}</div><span class="pts" data-s="${s}"><i>${scoreOf(m, s)}</i></span></div>`;
     return `<article class="court live" data-court="${c}" data-kind="tile" data-a="${m.cur[0]}" data-b="${m.cur[1]}">
       <div class="court-top"><h3 class="court-n">Court ${c}</h3>${badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`}</div>
-      <p class="court-meta"><span class="cs">${esc(shortStage(M!, m))}</span>${m.bestOf3 ? `<span class="unit">Best of 3</span>` : ""}</p>
+      <p class="court-meta"><span class="cs">${esc(shortStage(M!, m))}</span>${m.bestOf3 ? `<span class="unit">${esc(bo3Live(m))}</span>` : ""}</p>
       <div class="sides">${side("a")}${side("b")}</div></article>`;
   }
   const courtsHTML = () => Array.from({ length: N() }, (_, i) => tileHTML(i + 1)).join("");
@@ -169,13 +169,18 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       ${rowsVisible ? `<div class="q-window"><ol class="q-list">${rows.map(m => `<li>${qRowHTML(m, false, max)}</li>`).join("")}</ol></div>` : ""}`;
   }
 
+  // Best of 3: "Best of 3 · Game 2" on a live court; the games of a result.
+  const bo3Live = (m: TvMatch) => `Best of 3 · Game ${Math.min(3, m.games.length + 1)}`;
+  // `flip`: each game from team B's side, for "B beat A 2–1 (15–12, …)".
+  const gamesText = (m: TvMatch, flip = false) =>
+    m.games.map(([x, y]) => (flip ? `${y}–${x}` : `${x}–${y}`)).join(", ");
   /* ---------- boards: results, tables, brackets, champions ---------- */
   function resultHTML(m: TvMatch) {
     const wa = m.winner === m.a;
     return `<article class="res"><p class="res-cat">${esc(catStage(M!, m))}</p>
       <div class="res-row${wa ? " win" : ""}"><span>${esc(teamName(M!, m.a, "fit", 24))}</span><b>${m.walkover ? "" : m.cur[0]}</b></div>
       <div class="res-row${wa ? "" : " win"}"><span>${esc(teamName(M!, m.b, "fit", 24))}</span><b>${m.walkover ? "" : m.cur[1]}</b></div>
-      <p class="res-when">${m.walkover ? "Walkover · " : ""}${ago(m.doneAt)}</p></article>`;
+      <p class="res-when">${m.walkover ? "Walkover · " : ""}${m.bestOf3 && m.games.length && !m.walkover ? `${esc(gamesText(m))} · ` : ""}${ago(m.doneAt)}</p></article>`;
   }
   function tableHTML(cat: TvCategory, gIdx: number, max: number, compact: boolean) {
     const g = cat.groups.find(x => x.idx === gIdx);
@@ -306,7 +311,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   function mapCourtHTML(c: number) {
     const m = courtMatch(c), st = liveState(m), mode = N() <= 4 ? "lines" : "lastlines";
     const lead = m && st === "live" ? leadOf(m) : "", badge = m && st === "live" ? pointBadge(m) : null;
-    const chip = !m ? `<span class="state free">Free</span>` : st === "called" ? `<span class="state called">Now calling</span>` : badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : m.bestOf3 ? `<span class="badge soft">Best of 3</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`;
+    const chip = !m ? `<span class="state free">Free</span>` : st === "called" ? `<span class="state called">Now calling</span>` : badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : m.bestOf3 ? `<span class="badge soft">${esc(bo3Live(m))}</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`;
     const label = !m ? (N() <= 4 ? "Ready for the next match" : "") : N() <= 4 ? shortStage(M!, m) : N() <= 6 ? (M!.catById[m.cat]?.short ?? "") : "";
     const net = m && st === "live" ? `<span class="pts${lead === "a" ? " lead" : ""}" data-s="a"><i>${m.cur[0]}</i></span><span class="pts${lead === "b" ? " lead" : ""}" data-s="b"><i>${m.cur[1]}</i></span>` : `<span class="mc-word">${st === "called" ? "Warming up" : "Free"}</span>`;
     return `<article class="mcourt ${st}" data-court="${c}" data-kind="map"${m && st === "live" ? ` data-a="${m.cur[0]}" data-b="${m.cur[1]}"` : ""}>
@@ -409,7 +414,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (!m) return "";
     const lead = st === "live" ? leadOf(m) : "";
     const line = (s: "a" | "b") => `<div class="cl-line${lead === s ? " lead" : ""}"><span>${esc(sideLabel(M!, m, s, "fit", 30))}</span>${st === "live" ? `<b class="pts${lead === s ? " lead" : ""}" data-s="${s}"><i>${scoreOf(m, s)}</i></b>` : ""}</div>`;
-    return `<div class="cl-mini ${st}" data-court="${c}" data-kind="chanlive"${st === "live" ? ` data-a="${m.cur[0]}" data-b="${m.cur[1]}"` : ""}><span class="mini-court">Court ${c}</span><div class="cl-lines">${line("a")}${line("b")}</div><span class="cl-state">${st === "live" ? (m.bestOf3 ? "Best of 3" : "") : "Warming up"}</span></div>`;
+    return `<div class="cl-mini ${st}" data-court="${c}" data-kind="chanlive"${st === "live" ? ` data-a="${m.cur[0]}" data-b="${m.cur[1]}"` : ""}><span class="mini-court">Court ${c}</span><div class="cl-lines">${line("a")}${line("b")}</div><span class="cl-state">${st === "live" ? (m.bestOf3 ? `Game ${m.games.length + 1}` : "") : "Warming up"}</span></div>`;
   }
   function channelHTML(ctx: Ctx) {
     const list = channels(), key = list[ctx.v.chan % list.length], enter = ctx.enter ? " enter" : "";
@@ -544,7 +549,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   }
   function tkResultHTML(m: TvMatch) {
     const wa = m.winner === m.a, sc = wa ? m.cur : [m.cur[1], m.cur[0]];
-    return `<span class="ti" data-key="r${m.id}"><span class="ti-tag fin">Final</span><span class="ti-e">${esc(M!.catById[m.cat]?.short ?? "")}</span><b>${esc(teamName(M!, wa ? m.a : m.b, "last"))}</b>beat ${esc(teamName(M!, wa ? m.b : m.a, "last"))}${m.walkover ? `<span class="ti-e">walkover</span>` : `<span class="ti-sc">${sc[0]}–${sc[1]}</span>`}</span>`;
+    return `<span class="ti" data-key="r${m.id}"><span class="ti-tag fin">Final</span><span class="ti-e">${esc(M!.catById[m.cat]?.short ?? "")}</span><b>${esc(teamName(M!, wa ? m.a : m.b, "last"))}</b>beat ${esc(teamName(M!, wa ? m.b : m.a, "last"))}${m.walkover ? `<span class="ti-e">walkover</span>` : `<span class="ti-sc">${sc[0]}–${sc[1]}${m.bestOf3 && m.games.length ? ` (${esc(gamesText(m, !wa))})` : ""}</span>`}</span>`;
   }
   function tkItems() {
     const out: { key: string; sig: string; html: () => string }[] = [];

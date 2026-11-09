@@ -237,3 +237,26 @@ describe("projectSchedule: output", () => {
     expect(projectSchedule([], [category("a", 1)], 4, DAY_START)).toEqual({ projected: [], byId: {}, tournamentDeltaMin: 0, tournamentDeltaLabel: "ON TIME", liveByCourt: {} });
   });
 });
+
+describe("projectSchedule: best-of-3 matches", () => {
+  const NOW = DAY_START + 60 * MIN;
+  it("a live best-of-3 match is still playing at 15 minutes, where a one-game match is over time", () => {
+    const cats = [category("k", 1, { phase: "knockout" })];
+    const started = { status: "live" as const, started_at: iso(NOW - 15 * MIN), court_number: 1, team_a_id: "a", team_b_id: "b", stage: "knockout" as const, round_idx: 1 };
+    const one = projectSchedule([match("one", "k", started)], cats, 4, NOW);
+    const bo3 = projectSchedule([match("bo3", "k", { ...started, best_of: 3, games: [[15, 10]] })], cats, 4, NOW);
+    expect(one.byId.one.delta_label).toBe("3M OVER");
+    expect(bo3.byId.bo3.delta_label).toBe("15M PLAYING");
+  });
+
+  it("a queued best-of-3 match holds its court twice as long", () => {
+    const cats = [category("k", 1, { phase: "knockout", starts_at: iso(NOW) })];
+    const q = (id: string, slot: number, over: Partial<Match> = {}) =>
+      match(id, "k", { stage: "knockout", round_idx: 0, slot_idx: slot, team_a_id: `${id}-a`, team_b_id: `${id}-b`, ...over });
+    // One court: the second match starts when the first one ends.
+    const one = projectSchedule([q("m1", 0), q("m2", 1)], cats, 1, NOW);
+    const bo3 = projectSchedule([q("m1", 0, { best_of: 3 }), q("m2", 1)], cats, 1, NOW);
+    const gap = (s: ReturnType<typeof projectSchedule>) => (startOf(s, "m2") - startOf(s, "m1")) / MIN;
+    expect(gap(bo3)).toBeCloseTo(2 * gap(one), 5);
+  });
+});

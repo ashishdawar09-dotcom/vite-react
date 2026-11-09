@@ -4,9 +4,10 @@
 //
 // Pure functions only, so they can be tested without a browser.
 
-import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "../../types";
+import type { Category, GameScore, Match, Player, ProjectedMatch, Team, Tournament } from "../../types";
 import { buildGroups, groupLetter, groupStandings, isRoundRobinOnly, roundRobinPodium } from "../../lib/groups";
 import { isCancelledMatch } from "../../lib/matchOutcome";
+import { gamesOf, isBestOf3 } from "../../lib/bestOf3";
 import { eventStarts } from "../../lib/projection";
 
 const MIN = 60_000;
@@ -33,8 +34,10 @@ export type TvMatch = {
   groupIdx: number | null;
   roundIdx: number | null;
   slot: number;
-  /** Semifinals and finals are best of 3 under the tournament rules. */
+  /** The match's own format (matches.best_of), set from the event's "Best of 3 games from" setting. */
   bestOf3: boolean;
+  /** Best of 3: finished games in order. While live, `cur` is the current game; once done, games won. */
+  games: GameScore[];
   a: string | null;
   b: string | null;
   cur: [number, number];
@@ -263,7 +266,8 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
       groupIdx: m.group_idx,
       roundIdx: m.round_idx,
       slot: m.slot_idx,
-      bestOf3: kind === "sf" || kind === "final",
+      bestOf3: isBestOf3(m),
+      games: gamesOf(m),
       a: m.team_a_id && teams[m.team_a_id] ? m.team_a_id : null,
       b: m.team_b_id && teams[m.team_b_id] ? m.team_b_id : null,
       cur: [m.score_a ?? 0, m.score_b ?? 0],

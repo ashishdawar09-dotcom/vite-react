@@ -6,6 +6,7 @@ import { usePublicTournament } from "./usePublicTournament";
 import { derivePublicTournamentState } from "./publicDerive";
 import type { Category, ProjectedMatch } from "../../types";
 import { isCancelledMatch } from "../../lib/matchOutcome";
+import { isBestOf3, liveGameTag, playMinutes } from "../../lib/bestOf3";
 
 /**
  * Venue-TV hero card — /t/:slug/tv
@@ -77,7 +78,7 @@ export function VenueTvPage() {
       const start = m.projected_start_at ? new Date(m.projected_start_at).getTime() : null;
       if (start === null) continue;
       const cat = catById[m.category_id];
-      const dur = (cat?.match_minutes ?? 12) + (m.extended_minutes ?? 0);
+      const dur = playMinutes(m, cat?.match_minutes);
       candidates.push(start + dur * 60_000);
     }
     return candidates.length > 0 ? Math.max(...candidates) : null;
@@ -212,6 +213,7 @@ function LiveScoreCard({ m, tName, catById }: { m: ProjectedMatch; tName: (id: s
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span className="font-display" style={{ fontSize: 12, letterSpacing: 2, color: "#00d4ff", fontWeight: 700, textTransform: "uppercase" }}>
           Court {m.court_number ?? "—"} · {catById[m.category_id]?.name ?? ""}
+          {isBestOf3(m) && <span style={{ color: "#94a3b8", marginLeft: 8 }}>{liveGameTag(m)}</span>}
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "#ef4444", letterSpacing: 2, textTransform: "uppercase" }}>
           <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 8px #ef4444" }} />
