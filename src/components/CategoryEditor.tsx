@@ -241,7 +241,7 @@ export function CategoryEditor({
         </Field>
 
         <Field label="Best of 3 games from">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {BEST_OF_3_OPTIONS.map(o => (
               <FormatBtn key={o.label} active={bestOf3From === o.value} onClick={() => setBestOf3From(o.value)}>{o.label.toUpperCase()}</FormatBtn>
             ))}

@@ -326,9 +326,10 @@ export function MatchCard({
       }}>
         <span style={{ color: "#64748b" }}>
           Match{m.court_number != null && (isWarming || m.status === "live") ? ` · Court ${m.court_number}` : ""}
+          {/* Non-breaking spaces: a narrow card wraps between the parts, never inside "Game 2". */}
           {bo3
-            ? ` · Best of 3${m.status === "live" && !m.confirmed ? ` · Game ${currentGame(m)}` : ""}`
-            : m.stage === "knockout" && !m.is_bye ? " · 1 game" : ""}
+            ? ` · Best\u00a0of\u00a03${m.status === "live" && !m.confirmed ? ` · Game\u00a0${currentGame(m)}` : ""}`
+            : m.stage === "knockout" && !m.is_bye ? " · 1\u00a0game" : ""}
         </span>
         {cardTimeOver && (
           <span style={{ color: "#d97706", fontWeight: 800, display: "flex", alignItems: "center", gap: 4 }}>
@@ -447,22 +448,6 @@ export function MatchCard({
                 ✓ Confirm Final Score
               </button>
             ))}
-            {m.status === "live" && !m.confirmed && bo3 && showNotOver && (
-              <button
-                onClick={() => void runEndGame(true)}
-                style={{ ...btn("#f59e0b"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10 }}
-              >
-                Save Anyway
-              </button>
-            )}
-            {m.status === "live" && !m.confirmed && bo3 && games.length > 0 && (
-              <button
-                onClick={() => void actions.undoGame(m)}
-                style={{ ...btn("#e2e8f0", "#475569"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}
-              >
-                ↶ Undo Game {games.length}
-              </button>
-            )}
             {/* Time-over actions */}
             {m.status === "live" && !m.confirmed && cardTimeOver && (
               <>
@@ -507,6 +492,23 @@ export function MatchCard({
                   Cancel
                 </button>
               </>
+            )}
+            {/* Best of 3, after the main buttons (and the time-over ones). */}
+            {m.status === "live" && !m.confirmed && bo3 && showNotOver && (
+              <button
+                onClick={() => void runEndGame(true)}
+                style={{ ...btn("#f59e0b"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10 }}
+              >
+                Save Anyway
+              </button>
+            )}
+            {m.status === "live" && !m.confirmed && bo3 && games.length > 0 && (
+              <button
+                onClick={() => void actions.undoGame(m)}
+                style={{ ...btn("#e2e8f0", "#475569"), flex: "1 1 140px", padding: "12px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}
+              >
+                ↶ Undo Game {games.length}
+              </button>
             )}
             {/* Team picker for walkover/winner in time-over */}
             {pickerOpen && (

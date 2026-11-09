@@ -21,6 +21,7 @@
 // Pure, so it can be tested without React; useScheduling wraps it.
 
 import type { Category, Match, ProjectedMatch } from "../types";
+import { isBestOf3, playMinutes } from "./bestOf3";
 import { isCancelledMatch } from "./matchOutcome";
 
 const MIN = 60_000;
@@ -59,10 +60,15 @@ export function fmtDelta(min: number): string {
  *
  * Window: last 5 confirmed non-walkover, non-bye, non-cancelled matches. Weights: 5,4,3,2,1.
  */
+/** A best-of-3 match takes about two one-game matches on court (src/lib/bestOf3.ts). */
+const gamesFactor = (m: Match) => (isBestOf3(m) ? 2 : 1);
+
 export function adaptiveMatchMinutes(matches: Match[], categoryId: string, fallback: number): number {
   const completed = matches.filter(m =>
     m.category_id === categoryId &&
     m.confirmed && !m.is_walkover && !m.is_bye && !isCancelledMatch(m) &&
+    // A best-of-3 match runs about twice as long; it would skew a one-game pace.
+    !isBestOf3(m) &&
     m.started_at && m.confirmed_at,
   );
   if (completed.length < 3) return fallback;
@@ -196,7 +202,7 @@ export function projectSchedule(matches: Match[], categories: Category[], numCou
       if (begun != null && !isQueued(m)) ev.last = Math.max(ev.last, begun);
 
       if (m.confirmed && confirmedAt && scheduledAt) {
-        const d = (confirmedAt - (scheduledAt + ev.matchMin * MIN)) / MIN;
+        const d = (confirmedAt - (scheduledAt + ev.matchMin * gamesFactor(m) * MIN)) / MIN;
         slots.set(m.id, {
           projected_start_at: m.scheduled_at,
           delta_min: d,
@@ -206,7 +212,7 @@ export function projectSchedule(matches: Match[], categories: Category[], numCou
         tournamentDeltaSum += d;
         tournamentDeltaCount++;
       } else if (m.status === "live" && startedAt) {
-        const totalMin = nominal + (m.extended_minutes ?? 0);
+        const totalMin = playMinutes(m, nominal);
         const expectedFinish = startedAt + totalMin * MIN;
         const elapsed = (now - startedAt) / MIN;
         const end = Math.max(now, expectedFinish);
@@ -232,7 +238,7 @@ export function projectSchedule(matches: Match[], categories: Category[], numCou
   }
 
   const place = (m: Match, ev: EventInfo, court: number, start: number) => {
-    const end = start + ev.matchMin * MIN;
+    const end = start + ev.matchMin * gamesFactor(m) * MIN;
     const deltaMin = (start - now) / MIN;
     slots.set(m.id, { projected_start_at: new Date(start).toISOString(), delta_min: deltaMin, delta_label: pendingLabel(m, deltaMin) });
     free[court] = end;
