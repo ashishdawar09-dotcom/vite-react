@@ -1,10 +1,10 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
-  briefingRecipients, courtCallKey, defaultMorningSendAt, deliveryFromEvent, playerPlan, scheduleWindow, signSvix,
+  BRIEFING_KINDS, briefingRecipients, courtCallKey, defaultMorningSendAt, deliveryFromEvent, playerPlan, scheduleWindow, signSvix,
   verifySvix, WEBHOOK_EVENTS,
 } from "./raceday.ts";
 import { buildBody } from "./mailer.ts";
-import { type BriefingData, playerBriefing } from "./emails.ts";
+import { type BriefingData, type FullHouseData, fullHouseEmail, playerBriefing } from "./emails.ts";
 
 Deno.test("court call key: same allocation same key, new allocation new key", () => {
   const a = courtCallKey("m1", 3, "2026-11-21T17:00:00Z", "p1");
@@ -178,4 +178,47 @@ Deno.test("briefing email: uses the neutral event banner, not the 'You're in' on
   const e = playerBriefing(brief());
   assertStringIncludes(e.html, "/email/hero.gif");
   assert(!e.html.includes("approved.gif"));
+});
+
+const full = (over: Partial<FullHouseData> = {}): FullHouseData => ({
+  tournament: T, player: { name: "Amar Singh" },
+  entries: [{ category: "Men's Doubles 35+", partner: "Raj <Gill>" }, { category: "Men's Singles", partner: null }],
+  cap: 150, notes: null, waitlistUrl: "https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb",
+  appAssetBase: "https://badminton.adawar.org/email/", assetBase: "https://shuttlestorm.adawar.org/email", ...over,
+});
+
+Deno.test("full-house email: thanks them by name, with the FULL HOUSE animation and the waitlist", () => {
+  assert(BRIEFING_KINDS.includes("full_house"));
+  const e = fullHouseEmail(full());
+  assertEquals(e.subject, "It's a full house! Thank you, Amar");
+  assertStringIncludes(e.html, "Thank you, Amar.<br>We're at");
+  assertStringIncludes(e.html, "full capacity.");
+  assertStringIncludes(e.html, "Full house · 150/150");
+  assertStringIncludes(e.html, "all 150 entries are taken and the entry form is now closed");
+  // Hero and waitlist bar from the app (one slash), step GIFs from the website.
+  assertStringIncludes(e.html, 'src="https://badminton.adawar.org/email/full-house.gif"');
+  assertStringIncludes(e.html, 'src="https://badminton.adawar.org/email/full-house-waitlist.gif"');
+  assertStringIncludes(e.html, 'src="https://shuttlestorm.adawar.org/email/step-received.gif"');
+  assertStringIncludes(e.html, 'src="https://shuttlestorm.adawar.org/email/step-draw.gif"');
+  assert(!e.html.includes("approved.gif"));
+  assertStringIncludes(e.html, 'href="https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb"');
+  assertStringIncludes(e.html, "Join the waitlist");
+  assertStringIncludes(e.html, "Partner not entered yet?");
+  assertStringIncludes(e.html, "Raj &lt;Gill&gt;"); // escaped
+  assert(!e.html.includes("Raj <Gill>"));
+  assertStringIncludes(e.html, "150 of 150 taken");
+  assertStringIncludes(e.text, "Hi Amar,");
+  assertStringIncludes(e.text, "Your events: Men's Doubles 35+ with Raj <Gill>\n  Men's Singles");
+  assertStringIncludes(e.text, "Event day: Saturday, November 21, 2026 · first serve 9:30 am");
+  assertStringIncludes(e.text, "Join the waitlist: https://badminton.adawar.org/register/e7bb59ca-5cfc-4e5e-a4f6-0649ece00feb");
+  assertStringIncludes(e.text, "In the coming days");
+});
+
+Deno.test("full-house email: no cap, no events, directors' notes", () => {
+  const e = fullHouseEmail(full({ cap: null, entries: [], notes: "Parking <free>.\nBring water." }));
+  assertStringIncludes(e.html, "every entry is taken");
+  assert(!e.html.includes("150"));
+  assert(!e.html.includes("Your event"));
+  assertStringIncludes(e.html, "Parking &lt;free&gt;.<br>Bring water.");
+  assertStringIncludes(e.text, "From the directors: Parking <free>.\n  Bring water.");
 });

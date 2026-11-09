@@ -107,8 +107,9 @@ export async function verifySvix(
 
 // ---------- player briefings ----------
 
-export type BriefingKind = "day_before" | "morning_of";
-export const BRIEFING_KINDS: BriefingKind[] = ["day_before", "morning_of"];
+// full_house: the one-off "we're sold out" thank-you, sent once the entry cap is reached.
+export type BriefingKind = "day_before" | "morning_of" | "full_house";
+export const BRIEFING_KINDS: BriefingKind[] = ["day_before", "morning_of", "full_house"];
 
 export type RosterPlayer = { id: string; name: string; email: string | null; active: boolean };
 

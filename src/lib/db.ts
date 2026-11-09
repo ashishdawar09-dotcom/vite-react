@@ -1186,7 +1186,7 @@ export type BriefingResponse = {
 
 /** Calls the player-briefing function; a refusal comes back as `error`, never thrown. */
 export async function playerBriefing(body: {
-  action: BriefingAction; tournament_id: string; kind: "day_before" | "morning_of";
+  action: BriefingAction; tournament_id: string; kind: "full_house" | "day_before" | "morning_of";
   notes?: string | null; scheduled_at?: string | null; player_id?: string;
 }): Promise<BriefingResponse> {
   const { data, error } = await supabase.functions.invoke("player-briefing", { body });

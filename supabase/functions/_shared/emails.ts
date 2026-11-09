@@ -258,9 +258,13 @@ type Step = {
   wideCta?: boolean;
 };
 
+// An image file name under the asset base, or a full https URL used as is
+// (the full-house images are served by the app, not the website; http only in local previews).
+const assetSrc = (base: string, file: string) => (/^https?:\/\//.test(file) ? file : `${base}/${file}`);
+
 function stepBlock(s: Step, assetBase: string): string {
   const visual = s.visual ??
-    `<img src="${esc(`${assetBase}/${s.gif}`)}" width="536" alt="${esc(s.alt ?? "")}" ` +
+    `<img src="${esc(assetSrc(assetBase, s.gif ?? ""))}" width="536" alt="${esc(s.alt ?? "")}" ` +
       `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`;
   return `<tr><td class="px" style="padding:0 32px 36px">` +
     visual +
@@ -344,7 +348,7 @@ function layout(o: {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.ink}" style="background:${C.ink}">
 <tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.ink2}" style="width:100%;max-width:600px;background:${C.ink2};border-radius:18px;overflow:hidden">
-  <tr><td style="padding:0"><img src="${esc(`${base}/${o.hero.gif}`)}" width="600" alt="${esc(o.hero.alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0"></td></tr>
+  <tr><td style="padding:0"><img src="${esc(assetSrc(base, o.hero.gif))}" width="600" alt="${esc(o.hero.alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0"></td></tr>
   <tr><td class="px" style="padding:36px 32px 8px">
     ${kicker(o.kicker)}
     <h1 style="margin:0 0 16px;font-family:${SANS};font-size:40px;line-height:1.05;font-weight:800;letter-spacing:-0.5px;color:${C.bone}">${o.heading}</h1>
@@ -1297,6 +1301,111 @@ export function playerBriefing(d: BriefingData): RenderedEmail {
     ...details.map(([k, v]) => k === "Your matches" && profile ? `${k}: ${profile}` : `${k}: ${strip(v.replace(/<br>/g, "\n  "))}`),
     "",
     (morning ? "TODAY" : "TOMORROW"),
+    ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
+    textFooter(t),
+  ]);
+  return { subject, html, text };
+}
+
+// ---------- full house: the thank-you once every entry is taken ----------
+//
+// Sent once to every player on the roster from the Emails tab (player-briefing,
+// kind "full_house"). The FULL HOUSE animation and the waitlist bar come from
+// the Nov 8 social posts and are served by the app (appAssetBase), frame 0 of
+// the animation being the finished stamp for Outlook. Partners who haven't
+// finished their entry are sent to the directors, not the waitlist: their
+// seat is already counted, and only a director can add someone once it's full.
+
+export type FullHouseData = {
+  tournament: EmailTournament;
+  player: { name: string };
+  entries: { category: string; partner: string | null }[];
+  cap: number | null;                // the entry cap that's now reached
+  notes: string | null;              // from the directors, plain text
+  waitlistUrl: string;               // the registration page, which shows the waitlist when full
+  appAssetBase: string;              // e.g. https://badminton.adawar.org/email
+  assetBase: string;                 // the website's email images (step GIFs)
+  privacyUrl?: string | null;
+};
+
+export function fullHouseEmail(d: FullHouseData): RenderedEmail {
+  const t = d.tournament;
+  const name = firstName(d.player.name);
+  const cap = d.cap && d.cap > 0 ? Math.floor(d.cap) : null;
+  const start = clockTime(t.event_time);
+  const day = longDate(t.event_date);
+  const waitlist = safeUrl(d.waitlistUrl);
+  const app = d.appAssetBase.replace(/\/+$/, "");
+
+  const subject = `It's a full house! Thank you, ${name}`;
+  const allTaken = cap ? `all ${cap} entries are taken` : "every entry is taken";
+
+  const entriesHtml = d.entries.map((e) =>
+    `${esc(e.category)}${e.partner ? ` <span style="color:${C.mute}">with</span> ${esc(e.partner)}` : ""}`
+  ).join("<br>");
+  const notes = d.notes?.trim() ? esc(d.notes.trim()).replace(/\r?\n/g, "<br>") : null;
+  const details: [string, string][] = [
+    ...(d.entries.length ? [[d.entries.length > 1 ? "Your events" : "Your event", entriesHtml] as [string, string]] : []),
+    ...(day ? [["Event day", esc([day, start && `first serve ${start}`].filter(Boolean).join(" · "))] as [string, string]] : []),
+    ...(t.venue_name ? [["Venue", esc(t.venue_name)] as [string, string]] : []),
+    ...(cap
+      ? [["Entries", `<strong style="color:${C.volt}">${cap} of ${cap} taken</strong> <span style="color:${C.mute}">· entry form closed</span>`] as [string, string]]
+      : []),
+    ...(notes ? [["From the directors", notes] as [string, string]] : []),
+  ];
+
+  const intro = `We're delighted to let you know that ${esc(t.name)} is a full house: ${allTaken} and the entry form is now closed. ` +
+    `Thank you so much for registering. Your place is held, and there's nothing more you need to do right now.`;
+
+  const steps: Step[] = [
+    {
+      n: 1,
+      gif: "step-received.gif",
+      alt: "Checkmark",
+      title: "Partner not entered yet?",
+      html: "If your partner hasn't signed up yet, or you entered a doubles event without one, reply to this email or contact " +
+        "a director (details below). We'll sort it out with you, and if you don't have a partner we'll pair you with another player.",
+    },
+    {
+      n: 2,
+      visual: `<img src="${esc(`${app}/full-house-waitlist.gif`)}" width="536" alt="${esc(`${cap ? `${cap} of ${cap}` : "All"} entries taken. Missed out? Join the waitlist.`)}" ` +
+        `style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:14px;background:${C.ink2}">`,
+      title: "Know someone who missed out?",
+      html: "Point them to the waitlist. If a spot opens up, we'll contact them.",
+      cta: waitlist ? [waitlist, "Join the waitlist"] : undefined,
+      wideCta: true,
+    },
+    {
+      n: 3,
+      gif: "step-draw.gif",
+      alt: "Draw bracket filling in",
+      title: "Watch your inbox",
+      html: "In the coming days we'll send you everything for the day: when to arrive, your events and how to follow your matches live. " +
+        "Thank you again for being part of it.",
+    },
+  ];
+
+  const html = layout({
+    title: subject,
+    preheader: `${t.name} is sold out: ${allTaken}. Your place is held.`,
+    hero: { gif: `${app}/full-house.gif`, alt: `${t.name}: full house${cap ? `, ${cap} of ${cap}` : ""}.` },
+    kicker: cap ? `Full house · ${cap}/${cap}` : "Full house",
+    heading: `Thank you, ${esc(name)}.<br>We're at <span style="color:${C.volt}">full capacity.</span>`,
+    intro,
+    details,
+    stepsHeading: "What happens now",
+    steps,
+    data: d,
+  });
+
+  const text = textBlock([
+    `Hi ${name},`,
+    "",
+    strip(intro),
+    "",
+    ...details.map(([k, v]) => `${k}: ${strip(v.replace(/<br>/g, "\n  "))}`),
+    "",
+    "WHAT HAPPENS NOW",
     ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html), s.cta ? `${s.cta[1]}: ${s.cta[0]}` : null]),
     textFooter(t),
   ]);

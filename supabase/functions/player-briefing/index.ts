@@ -1,7 +1,7 @@
 // supabase/functions/player-briefing/index.ts
 //
-// The day-before and morning-of player briefings, sent from the admin app's
-// Emails tab. Admin-only. Actions:
+// The day-before and morning-of player briefings, and the one-off "full
+// house" thank-you, sent from the admin app's Emails tab. Admin-only. Actions:
 //   preview  → counts and one rendered email (nothing is sent)
 //   test     → that rendered email, sent only to the signed-in admin
 //   send     → the next batch of players (BATCH at a time; the app calls again
@@ -11,13 +11,17 @@
 //              email until then.
 //   cancel   → cancels the next batch of scheduled (not yet sent) emails.
 //
+// The full-house email is never scheduled, and it only sends once the
+// database says every entry is taken (registration_capacity), so a slip of
+// the finger can't tell 100 players they're sold out early.
+//
 // Replies go to the tournament's reply_to_email. Delivery problems come back
 // through resend-webhook into briefing_emails.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
 import { isUuid, json, serveWithCors, SITE_URL } from "../_shared/http.ts";
-import { type EmailTournament, playerBriefing, type RenderedEmail } from "../_shared/emails.ts";
+import { type EmailTournament, fullHouseEmail, playerBriefing, type RenderedEmail } from "../_shared/emails.ts";
 import { cancelScheduledEmail, sendEmailDetailed } from "../_shared/mailer.ts";
 import {
   BRIEFING_KINDS, type BriefingKind, briefingRecipients, type PlanMatch, type PlanTeam, playerPlan, scheduleWindow,
@@ -25,12 +29,14 @@ import {
 
 const ASSET_BASE = Deno.env.get("EMAIL_ASSET_BASE") ?? "https://shuttlestorm.adawar.org/email";
 const PRIVACY_URL = Deno.env.get("EMAIL_PRIVACY_URL") ?? "https://shuttlestorm.adawar.org/privacy";
+// Images the app serves (public/email): the full-house animation and waitlist bar.
+const APP_ASSET_BASE = Deno.env.get("EMAIL_APP_ASSET_BASE") ?? `${SITE_URL}/email`;
 const BATCH = 25;
 const GAP_MS = 150; // stays under Resend's 10 requests a second, shared with court calls
 const NOTES_MAX = 600;
 
 const T_COLUMNS =
-  "id, name, slug, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, reply_to_email";
+  "id, name, slug, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, reply_to_email, entry_cap";
 
 serveWithCors(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
@@ -42,7 +48,7 @@ serveWithCors(async (req: Request) => {
   const tournamentId = body.tournament_id;
   const kind = body.kind as BriefingKind;
   if (!isUuid(tournamentId)) return json({ error: "tournament_id required" }, 400);
-  if (!BRIEFING_KINDS.includes(kind)) return json({ error: "kind must be day_before or morning_of" }, 400);
+  if (!BRIEFING_KINDS.includes(kind)) return json({ error: "kind must be day_before, morning_of or full_house" }, 400);
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, NOTES_MAX) || null : null;
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -73,8 +79,17 @@ serveWithCors(async (req: Request) => {
   }
 
   if (action === "send") {
-    const when = scheduleWindow(typeof body.scheduled_at === "string" ? body.scheduled_at : null);
+    const when = kind === "full_house"
+      ? { at: null, error: null }
+      : scheduleWindow(typeof body.scheduled_at === "string" ? body.scheduled_at : null);
     if (when.error) return json({ error: when.error }, 400);
+    if (kind === "full_house") {
+      const { data: c, error: capErr } = await supabase.rpc("registration_capacity", { p_tournament_id: tournamentId });
+      if (capErr) return json({ error: `Couldn't read the entry count: ${capErr.message}` }, 500);
+      const cap = c as { cap?: unknown; taken?: unknown } | null;
+      const full = typeof cap?.cap === "number" && typeof cap?.taken === "number" && cap.taken >= cap.cap;
+      if (!full) return json({ error: "The tournament isn't full yet, so the full-house email can't go out." }, 409);
+    }
     const done = await doneIds(supabase, tournamentId, kind);
     const todo = ctx.recipients.filter((r) => !done.has(r.id));
     let sent = 0, scheduled = 0, failed = 0;
@@ -143,7 +158,7 @@ serveWithCors(async (req: Request) => {
 });
 
 type Ctx = {
-  t: EmailTournament & { id: string; slug: string | null; reply_to_email: string | null };
+  t: EmailTournament & { id: string; slug: string | null; reply_to_email: string | null; entry_cap: number | null };
   replyTo: string | null;
   recipients: { id: string; name: string; email: string }[];
   activeCount: number;
@@ -195,6 +210,19 @@ async function doneIds(supabase: SupabaseClient, tournamentId: string, kind: Bri
 
 function render(ctx: Ctx, kind: BriefingKind, p: { id: string; name: string }, notes: string | null): RenderedEmail {
   const plan = ctx.plan(p.id);
+  if (kind === "full_house") {
+    return fullHouseEmail({
+      tournament: ctx.t,
+      player: { name: p.name },
+      entries: plan.entries,
+      cap: ctx.t.entry_cap,
+      notes,
+      waitlistUrl: `${SITE_URL}/register/${ctx.t.id}`,
+      appAssetBase: APP_ASSET_BASE,
+      assetBase: ASSET_BASE,
+      privacyUrl: PRIVACY_URL,
+    });
+  }
   return playerBriefing({
     tournament: ctx.t,
     kind,
