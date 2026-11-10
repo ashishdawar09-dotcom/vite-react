@@ -114,6 +114,95 @@ export type Database = {
           },
         ]
       }
+      on_deck_alerts: {
+        Row: {
+          claimed_at: string
+          email_failed: number
+          emailed: number
+          expected_at: string | null
+          match_id: string
+          no_email: number
+          push_failed: number
+          pushed: number
+          tournament_id: string
+        }
+        Insert: {
+          claimed_at?: string
+          email_failed?: number
+          emailed?: number
+          expected_at?: string | null
+          match_id: string
+          no_email?: number
+          push_failed?: number
+          pushed?: number
+          tournament_id: string
+        }
+        Update: {
+          claimed_at?: string
+          email_failed?: number
+          emailed?: number
+          expected_at?: string | null
+          match_id?: string
+          no_email?: number
+          push_failed?: number
+          pushed?: number
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "on_deck_alerts_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "on_deck_alerts_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_day_settings: {
+        Row: {
+          monitor_email_to: string | null
+          monitor_on: boolean
+          monitor_plan: Json | null
+          monitor_state: Json
+          on_deck_alerts: boolean
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          monitor_email_to?: string | null
+          monitor_on?: boolean
+          monitor_plan?: Json | null
+          monitor_state?: Json
+          on_deck_alerts?: boolean
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          monitor_email_to?: string | null
+          monitor_on?: boolean
+          monitor_plan?: Json | null
+          monitor_state?: Json
+          on_deck_alerts?: boolean
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_day_settings_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: true
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           age_band: string | null
@@ -1188,6 +1277,15 @@ export type Database = {
       set_knockout_format: {
         Args: { p_category_id: string; p_from: string | null }
         Returns: number
+      }
+      set_race_day_settings: {
+        Args: {
+          p_monitor_email_to?: string | null
+          p_monitor_on?: boolean | null
+          p_on_deck_alerts?: boolean | null
+          p_tournament_id: string
+        }
+        Returns: Database["public"]["Tables"]["race_day_settings"]["Row"]
       }
       start_category_stage: {
         Args: {

@@ -441,3 +441,8 @@ verify_jwt = false
 # Woken by pg_cron and the other functions with the internal secret.
 [functions.whatsapp-send]
 verify_jwt = false
+
+# Called by pg_cron (pg_net) with the internal secret, or by an admin from
+# the Emails tab; the function checks both itself.
+[functions.race-monitor]
+verify_jwt = false

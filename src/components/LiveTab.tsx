@@ -11,6 +11,8 @@ import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/form
 import { groupKeyOf, groupLetter } from "../lib/groups";
 import { isCancelledMatch } from "../lib/matchOutcome";
 import { currentGame, gamesLine, isBestOf3, liveGameTag } from "../lib/bestOf3";
+import { eventsReadyForKnockout } from "../lib/deskPrompts";
+import { stageTag } from "../lib/knockout";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -53,7 +55,7 @@ function StatTile({ label, value, sub, color }: { label: string; value: React.Re
   );
 }
 
-export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches, players, playerCategories, onShowProfile }: {
+export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, groups, getStandings, categories, numCourts, liveByCourt, projectedMatches, players, playerCategories, onShowProfile, onCall, onOpenGroups }: {
   teamsView: TeamView[];
   allTeamById: Record<string, TeamView | undefined>;
   matches: Match[];
@@ -70,6 +72,10 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   players: Player[];
   playerCategories: PlayerCategory[];
   onShowProfile: (playerId: string) => void;
+  /** Admin only: call a waiting match to a court (opens the court picker). Adds a Call button to each Up next row. */
+  onCall?: (matchId: string) => void;
+  /** Admin only: open an event's Groups tab, where Start Knockout is. Shows the "groups done" prompt. */
+  onOpenGroups?: (categoryId: string) => void;
 }) {
   const isMobile = useIsMobile();
   const reduceMotion = useReducedMotion(); /* NEW: respect prefers-reduced-motion globally */
@@ -111,6 +117,9 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
     return haystack.includes(q);
   };
   const matchInQuery = (m: ProjectedMatch) => !q || teamMatchesQuery(m.team_a_id) || teamMatchesQuery(m.team_b_id);
+  // The desk's extras (admin only): Call buttons and the "groups done" prompt.
+  const deskCalls = !!onCall;
+  const deskPrompts = !!onOpenGroups;
 
   const live = useMemo(
     () => projectedMatches.filter(m => m.status === "live").filter(matchInQuery),
@@ -122,9 +131,24 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       .filter(m => m.status === "pending" && !m.confirmed && m.team_a_id && m.team_b_id && !m.is_bye)
       .filter(matchInQuery)
       .sort((a, b) => new Date(a.projected_start_at ?? 0).getTime() - new Date(b.projected_start_at ?? 0).getTime())
-      .slice(0, q ? 20 : 5),
+      .slice(0, q ? 20 : deskCalls ? 8 : 5),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projectedMatches, q]
+    [projectedMatches, q, deskCalls]
+  );
+  // Courts holding a called match whose players are warming up: the court
+  // cards show them as warming up, not free.
+  const warmingByCourt = useMemo(() => {
+    const out: Record<number, ProjectedMatch | undefined> = {};
+    for (const m of projectedMatches) {
+      if (m.court_number != null && m.court_allocated_at && !m.started_at && !m.confirmed && m.status === "pending") out[m.court_number] = m;
+    }
+    return out;
+  }, [projectedMatches]);
+  // The desk's prompt: events whose groups are all in but whose knockout
+  // hasn't been started (its matches can't come into Up next until it is).
+  const knockoutReady = useMemo(
+    () => (deskPrompts ? eventsReadyForKnockout(categories, matches) : []),
+    [deskPrompts, categories, matches]
   );
   const recent = useMemo(
     () => [...projectedMatches.filter(m => m.confirmed && !m.is_bye).filter(matchInQuery)]
@@ -208,6 +232,79 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
     return { topN, groupsCount, shape, category: c };
   };
 
+  // Up next: on the desk's Live tab it sits right under the courts (with a
+  // Call button on each row); everyone else sees it next to Recent Results.
+  const upNextSection = upcoming.length > 0 && (
+      <div>
+        <SectionHeader accent="#00d4ff">{onCall ? "Up next" : "Upcoming"}</SectionHeader>
+        <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
+          {upcoming.map((m, i) => {
+            const isWarming = !!m.court_allocated_at && !m.started_at;
+            // Compose the rightmost time cell. Warming overrides the queue projection.
+            let timeText = "";
+            let timeColor = "#94a3b8";
+            if (isWarming) {
+              timeText = `🟡 COURT ${m.court_number} · ${fmtWarmupShort(m.court_allocated_at)}`;
+              timeColor = "#fbbf24";
+            } else if (m.projected_start_at) {
+              // delta_label is "IN 5M" / "STARTS NOW" / "LATER" / "BYE".
+              // Pair it with the rolling wall-clock from projected_start_at.
+              const wallClock = fmtClock(m.projected_start_at);
+              if (m.delta_label && m.delta_label !== "STARTS NOW" && m.delta_label !== "BYE") {
+                timeText = `${wallClock} · ${m.delta_label}`;
+              } else if (m.delta_label === "BYE") {
+                timeText = "BYE";
+              } else {
+                timeText = wallClock; // backlogged — wall-clock rolls forward
+              }
+            }
+            if (onCall) {
+              // The desk's row: event and round, both teams, the time, and Call.
+              // Called matches still warming up stay in the list; the label and
+              // the highlight go to the first match still to call.
+              const waitIdx = upcoming.slice(0, i).filter(x => !(x.court_allocated_at && !x.started_at)).length;
+              const isNext = !isWarming && waitIdx === 0;
+              return (
+                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px 10px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", position: "relative", background: isWarming ? "rgba(251,191,36,0.06)" : isNext ? "rgba(0,212,255,0.04)" : "transparent" }}>
+                  {(isWarming || isNext) && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: isWarming ? "#fbbf24" : "#00d4ff" }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+                      <span className="font-display" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: isWarming ? "#fbbf24" : isNext ? "#00d4ff" : "#64748b", whiteSpace: "nowrap" }}>{isWarming ? "🟡 WARM-UP" : isNext ? "▸ NEXT" : `#${waitIdx + 1}`}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#94a3b8", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{catById[m.category_id]?.name ?? ""} · {stageTag(m, matches)}</span>
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "#e2e8f0", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_a_id)}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 1.5, marginRight: 6 }}>VS</span>{tName(m.team_b_id)}</div>
+                    {timeText && <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: timeColor, letterSpacing: 0.5, marginTop: 3 }}>{timeText}</div>}
+                  </div>
+                  {!isWarming && (
+                    <button
+                      type="button"
+                      onClick={() => onCall(m.id)}
+                      aria-label={`Call ${tName(m.team_a_id)} versus ${tName(m.team_b_id)} to a court`}
+                      className="font-display"
+                      style={{ flexShrink: 0, padding: "10px 16px", minHeight: 42, borderRadius: 6, border: "none", background: isNext ? "#00d4ff" : "#1e3a5f", color: isNext ? "#0a1628" : "#e2e8f0", fontSize: 12, fontWeight: 800, letterSpacing: 1.5, cursor: "pointer" }}
+                    >CALL</button>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", gap: 12, position: "relative", background: isWarming ? "rgba(251,191,36,0.06)" : i === 0 ? "rgba(0,212,255,0.04)" : "transparent" }}>
+                {(isWarming || i === 0) && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: isWarming ? "#fbbf24" : "#00d4ff" }} />}
+                <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: isWarming ? "#fbbf24" : i === 0 ? "#00d4ff" : "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{isWarming ? "🟡 WARM-UP" : i === 0 ? "▸ NEXT" : stageBadge(m)}</div>
+                <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: "#cbd5e1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_a_id)}</div>
+                <div className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 2 }}>VS</div>
+                <div style={{ flex: 1, fontWeight: 600, fontSize: 13, textAlign: "right", color: "#cbd5e1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_b_id)}</div>
+                {timeText && (
+                  <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: timeColor, letterSpacing: 0.5, minWidth: 100, textAlign: "right", whiteSpace: "nowrap" }}>{timeText}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+  );
+
   return (
     /* MAKEOVER: page-level gradient backdrop. Outer wrapper now position:relative + overflow:hidden
        so the absolutely-positioned backdrop fills the entire LIVE tab area, not
@@ -244,9 +341,30 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
         </SectionReveal>
       )}
 
+      {onOpenGroups && knockoutReady.length > 0 && (
+        <div role="status" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {knockoutReady.map(id => (
+            <div key={id} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", borderRadius: 10, background: "linear-gradient(90deg,rgba(230,57,70,0.2) 0%,#0a1628 75%)", border: "1px solid #E63946" }}>
+              <span className="font-display" style={{ fontSize: 11, fontWeight: 800, color: "#fca5a5", letterSpacing: 2, whiteSpace: "nowrap" }}>⚔️ GROUPS DONE</span>
+              <span style={{ flex: "1 1 220px", fontSize: 13, color: "#fff", fontWeight: 600, lineHeight: 1.35 }}>
+                {catById[id]?.name ?? "This event"}: start the knockout so its matches come into Up next.
+              </span>
+              <button
+                type="button"
+                onClick={() => onOpenGroups(id)}
+                className="font-display"
+                style={{ padding: "10px 16px", minHeight: 42, borderRadius: 6, border: "none", background: "#E63946", color: "#fff", fontSize: 12, fontWeight: 800, letterSpacing: 1.5, cursor: "pointer", whiteSpace: "nowrap" }}
+              >GO TO GROUPS →</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <SectionReveal>
-      <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} categories={categories} teamById={allTeamById} />
+      <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} warmingByCourt={warmingByCourt} categories={categories} teamById={allTeamById} />
       </SectionReveal>
+
+      {onCall && upNextSection && <div style={{ marginBottom: 28 }}>{upNextSection}</div>}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <div style={{ position: "relative", flex: "1 1 280px", maxWidth: 520 }}>
@@ -477,46 +595,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
 
       <SectionReveal>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(360px,1fr))", gap: 20, marginBottom: 32 }}>
-        {upcoming.length > 0 && (
-          <div>
-            <SectionHeader accent="#00d4ff">Upcoming</SectionHeader>
-            <div style={{ background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050", overflow: "hidden" }}>
-              {upcoming.map((m, i) => {
-                const isWarming = !!m.court_allocated_at && !m.started_at;
-                // Compose the rightmost time cell. Warming overrides the queue projection.
-                let timeText = "";
-                let timeColor = "#94a3b8";
-                if (isWarming) {
-                  timeText = `🟡 COURT ${m.court_number} · ${fmtWarmupShort(m.court_allocated_at)}`;
-                  timeColor = "#fbbf24";
-                } else if (m.projected_start_at) {
-                  // delta_label is "IN 5M" / "STARTS NOW" / "LATER" / "BYE".
-                  // Pair it with the rolling wall-clock from projected_start_at.
-                  const wallClock = fmtClock(m.projected_start_at);
-                  if (m.delta_label && m.delta_label !== "STARTS NOW" && m.delta_label !== "BYE") {
-                    timeText = `${wallClock} · ${m.delta_label}`;
-                  } else if (m.delta_label === "BYE") {
-                    timeText = "BYE";
-                  } else {
-                    timeText = wallClock; // backlogged — wall-clock rolls forward
-                  }
-                }
-                return (
-                  <div key={m.id} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: i < upcoming.length - 1 ? "1px solid #1a3050" : "none", gap: 12, position: "relative", background: isWarming ? "rgba(251,191,36,0.06)" : i === 0 ? "rgba(0,212,255,0.04)" : "transparent" }}>
-                    {(isWarming || i === 0) && <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, background: isWarming ? "#fbbf24" : "#00d4ff" }} />}
-                    <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: isWarming ? "#fbbf24" : i === 0 ? "#00d4ff" : "#64748b", letterSpacing: 1.5, minWidth: 70 }}>{isWarming ? "🟡 WARM-UP" : i === 0 ? "▸ NEXT" : stageBadge(m)}</div>
-                    <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: "#cbd5e1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_a_id)}</div>
-                    <div className="font-display" style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: 2 }}>VS</div>
-                    <div style={{ flex: 1, fontWeight: 600, fontSize: 13, textAlign: "right", color: "#cbd5e1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tName(m.team_b_id)}</div>
-                    {timeText && (
-                      <div className="font-display" style={{ fontSize: 10, fontWeight: 700, color: timeColor, letterSpacing: 0.5, minWidth: 100, textAlign: "right", whiteSpace: "nowrap" }}>{timeText}</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {!onCall && upNextSection}
 
         {recent.length > 0 && (
           <div>

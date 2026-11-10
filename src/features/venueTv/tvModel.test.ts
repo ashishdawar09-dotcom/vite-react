@@ -189,7 +189,7 @@ describe("venue TV model", () => {
     expect(buildTvModel({ ...fixture(), tournament: null }, NOW)).toBeNull();
   });
 
-  it("takes the venue-wide order from the app projection, so events take turns on the courts", () => {
+  it("takes the venue-wide order from the app projection: the event first in the order goes first", () => {
     pid = 0;
     const cats = [category("e1", "Men's Doubles 35+", 1), category("e2", "Mixed Doubles 35+", 2)];
     const teams: Team[] = [];
@@ -204,7 +204,7 @@ describe("venue TV model", () => {
     }
     const snap: TvSnapshot = { tournament: tournament({ num_courts: 2 }), players: [], teams, matches, categories: cats, generated_at: NOW / 1000 };
     const m = buildTvModel(snap, NOW)!;
-    expect(m.queue.map(x => x.id)).toEqual(["e1-0", "e2-0", "e1-1", "e2-1", "e1-2", "e2-2"]);
+    expect(m.queue.map(x => x.id)).toEqual(["e1-0", "e1-1", "e1-2", "e2-0", "e2-1", "e2-2"]);
     // Two courts; each turn is 4 min call to serve, 12 min play, 2 min changeover.
     expect(m.queue.map(x => (x.eta! - NOW) / MIN)).toEqual([0, 0, 18, 18, 36, 36]);
     // The last match is called at +36 and ends at +52.
