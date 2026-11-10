@@ -7,6 +7,13 @@ export type NameMode = "full" | "fit" | "last";
 
 const surname = (n: string) => n.slice(n.lastIndexOf(" ") + 1);
 
+/** "Gurmeet Singh Ghera" → "G. Ghera": a person's name where the full one doesn't fit its box. */
+export function shortPersonName(name: string): string {
+  const n = name.trim().replace(/\s+/g, " ");
+  const i = n.lastIndexOf(" ");
+  return i < 0 ? n : `${[...n][0]}. ${n.slice(i + 1)}`;
+}
+
 export function teamName(model: TvModel, id: string | null, mode: NameMode, max = 99): string {
   if (!id) return "To be decided";
   const t = model.teams[id];

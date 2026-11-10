@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { Category, Match, Player, Team, Tournament } from "../../types";
 import { buildTvModel, safePhotoUrl, type TvModel, type TvSnapshot } from "./tvModel";
 import { buildStats, championOf, counts, leadersReady, matchPoints, matchupMatches, nextFor, spotlightPeople } from "./tvStats";
-import { fitPx, initials, leadersHTML, matchupHTML, splitName, spotlightHTML } from "./tvCards";
+import { fitPx, initials, leaderEvents, leadersHTML, matchupHTML, splitName, spotlightHTML } from "./tvCards";
+import { shortPersonName } from "./tvNames";
+
+describe("short person names", () => {
+  it("keeps the first initial and the surname", () => {
+    expect(shortPersonName("Gurmeet Singh Ghera")).toBe("G. Ghera");
+    expect(shortPersonName(" Mariyam  Rajeev George ")).toBe("M. George");
+    expect(shortPersonName("Arif")).toBe("Arif");
+  });
+});
 
 const NOW = Date.parse("2026-11-21T21:12:00Z"); // 2:12 pm in Abbotsford (UTC-7)
 const MIN = 60_000;
@@ -206,6 +215,14 @@ describe("player boards", () => {
     expect(html).toContain("<b>0–2</b>in the group");
     expect(html).toContain('class="mu-r"');
     expect(matchupHTML(m, s, 1, false, ok)).toContain("Up next");
+  });
+  it("keeps a leader's events line short enough to fit: 3 or more read as a count", () => {
+    const c = (name: string, short: string) => ({ name, short });
+    expect(leaderEvents([c("Men's Doubles 18–34", "Men's 18–34")])).toBe("Men's Doubles 18–34");
+    expect(leaderEvents([c("Mixed Doubles 18–34", "Mixed 18–34"), c("Super Doubles 50+", "Super 50+")])).toBe("Mixed Doubles 18–34 · Super Doubles 50+");
+    expect(leaderEvents([c("Women's Doubles 18–34", "Women's 18–34"), c("Mixed Doubles 18–34 extended", "Mixed 18–34")])).toBe("Women's 18–34 · Mixed 18–34");
+    expect(leaderEvents([c("Mixed Doubles 35+", "Mixed 35+"), c("Mixed Doubles 18–34", "Mixed 18–34"), c("Men's Doubles 18–34", "Men's 18–34"), c("Men's Doubles 35+", "Men's 35+")])).toBe("4 events");
+    expect(leaderEvents([c("A", "A"), c("B", "B"), c("C", "C")])).toBe("3 events");
   });
   it("draws the leaders: most wins with the photo, and each event's leader or champion", () => {
     const m = fixture(), s = buildStats(m);

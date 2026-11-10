@@ -189,6 +189,18 @@ export function matchupHTML(model: TvModel, stats: TvStats, idx: number, enter: 
 
 /* ---------- leaders ---------- */
 
+/**
+ * A leaders row's events line. Three or more events never fit next to the
+ * name ("Mixed Doubles 35+ · Mixed Doubles 18–34 · Men's…" was cut off for a
+ * player in four), so they read "4 events"; two long names fall back to the
+ * short ones.
+ */
+export function leaderEvents(cats: { name: string; short: string }[], maxChars = 44): string {
+  if (cats.length >= 3) return `${cats.length} events`;
+  const full = cats.map(c => c.name).join(" · ");
+  return full.length <= maxChars ? full : cats.map(c => c.short).join(" · ");
+}
+
 /** Event rows a leaders page holds. */
 export const LD_ROWS = 6;
 export const leadersPages = (stats: TvStats) => Math.max(1, Math.ceil(stats.eventLeaders.length / LD_ROWS));
@@ -202,7 +214,7 @@ export function leadersHTML(model: TvModel, stats: TvStats, page: number, enter:
   const sub = [`${hero.played} played`, `${hero.pointsFor} points`, hero.streak >= 2 ? `won the last ${hero.streak}` : `${fmtDiff(hero.diff)} points difference`].join(" · ");
   const row = (s: PersonStats, i: number) => {
     const p = photoHTML(s.person, ok);
-    return `<div class="ld-row"><span class="n">${i + 2}</span><span class="ld-av${p.cls}">${p.html}</span><span class="ld-who"><b>${esc(s.person.name)}</b><span>${esc(cats(s).map(c => c!.name).join(" · "))}</span></span><span class="w">${s.won}<small>of ${s.played}</small></span><span class="d">${fmtDiff(s.diff)}</span></div>`;
+    return `<div class="ld-row"><span class="n">${i + 2}</span><span class="ld-av${p.cls}">${p.html}</span><span class="ld-who"><b>${esc(s.person.name)}</b><span>${esc(leaderEvents(cats(s).map(c => ({ name: c!.name, short: c!.short }))))}</span></span><span class="w">${s.won}<small>of ${s.played}</small></span><span class="d">${fmtDiff(s.diff)}</span></div>`;
   };
 
   const pages = leadersPages(stats), pg = ((page % pages) + pages) % pages;
