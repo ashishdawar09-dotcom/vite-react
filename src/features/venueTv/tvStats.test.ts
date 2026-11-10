@@ -3,6 +3,15 @@ import type { Category, Match, Player, Team, Tournament } from "../../types";
 import { buildTvModel, safePhotoUrl, type TvModel, type TvSnapshot } from "./tvModel";
 import { buildStats, championOf, counts, leadersReady, matchPoints, matchupMatches, nextFor, spotlightPeople } from "./tvStats";
 import { fitPx, initials, leaderEvents, leadersHTML, matchupHTML, splitName, spotlightHTML } from "./tvCards";
+import { shortPersonName } from "./tvNames";
+
+describe("short person names", () => {
+  it("keeps the first initial and the surname", () => {
+    expect(shortPersonName("Gurmeet Singh Ghera")).toBe("G. Ghera");
+    expect(shortPersonName(" Mariyam  Rajeev George ")).toBe("M. George");
+    expect(shortPersonName("Arif")).toBe("Arif");
+  });
+});
 
 const NOW = Date.parse("2026-11-21T21:12:00Z"); // 2:12 pm in Abbotsford (UTC-7)
 const MIN = 60_000;
