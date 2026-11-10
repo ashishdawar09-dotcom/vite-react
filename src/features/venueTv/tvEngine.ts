@@ -180,8 +180,8 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     const lead = leadOf(m), badge = pointBadge(m);
     const side = (s: "a" | "b") => `<div class="side${lead === s ? " lead" : ""}"><div class="who">${namesHTML(m, s, mode)}</div><span class="pts" data-s="${s}"><i>${scoreOf(m, s)}</i></span></div>`;
     return `<article class="court live" data-court="${c}" data-kind="tile" data-a="${m.cur[0]}" data-b="${m.cur[1]}">
-      <div class="court-top"><h3 class="court-n">Court ${c}</h3>${badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`}</div>
-      <p class="court-meta"><span class="cs">${esc(shortStage(M!, m))}</span>${m.bestOf3 ? `<span class="unit">${esc(bo3Live(m))}</span>` : ""}</p>
+      <div class="court-top"><h3 class="court-n">Court ${c}</h3>${liveChip(m, badge)}</div>
+      <p class="court-meta"><span class="cs">${esc(shortStage(M!, m))}</span></p>
       <div class="sides">${side("a")}${side("b")}</div></article>`;
   }
   const courtsHTML = () => Array.from({ length: N() }, (_, i) => tileHTML(i + 1)).join("");
@@ -216,6 +216,13 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
 
   // Best of 3: "Best of 3 · Game 2" on a live court; the games of a result.
   const bo3Live = (m: TvMatch) => `Best of 3 · Game ${Math.min(3, m.games.length + 1)}`;
+  /**
+   * Top right of a court in play, on the court tile and the court map: "Match point" or "Final score"
+   * first, then a best-of-3 match's game, else the match clock. The game sits here rather than on the
+   * event line, so a 4-court tile has room for the longest event line ("Women's 18–34 · Bronze match").
+   */
+  const liveChip = (m: TvMatch, badge: ReturnType<typeof pointBadge>) =>
+    badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : m.bestOf3 ? `<span class="badge soft">${esc(bo3Live(m))}</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`;
   // `flip`: each game from team B's side, for "B beat A 2–1 (15–12, …)".
   const gamesText = (m: TvMatch, flip = false) =>
     m.games.map(([x, y]) => (flip ? `${y}–${x}` : `${x}–${y}`)).join(", ");
@@ -356,7 +363,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   function mapCourtHTML(c: number) {
     const m = courtMatch(c), st = liveState(m), mode = N() <= 4 ? "lines" : "lastlines";
     const lead = m && st === "live" ? leadOf(m) : "", badge = m && st === "live" ? pointBadge(m) : null;
-    const chip = !m ? `<span class="state free">Free</span>` : st === "called" ? `<span class="state called">Now calling</span>` : badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : m.bestOf3 ? `<span class="badge soft">${esc(bo3Live(m))}</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`;
+    const chip = !m ? `<span class="state free">Free</span>` : st === "called" ? `<span class="state called">Now calling</span>` : liveChip(m, badge);
     const label = !m ? (N() <= 4 ? "Ready for the next match" : "") : N() <= 4 ? shortStage(M!, m) : N() <= 6 ? (M!.catById[m.cat]?.short ?? "") : "";
     const net = m && st === "live" ? `<span class="pts${lead === "a" ? " lead" : ""}" data-s="a"><i>${m.cur[0]}</i></span><span class="pts${lead === "b" ? " lead" : ""}" data-s="b"><i>${m.cur[1]}</i></span>` : `<span class="mc-word">${st === "called" ? "Warming up" : "Free"}</span>`;
     return `<article class="mcourt ${st}" data-court="${c}" data-kind="map"${m && st === "live" ? ` data-a="${m.cur[0]}" data-b="${m.cur[1]}"` : ""}>
