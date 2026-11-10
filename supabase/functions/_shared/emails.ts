@@ -1461,3 +1461,96 @@ export function fullHouseEmail(d: FullHouseData): RenderedEmail {
   ]);
   return { subject, html, text };
 }
+
+// ---------- photo invite (player-briefing kind "photo_invite") ----------
+//
+// Nov 10, 2026: the directors invite every player to add a photo to their
+// player profile, for the live app and the hall TV's player cards. Each
+// player gets their own link (/photo/<token>); a family sharing one inbox
+// gets one email per player, named in the subject. Optional, and the same
+// link changes or removes the photo.
+
+export type PhotoInviteData = {
+  tournament: EmailTournament;
+  player: { name: string };
+  photoUrl: string;          // this player's own /photo/<token> link (a demo link in previews and tests)
+  hasPhoto: boolean;         // they already have a photo (added by the desk): the email says they can change it
+  notes?: string | null;     // from the directors, plain text
+  appAssetBase: string;      // e.g. https://badminton.adawar.org/email
+  assetBase: string;         // the website's email images
+  privacyUrl?: string | null;
+};
+
+export function photoInviteEmail(d: PhotoInviteData): RenderedEmail {
+  const t = d.tournament;
+  const name = firstName(d.player.name);
+  const link = safeUrl(d.photoUrl);
+  const app = d.appAssetBase.replace(/\/+$/, "");
+  const day = longDate(t.event_date);
+
+  const subject = d.hasPhoto ? `${name}, check your photo for ${t.name}` : `${name}, add your photo to your ${t.name} player profile`;
+  const intro = `We're creating a player profile for everyone playing ${esc(t.name)}. ` +
+    (d.hasPhoto
+      ? "Your profile already has a photo. If you'd like a different one, you can change it or take it off with the button below."
+      : "If you're comfortable, please upload a photo of yourself. It goes on your profile in the live app, and on the player cards on the hall TV on game day.");
+
+  const details: [string, string][] = [
+    ["Player", esc(d.player.name.trim())],
+    ["Where it shows", "Your player profile in the live app, and the player cards on the hall TV"],
+    ["Takes", "About a minute, on your phone or computer"],
+    ["Optional", "Yes. You can change or remove it any time with the same link"],
+    ...(d.notes?.trim() ? [["From the directors", esc(d.notes.trim()).replace(/\r?\n/g, "<br>")] as [string, string]] : []),
+  ];
+
+  const steps: Step[] = [
+    {
+      visual: "",
+      title: "Pick a good photo",
+      html: "A clear photo of you: face and shoulders, in good light, works best. On a phone you can take one there and then.",
+      cta: link ? [link, d.hasPhoto ? "Change my photo" : "Add my photo"] as [string, string] : undefined,
+      wideCta: true,
+    },
+    {
+      visual: "",
+      title: "Tick the box and upload",
+      html: "If the player is under 19, a parent or guardian should do this part. The photo is made smaller on your phone before it's sent, " +
+        "and any location details stored inside it are left out.",
+    },
+    {
+      visual: "",
+      title: "Look out for yourself on the big screen",
+      html: `Your photo shows on your profile straight away${day ? `, and on the hall TV's player cards on ${esc(day)}` : ", and on the hall TV's player cards on game day"}. ` +
+        "This link is just for you, so please don't share it.",
+    },
+  ].map((s, i) => ({ ...s, n: i + 1 }));
+
+  const html = layout({
+    title: subject,
+    preheader: d.hasPhoto ? "Your player profile has a photo. Change it or take it off any time." : "Add a photo to your player profile for the live app and the hall TV.",
+    hero: { gif: `${app}/photo-invite.jpg`, alt: "A Shuttle Storm player card on the hall TV, with space for your photo." },
+    kicker: "Player profiles",
+    heading: d.hasPhoto
+      ? `Hi ${esc(name)}, your photo<br>is on your <span style="color:${C.volt}">player card.</span>`
+      : `Hi ${esc(name)}, want to be<br>on the <span style="color:${C.volt}">big screen?</span>`,
+    intro,
+    details,
+    stepsHeading: "How it works",
+    steps,
+    data: d,
+  });
+
+  const text = textBlock([
+    `Hi ${name},`,
+    "",
+    strip(intro),
+    "",
+    link ? `${d.hasPhoto ? "Change my photo" : "Add my photo"}: ${link}` : null,
+    "",
+    ...details.map(([k, v]) => `${k}: ${strip(v)}`),
+    "",
+    "HOW IT WORKS",
+    ...steps.flatMap((s) => ["", `${s.n}. ${s.title}`, strip(s.html)]),
+    textFooter(t),
+  ]);
+  return { subject, html, text };
+}

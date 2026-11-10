@@ -7,14 +7,14 @@ import { briefingCounts, type BriefingCounts } from "./model";
 import { DeskAlertsCard } from "./DeskAlertsCard";
 
 /**
- * Admin Emails tab: the full-house thank-you, the two player briefings (the
- * day before, and the morning of) and every race-day email that didn't reach
- * its player. Each
+ * Admin Emails tab: the photo invite, the full-house thank-you, the two player
+ * briefings (the day before, and the morning of) and every race-day email that
+ * didn't reach its player. Each
  * player gets a briefing once; a send that stops partway carries on where it
  * left off. Delivery comes back from Resend (resend-webhook).
  */
 
-type Kind = "full_house" | "day_before" | "morning_of";
+type Kind = "photo_invite" | "full_house" | "day_before" | "morning_of";
 
 const card: React.CSSProperties = { background: "#0a1628", border: "1px solid #1a3050", borderRadius: 14, padding: 18, marginBottom: 16, color: "#e2e8f0" };
 const label: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 700, letterSpacing: 0.4, color: "#94a3b8", marginBottom: 6 };
@@ -25,6 +25,11 @@ const muted: React.CSSProperties = { margin: "0 0 12px", color: "#94a3b8", fontS
 
 const NOTES_MAX = 600;
 const COPY: Record<Kind, { title: string; blurb: string; sendLabel: string }> = {
+  photo_invite: {
+    title: "Photo invite",
+    blurb: "Asks every player to add a photo to their player profile, for the live app and the player cards on the hall TV. Each player gets their own link (a family sharing one inbox gets one email per player). Preview and Send me a test use a demo link that saves nothing.",
+    sendLabel: "Send",
+  },
   full_house: {
     title: "Full house",
     blurb: "A thank-you to every player now that all entries are taken: the FULL HOUSE animation, their events, partners still to enter go to the directors, friends go to the waitlist, and more details in the coming days. It only sends once the tournament is full.",
@@ -81,7 +86,7 @@ export function PlayerEmailsTab({ tournament, players }: { tournament: Tournamen
   const nameById = useMemo(() => new Map(players.map(p => [p.id, p.name])), [players]);
   const emailById = useMemo(() => new Map(players.map(p => [p.id, p.email ?? ""])), [players]);
 
-  const briefingProblems = useMemo(() => (["full_house", "day_before", "morning_of"] as Kind[]).flatMap(k =>
+  const briefingProblems = useMemo(() => (["photo_invite", "full_house", "day_before", "morning_of"] as Kind[]).flatMap(k =>
     briefingCounts(rows, k).problems.map(p => ({ ...p, what: COPY[k].title }))), [rows]);
   const courtList = useMemo(() => {
     // Latest problem per player: one line each, however many calls bounced.
@@ -104,6 +109,7 @@ export function PlayerEmailsTab({ tournament, players }: { tournament: Tournamen
         </section>
       ) : (
         <>
+          <BriefingCard kind="photo_invite" tournament={tournament} counts={briefingCounts(rows, "photo_invite")} onChanged={load} />
           <BriefingCard kind="full_house" tournament={tournament} counts={briefingCounts(rows, "full_house")} onChanged={load} />
           <BriefingCard kind="day_before" tournament={tournament} counts={briefingCounts(rows, "day_before")} onChanged={load} />
           <BriefingCard kind="morning_of" tournament={tournament} counts={briefingCounts(rows, "morning_of")} onChanged={load} />
@@ -171,7 +177,7 @@ function BriefingCard({ kind, tournament, counts, onChanged }: {
     if (p.error) { toast(p.error, "error"); return; }
     const todo = (p.eligible ?? 0) - (p.already ?? 0);
     if (todo <= 0) { toast("Everyone with an email address already has this one.", "info"); return; }
-    const what = kind === "full_house" ? "full-house email" : copy.title.toLowerCase();
+    const what = kind === "full_house" ? "full-house email" : kind === "photo_invite" ? "photo invite" : copy.title.toLowerCase();
     const ask = scheduledAt
       ? `Schedule the ${what} for ${todo} player${todo === 1 ? "" : "s"}, to arrive ${when(scheduledAt)}?`
       : `Send the ${what} to ${todo} player${todo === 1 ? "" : "s"} now? This can't be undone.`;
