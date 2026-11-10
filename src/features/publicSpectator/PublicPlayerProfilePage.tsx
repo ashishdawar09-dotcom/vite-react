@@ -77,7 +77,7 @@ export function PublicPlayerProfilePage() {
   const tournamentId = tournament?.id ?? null;
   const { players, teams, matches, categories, playerCategories } = useTournamentData(tournamentId, false);
   const numCourts = tournament?.num_courts ?? 2;
-  const { projected } = useScheduling(matches, categories, numCourts);
+  const { projected } = useScheduling(matches, categories, numCourts, teams);
 
   const derived = useMemo(() => {
     if (!tournament) return null;

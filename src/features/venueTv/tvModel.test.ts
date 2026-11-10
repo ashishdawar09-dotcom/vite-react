@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Category, Match, Player, Team, Tournament } from "../../types";
-import { bracketOf, buildTvModel, FINAL_SCORE_HOLD_MS, parseMessages, projectQueue, shortCategoryName, standingsOf, tvStatus, type TvMatch, type TvSnapshot } from "./tvModel";
+import { bracketOf, buildTvModel, FINAL_SCORE_HOLD_MS, parseMessages, shortCategoryName, standingsOf, tvStatus, type TvSnapshot } from "./tvModel";
 import { annList } from "./tvAnnouncements";
 import { teamName } from "./tvNames";
 import { ampm, clockSkewMs, hm } from "./tvTime";
@@ -129,29 +129,12 @@ describe("venue TV model", () => {
     expect(m.finish).toBeGreaterThan(NOW);
   });
 
-  it("sends the next match to whichever court frees first", () => {
-    const mk = (id: string, over: Partial<TvMatch>): TvMatch => ({ id, cat: "c", kind: "group", label: "", groupIdx: 0, roundIdx: null, slot: 0, bestOf3: false, games: [], a: "x", b: "y", cur: [0, 0], status: "queued", ending: false, court: null, calledAt: null, startedAt: null, doneAt: null, winner: null, walkover: false, cancelled: false, eta: null, ...over });
-    const courts = [mk("l1", { status: "live", court: 1, startedAt: NOW - 10 * MIN }), mk("l2", { status: "live", court: 2, startedAt: NOW - 2 * MIN })];
-    const q = [mk("q1", {}), mk("q2", {}), mk("q3", {})];
-    projectQueue(q, courts, NOW, () => 12);
-    // Court 1 frees at +2 min (+2 changeover), court 2 at +10 (+2).
-    expect((q[0].eta! - NOW) / MIN).toBe(4);
-    expect((q[1].eta! - NOW) / MIN).toBe(12);
-    expect((q[2].eta! - NOW) / MIN).toBe(18);
-  });
-
-  it("holds back a match while one of its players is still on another court", () => {
-    const mk = (id: string, over: Partial<TvMatch>): TvMatch => ({ id, cat: "c", kind: "group", label: "", groupIdx: 0, roundIdx: null, slot: 0, bestOf3: false, games: [], a: "x", b: "y", cur: [0, 0], status: "queued", ending: false, court: null, calledAt: null, startedAt: null, doneAt: null, winner: null, walkover: false, cancelled: false, eta: null, ...over });
-    // Court 1: a match that ends in 8 minutes, with player P. Court 2 is free.
-    const courts = [mk("l1", { status: "live", court: 1, startedAt: NOW - 4 * MIN, a: "tP", b: "tQ" }), null];
-    const q1 = mk("q1", { a: "tP2", b: "tR" }); // P also plays in this one
-    const q2 = mk("q2", { a: "tS", b: "tT" });
-    const players: Record<string, string[]> = { tP: ["P"], tQ: ["Q"], tP2: ["P", "U"], tR: ["R"], tS: ["S"], tT: ["T"] };
-    const { order } = projectQueue([q1, q2], courts, NOW, () => 12, m => [m.a, m.b].flatMap(id => (id ? players[id] : [])));
-    expect(order.map(m => m.id)).toEqual(["q2", "q1"]);
-    expect((q2.eta! - NOW) / MIN).toBe(2);
-    // P is free at +8; court 1 is ready at +10 after the changeover.
-    expect((q1.eta! - NOW) / MIN).toBe(10);
+  it("shows the same queued times as the phones, from the same model", () => {
+    const snap = fixture();
+    const m = buildTvModel(snap, NOW)!;
+    const phones = projectSchedule(snap.matches, snap.categories, snap.tournament!.num_courts, NOW, { teams: snap.teams });
+    expect(m.queue.length).toBeGreaterThan(0);
+    for (const q of m.queue) expect(q.eta).toBe(Date.parse(phones.byId[q.id].projected_start_at!));
   });
 
   it("ranks groups with the shared standings rule", () => {
@@ -220,10 +203,12 @@ describe("venue TV model", () => {
       }
     }
     const snap: TvSnapshot = { tournament: tournament({ num_courts: 2 }), players: [], teams, matches, categories: cats, generated_at: NOW / 1000 };
-    const m = buildTvModel(snap, NOW, projectSchedule(matches, cats, 2, NOW).byId)!;
+    const m = buildTvModel(snap, NOW)!;
     expect(m.queue.map(x => x.id)).toEqual(["e1-0", "e2-0", "e1-1", "e2-1", "e1-2", "e2-2"]);
-    // Two courts, each match 12 minutes plus the TV's 2 minute changeover.
-    expect(m.queue.map(x => (x.eta! - NOW) / MIN)).toEqual([2, 2, 16, 16, 30, 30]);
+    // Two courts; each turn is 4 min call to serve, 12 min play, 2 min changeover.
+    expect(m.queue.map(x => (x.eta! - NOW) / MIN)).toEqual([0, 0, 18, 18, 36, 36]);
+    // The last match is called at +36 and ends at +52.
+    expect((m.finish! - NOW) / MIN).toBe(52);
   });
 
   it("waits for the events' start time on race morning, also for events with none of their own", () => {
@@ -240,7 +225,7 @@ describe("venue TV model", () => {
       matches.push(match(`${c.id}-0`, c.id, { team_a_id: a.id, team_b_id: b.id }));
     }
     const snap: TvSnapshot = { tournament: tournament(), players: [], teams, matches, categories: cats, generated_at: early / 1000 };
-    const m = buildTvModel(snap, early, projectSchedule(matches, cats, 4, early).byId)!;
+    const m = buildTvModel(snap, early)!;
     expect(m.queue.map(x => x.eta)).toEqual([nineThirty, nineThirty]);
   });
 });

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { renderSVG } from "uqr";
 import * as db from "../../lib/db";
-import { useScheduling } from "../../hooks/useScheduling";
 import { buildTvModel, type TvSnapshot } from "./tvModel";
 import { createTvShow, type DesignKey, type TvShow } from "./tvEngine";
 import { startTvFeed } from "./tvFeed";
@@ -101,7 +100,6 @@ export function TvShowPage() {
 
   const feed = useTvFeed(tournamentId);
   const snap = feed.snap;
-  const scheduling = useScheduling(snap?.matches ?? [], snap?.categories ?? [], snap?.tournament?.num_courts ?? 4);
 
   // Shown under the scan code and in the strip. A preview's long vercel.app
   // host would wrap onto several lines, so long hosts are shortened.
@@ -119,7 +117,7 @@ export function TvShowPage() {
     if (!snap || !stageRef.current) return;
     skewRef.current = clockSkewMs(snap.generated_at ?? null, feed.receivedAt);
     const now = Date.now() + skewRef.current;
-    const model = buildTvModel(snap, now, scheduling.byId);
+    const model = buildTvModel(snap, now);
     if (!model) return;
     if (!showRef.current) {
       showRef.current = createTvShow(stageRef.current, {
@@ -132,7 +130,7 @@ export function TvShowPage() {
       if (options.debug) (window as unknown as { __tvshow?: TvShow["debug"] }).__tvshow = showRef.current.debug;
     }
     showRef.current.update(model);
-  }, [snap, feed.receivedAt, scheduling.byId, tick, options, siteUrl, qrSvg]);
+  }, [snap, feed.receivedAt, tick, options, siteUrl, qrSvg]);
   useEffect(() => () => { showRef.current?.destroy(); showRef.current = null; }, []);
 
   // Scale the 1920x1080 stage to the screen, with a tiny shift every few minutes.

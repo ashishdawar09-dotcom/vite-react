@@ -4,21 +4,16 @@
 //
 // Pure functions only, so they can be tested without a browser.
 
-import type { Category, GameScore, Match, Player, ProjectedMatch, Team, Tournament } from "../../types";
+import type { Category, GameScore, Match, Player, Team, Tournament } from "../../types";
 import { buildGroups, groupLetter, groupStandings, isRoundRobinOnly, roundRobinPodium } from "../../lib/groups";
 import { isCancelledMatch } from "../../lib/matchOutcome";
 import { gamesOf, isBestOf3 } from "../../lib/bestOf3";
-import { eventStarts } from "../../lib/projection";
+import { projectVenue } from "../../lib/projection";
 
-const MIN = 60_000;
 /** A finished match stays on its court as "Final score" this long, unless the next match is called there first. */
 export const FINAL_SCORE_HOLD_MS = 20_000;
 /** Courts the TV layouts are drawn for. */
 export const MAX_TV_COURTS = 8;
-/** Changeover between two matches on the same court. */
-const CHANGEOVER_MIN = 2;
-/** Time from the call to the first serve: the rules allow 10 minutes to arrive plus a 3 minute warm up; most players are quicker. */
-const CALL_TO_START_MIN = 5;
 
 export type TvStatus = "queued" | "called" | "live" | "done";
 export type TvKind = "group" | "round" | "qf" | "sf" | "final" | "bronze";
@@ -51,7 +46,7 @@ export type TvMatch = {
   winner: string | null;
   walkover: boolean;
   cancelled: boolean;
-  /** Estimated start, venue wide, for queued matches. */
+  /** Expected court call, venue wide, for queued matches: the same time the phones show (lib/projection.ts). */
   eta: number | null;
 };
 
@@ -173,65 +168,7 @@ export function tvStatus(m: Pick<Match, "status" | "confirmed" | "court_number" 
   return "queued";
 }
 
-type Projections = Record<string, Pick<ProjectedMatch, "projected_start_at">> | undefined;
-
-/** How far down the queue the desk looks for a match whose players are all free. */
-const LOOKAHEAD = 8;
-
-/**
- * Venue wide estimate, the way the desk works: whichever court frees first
- * takes the next match in the queue whose players are all free (someone
- * still on another court can't start). The app's projection (lib/projection.ts)
- * shares the courts too and decides the order the desk works through, but it
- * only knows teams, not players entered in two events, and leaves out the
- * changeover, the call-to-serve time and best of 3; so the TV's times come
- * from here. A match also waits for its event's start time (`notBefore`).
- * Returns the queue in the order the matches should start.
- */
-export function projectQueue(
-  queued: TvMatch[],
-  courts: (TvMatch | null)[],
-  now: number,
-  minutesOf: (m: TvMatch) => number,
-  playersOf: (m: TvMatch) => string[] = () => [],
-  notBefore: (m: TvMatch) => number = () => now,
-): { order: TvMatch[]; finish: number | null } {
-  const free = courts.map(m => {
-    if (!m || m.status === "done") return now;
-    const dur = minutesOf(m) * MIN;
-    if (m.status === "live") return Math.max(now + MIN, (m.startedAt ?? now) + dur);
-    if (m.status === "called") return Math.max(now + MIN, (m.calledAt ?? now) + CALL_TO_START_MIN * MIN + dur);
-    return now;
-  });
-  // Players on court are free when their match ends.
-  const busy = new Map<string, number>();
-  courts.forEach((m, i) => { if (m && m.status !== "done") for (const p of playersOf(m)) busy.set(p, Math.max(busy.get(p) ?? 0, free[i])); });
-  for (let i = 0; i < free.length; i++) free[i] += CHANGEOVER_MIN * MIN;
-  if (!free.length) free.push(now);
-  const ready = (m: TvMatch) => playersOf(m).reduce((t, p) => Math.max(t, busy.get(p) ?? 0), Math.max(now, notBefore(m)));
-
-  const waiting = [...queued], order: TvMatch[] = [];
-  while (waiting.length) {
-    let k = 0;
-    for (let i = 1; i < free.length; i++) if (free[i] < free[k]) k = i;
-    let pick = 0, start = Infinity;
-    for (let i = 0; i < Math.min(LOOKAHEAD, waiting.length); i++) {
-      const s = Math.max(free[k], ready(waiting[i]));
-      if (s < start - 1000) { start = s; pick = i; }
-    }
-    const m = waiting.splice(pick, 1)[0];
-    m.eta = start;
-    const end = start + minutesOf(m) * MIN;
-    free[k] = end + CHANGEOVER_MIN * MIN;
-    for (const p of playersOf(m)) busy.set(p, end);
-    order.push(m);
-  }
-  order.sort((x, y) => (x.eta ?? 0) - (y.eta ?? 0));
-  const anything = courts.some(m => m && m.status !== "done") || queued.length > 0;
-  return { order, finish: anything ? Math.max(...free) - CHANGEOVER_MIN * MIN : null };
-}
-
-export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projections): TvModel | null {
+export function buildTvModel(snap: TvSnapshot, now: number): TvModel | null {
   const t = snap.tournament;
   if (!t) return null;
   const numCourts = Math.max(1, Math.min(MAX_TV_COURTS, t.num_courts || 1));
@@ -241,8 +178,6 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
   const catRaw = new Map(categoriesRaw.map(c => [c.id, c]));
 
   const teams: Record<string, TvTeam> = {};
-  // Player ids per team, so a player in two events is never on two courts at once in the estimates.
-  const snapTeamPlayers = new Map(snap.teams.map(tm => [tm.id, [tm.p1_id, tm.p2_id].filter((x): x is string => !!x)]));
   for (const tm of snap.teams) {
     const names = [tm.p1_id, tm.p2_id].filter((x): x is string => !!x).map(id => players.get(id)?.name?.trim()).filter((x): x is string => !!x);
     teams[tm.id] = { id: tm.id, category_id: tm.category_id, names: names.length ? names : [tm.name || "To be decided"] };
@@ -300,13 +235,17 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
   }
   for (const m of courts) if (m && m.status === "done") m.ending = true;
 
-  // Queue: matches waiting for a court, in the venue-wide order the app
-  // projects them (events interleaved; inside an event group stage before
-  // knockout, then the admin's queue order).
+  // Queue: matches waiting for a court, with the times and order the phones
+  // show. One model (lib/projection.ts) for both: the venue's courts shared
+  // across events, call to serve, changeover, best-of-3 matches (each match's
+  // own matches.best_of) counted double, and players entered in two events
+  // never on two courts at once.
+  const venue = projectVenue(snap.matches, snap.categories, t.num_courts, now, { teams: snap.teams });
   const rawById = new Map(snap.matches.map(m => [m.id, m]));
   const orderKey = new Map<string, number[]>();
   for (const m of matches) {
-    const p = parseT(projections?.[m.id]?.projected_start_at ?? null);
+    const p = m.status === "queued" ? parseT(venue.byId[m.id]?.projected_start_at ?? null) : null;
+    if (p != null && m.a && m.b) m.eta = p;
     const raw = rawById.get(m.id);
     orderKey.set(m.id, [
       p ?? Number.MAX_SAFE_INTEGER,
@@ -321,19 +260,8 @@ export function buildTvModel(snap: TvSnapshot, now: number, projections?: Projec
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i];
     return x.id.localeCompare(y.id);
   };
-  const waiting = matches.filter(m => m.status === "queued" && !m.cancelled).sort(cmp);
-  const known = waiting.filter(m => m.a && m.b);
-  const later = waiting.filter(m => !(m.a && m.b));
-  const minutesOf = (m: TvMatch) => {
-    const base = catRaw.get(m.cat)?.match_minutes || 12;
-    const extra = rawById.get(m.id)?.extended_minutes ?? 0;
-    return (m.bestOf3 ? base * 2 : base) + (m.status === "live" ? extra : 0);
-  };
-  const playersOf = (m: TvMatch) => [m.a, m.b].flatMap(id => (id ? snapTeamPlayers.get(id) ?? [] : []));
-  // Events start at their own time; the rest with the day's first event until play is underway.
-  const starts = eventStarts(snap.matches, snap.categories, now);
-  const { order: started, finish } = projectQueue([...known, ...later], courts, now, minutesOf, playersOf, m => starts.get(m.cat) ?? now);
-  const queue = started.filter(m => m.a && m.b);
+  const queue = matches.filter(m => m.status === "queued" && !m.cancelled && m.a && m.b).sort(cmp);
+  const finish = venue.finish;
 
   const results = matches.filter(m => m.status === "done" && m.winner && !m.cancelled).sort((x, y) => (y.doneAt ?? 0) - (x.doneAt ?? 0));
 

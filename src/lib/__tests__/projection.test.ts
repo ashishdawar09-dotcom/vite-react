@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Category, Match } from "../../types";
-import { projectSchedule } from "../projection";
+import { projectSchedule, type Timing } from "../projection";
+
+// These cases test who goes on which court when: the venue's courts shared
+// across events, queue order, teams and start times. They run with no
+// call-to-serve time, no changeover and one-game finals, so every match is a
+// plain 12-minute slot and the arithmetic stays readable. The race-day
+// timing is tested in projectionTiming.test.ts.
+const NO_GAPS: Timing = { callToServeMin: 0, changeoverMin: 0, bestOf3Factor: 1, learnTurnaround: false };
+const noGaps = (...a: Parameters<typeof projectSchedule>) => projectSchedule(a[0], a[1], a[2], a[3], { ...a[4], timing: NO_GAPS });
 
 const MIN = 60_000;
 const DAY_START = Date.parse("2026-11-21T16:30:00Z"); // 9:30 am in Abbotsford (UTC-7)
@@ -39,7 +47,7 @@ describe("projectSchedule: events share the venue's courts", () => {
   it("never puts more matches on court than there are courts, with 10 events starting together", () => {
     const cats = Array.from({ length: 10 }, (_, i) => category(`e${i + 1}`, i + 1));
     const matches = cats.flatMap(c => event(c.id, 6));
-    const s = projectSchedule(matches, cats, 4, DAY_START);
+    const s = noGaps(matches, cats, 4, DAY_START);
     const starts = matches.map(m => startOf(s, m.id));
 
     expect(peakOnCourt(starts, 12)).toBe(4);
@@ -54,7 +62,7 @@ describe("projectSchedule: events share the venue's courts", () => {
   it("takes events in turn: each wave of free courts goes to the events that have waited longest", () => {
     const cats = Array.from({ length: 10 }, (_, i) => category(`e${i + 1}`, i + 1));
     const matches = cats.flatMap(c => event(c.id, 3));
-    const s = projectSchedule(matches, cats, 4, DAY_START);
+    const s = noGaps(matches, cats, 4, DAY_START);
     const at = (min: number) => matches.filter(m => startOf(s, m.id) === DAY_START + min * MIN).map(m => m.id).sort();
 
     expect(at(0)).toEqual(["e1-0", "e2-0", "e3-0", "e4-0"]);
@@ -69,7 +77,7 @@ describe("projectSchedule: events share the venue's courts", () => {
       ...event("a", 4).map((m, i) => ({ ...m, queue_position: 3 - i })), // reversed by the admin
       ...event("b", 4),
     ];
-    const s = projectSchedule(matches, cats, 2, DAY_START);
+    const s = noGaps(matches, cats, 2, DAY_START);
     const aOrder = matches.filter(m => m.category_id === "a").sort((x, y) => startOf(s, x.id) - startOf(s, y.id)).map(m => m.id);
     expect(aOrder).toEqual(["a-3", "a-2", "a-1", "a-0"]);
   });
@@ -77,7 +85,7 @@ describe("projectSchedule: events share the venue's courts", () => {
   it("gives the old per-event answer when there is only one event", () => {
     const cats = [category("a", 1)];
     const matches = event("a", 9);
-    const s = projectSchedule(matches, cats, 4, DAY_START);
+    const s = noGaps(matches, cats, 4, DAY_START);
     expect(matches.map(m => minutesFrom(DAY_START)(startOf(s, m.id)))).toEqual([0, 0, 0, 0, 12, 12, 12, 12, 24]);
   });
 });
@@ -94,7 +102,7 @@ describe("projectSchedule: courts already in use", () => {
       match("q2", "c", { slot_idx: 1, team_a_id: "c3", team_b_id: "c4" }),
       match("q3", "c", { slot_idx: 2, team_a_id: "c5", team_b_id: "c6" }),
     ];
-    const s = projectSchedule(matches, cats, 4, now);
+    const s = noGaps(matches, cats, 4, now);
     const m = minutesFrom(now);
     expect(m(startOf(s, "called"))).toBe(0);
     expect(m(startOf(s, "q1"))).toBe(0); // court 3
@@ -111,7 +119,7 @@ describe("projectSchedule: courts already in use", () => {
       match("called", "a", { slot_idx: 1, team_a_id: "a3", team_b_id: "a4", court_number: 2, court_allocated_at: iso(now) }),
       match("q1", "a", { slot_idx: 2, team_a_id: "a5", team_b_id: "a6" }),
     ];
-    const s = projectSchedule(matches, cats, 2, now);
+    const s = noGaps(matches, cats, 2, now);
     // Court 2 is busy for 2 more minutes; court 1 is free and goes to q1.
     expect(minutesFrom(now)(startOf(s, "called"))).toBe(2);
     expect(minutesFrom(now)(startOf(s, "q1"))).toBe(0);
@@ -121,7 +129,7 @@ describe("projectSchedule: courts already in use", () => {
     const cats = [category("a", 1, { starts_at: iso(DAY_START) }), category("b", 2, { starts_at: iso(DAY_START) })];
     const matches = [...event("a", 3), ...event("b", 3)];
     const late = DAY_START + 90 * MIN;
-    const s = projectSchedule(matches, cats, 4, late);
+    const s = noGaps(matches, cats, 4, late);
     for (const m of matches) expect(startOf(s, m.id)).toBeGreaterThanOrEqual(late);
   });
 });
@@ -132,7 +140,7 @@ describe("projectSchedule: who can play when", () => {
     const cats = [category("g", 1)];
     const pairs: [string, string][] = [["A", "B"], ["A", "C"], ["A", "D"], ["B", "C"], ["B", "D"], ["C", "D"]];
     const matches = pairs.map(([a, b], i) => match(`${a}${b}`, "g", { slot_idx: i, team_a_id: a, team_b_id: b }));
-    const s = projectSchedule(matches, cats, 4, DAY_START);
+    const s = noGaps(matches, cats, 4, DAY_START);
     const m = minutesFrom(DAY_START);
     expect(m(startOf(s, "AB"))).toBe(0);
     expect(m(startOf(s, "CD"))).toBe(0);
@@ -150,7 +158,7 @@ describe("projectSchedule: who can play when", () => {
       match("final", "ko", { stage: "knockout", group_idx: null, round_idx: 1, slot_idx: 0 }),
       ...event("big", 6),
     ];
-    const s = projectSchedule(matches, cats, 3, DAY_START);
+    const s = noGaps(matches, cats, 3, DAY_START);
     const m = minutesFrom(DAY_START);
     const sfEnd = Math.max(m(startOf(s, "sf1")), m(startOf(s, "sf2"))) + 12;
     expect(m(startOf(s, "final"))).toBeGreaterThanOrEqual(sfEnd);
@@ -160,7 +168,7 @@ describe("projectSchedule: who can play when", () => {
   it("holds an event until its own start time, then gives it the next free court", () => {
     const cats = [category("early", 1, { starts_at: iso(DAY_START) }), category("late", 2, { starts_at: iso(DAY_START + 60 * MIN) })];
     const matches = [...event("early", 12), ...event("late", 2)];
-    const s = projectSchedule(matches, cats, 2, DAY_START);
+    const s = noGaps(matches, cats, 2, DAY_START);
     const m = minutesFrom(DAY_START);
     expect(m(startOf(s, "early-0"))).toBe(0);
     // Both courts free up at +60: the late event gets one, the early event
@@ -176,7 +184,7 @@ describe("projectSchedule: events with no start time", () => {
     const cats = [category("timed", 1, { starts_at: iso(DAY_START) }), category("untimed", 2)];
     const matches = [...event("timed", 2), ...event("untimed", 2)];
     const twoHoursEarly = DAY_START - 120 * MIN;
-    const s = projectSchedule(matches, cats, 4, twoHoursEarly);
+    const s = noGaps(matches, cats, 4, twoHoursEarly);
     expect(startOf(s, "untimed-0")).toBe(DAY_START);
     expect(startOf(s, "timed-0")).toBe(DAY_START);
   });
@@ -189,7 +197,7 @@ describe("projectSchedule: events with no start time", () => {
       match("next", "untimed", { slot_idx: 1, team_a_id: "u3", team_b_id: "u4" }),
       ...event("timed", 1),
     ];
-    const s = projectSchedule(matches, cats, 4, now);
+    const s = noGaps(matches, cats, 4, now);
     expect(startOf(s, "next")).toBe(now);
     expect(startOf(s, "timed-0")).toBe(DAY_START + 240 * MIN);
   });
@@ -197,7 +205,7 @@ describe("projectSchedule: events with no start time", () => {
   it("fall back to now when no event has a start time", () => {
     const cats = [category("a", 1), category("b", 2)];
     const now = DAY_START - 30 * MIN;
-    const s = projectSchedule([...event("a", 1), ...event("b", 1)], cats, 4, now);
+    const s = noGaps([...event("a", 1), ...event("b", 1)], cats, 4, now);
     expect(startOf(s, "a-0")).toBe(now);
   });
 });
@@ -211,7 +219,7 @@ describe("projectSchedule: output", () => {
       match("x", "unknown-event", {}),
       match("bye", "a", { stage: "knockout", group_idx: null, round_idx: 0, slot_idx: 5, team_a_id: "a-t0", is_bye: true }),
     ];
-    const s = projectSchedule(matches, cats, 2, DAY_START);
+    const s = noGaps(matches, cats, 2, DAY_START);
     // Same order as the categories array, as the old hook did; matches outside it are left out.
     expect(s.projected.map(p => p.id)).toEqual(["b-0", "b-1", "a-0", "a-1", "bye"]);
     expect(Object.keys(s.byId).sort()).toEqual(["a-0", "a-1", "b-0", "b-1", "bye"]);
@@ -227,19 +235,21 @@ describe("projectSchedule: output", () => {
     const matches = [
       match("m1", "a", { confirmed: true, status: "completed", winner_id: "t1", team_a_id: "t1", team_b_id: "t2", scheduled_at: iso(DAY_START), started_at: iso(DAY_START), confirmed_at: iso(DAY_START + 17 * MIN) }),
     ];
-    const s = projectSchedule(matches, cats, 4, DAY_START + 30 * MIN);
+    const s = noGaps(matches, cats, 4, DAY_START + 30 * MIN);
     expect(s.tournamentDeltaMin).toBe(5);
     expect(s.tournamentDeltaLabel).toBe("5 MIN BEHIND");
     expect(s.byId.m1.delta_label).toBe("5M LATE");
   });
 
   it("returns empty results with no matches", () => {
-    expect(projectSchedule([], [category("a", 1)], 4, DAY_START)).toEqual({ projected: [], byId: {}, tournamentDeltaMin: 0, tournamentDeltaLabel: "ON TIME", liveByCourt: {} });
+    expect(noGaps([], [category("a", 1)], 4, DAY_START)).toEqual({ projected: [], byId: {}, tournamentDeltaMin: 0, tournamentDeltaLabel: "ON TIME", liveByCourt: {} });
   });
 });
 
 describe("projectSchedule: best-of-3 matches", () => {
   const NOW = DAY_START + 60 * MIN;
+  // No gaps, but best of 3 counted double (the race-day factor), so a court's time is play alone.
+  const BO3: Timing = { ...NO_GAPS, bestOf3Factor: 2 };
   it("a live best-of-3 match is still playing at 15 minutes, where a one-game match is over time", () => {
     const cats = [category("k", 1, { phase: "knockout" })];
     const started = { status: "live" as const, started_at: iso(NOW - 15 * MIN), court_number: 1, team_a_id: "a", team_b_id: "b", stage: "knockout" as const, round_idx: 1 };
@@ -254,9 +264,10 @@ describe("projectSchedule: best-of-3 matches", () => {
     const q = (id: string, slot: number, over: Partial<Match> = {}) =>
       match(id, "k", { stage: "knockout", round_idx: 0, slot_idx: slot, team_a_id: `${id}-a`, team_b_id: `${id}-b`, ...over });
     // One court: the second match starts when the first one ends.
-    const one = projectSchedule([q("m1", 0), q("m2", 1)], cats, 1, NOW);
-    const bo3 = projectSchedule([q("m1", 0, { best_of: 3 }), q("m2", 1)], cats, 1, NOW);
+    const one = projectSchedule([q("m1", 0), q("m2", 1)], cats, 1, NOW, { timing: BO3 });
+    const bo3 = projectSchedule([q("m1", 0, { best_of: 3 }), q("m2", 1)], cats, 1, NOW, { timing: BO3 });
     const gap = (s: ReturnType<typeof projectSchedule>) => (startOf(s, "m2") - startOf(s, "m1")) / MIN;
-    expect(gap(bo3)).toBeCloseTo(2 * gap(one), 5);
+    expect(gap(one)).toBe(12);
+    expect(gap(bo3)).toBe(24);
   });
 });
