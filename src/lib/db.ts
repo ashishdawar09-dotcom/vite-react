@@ -977,6 +977,36 @@ export async function callWaiverConsent<T = Record<string, unknown>>(
   }
 }
 
+// Player photo page (/photo/:token) → player-photo Edge Function. Public:
+// the token from the photo invite email is the only credential.
+export type PlayerPhotoInfo = {
+  first_name: string;
+  name: string;
+  tournament: { name: string; event_date: string | null };
+  photo_url: string | null;
+  consent_text: string;
+  profile_path: string | null;
+};
+
+export async function callPlayerPhoto<T = Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: T } | { ok: false; error: string; status?: number }> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/player-photo`;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify(body),
+    });
+    const json = (await resp.json().catch(() => ({}))) as { success?: boolean; error?: string } & T;
+    if (!resp.ok || !json.success) return { ok: false, error: json.error ?? "Something went wrong. Please try again.", status: resp.status };
+    return { ok: true, data: json };
+  } catch {
+    return { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
+  }
+}
+
 // Waiver acceptances for a tournament (admin-only via RLS). Newest first.
 export async function listWaiverConsents(tournament_id: string): Promise<WaiverConsent[]> {
   const { data, error } = await supabase
@@ -1258,7 +1288,7 @@ export type BriefingResponse = {
 
 /** Calls the player-briefing function; a refusal comes back as `error`, never thrown. */
 export async function playerBriefing(body: {
-  action: BriefingAction; tournament_id: string; kind: "full_house" | "day_before" | "morning_of";
+  action: BriefingAction; tournament_id: string; kind: "full_house" | "day_before" | "morning_of" | "photo_invite";
   notes?: string | null; scheduled_at?: string | null; player_id?: string;
 }): Promise<BriefingResponse> {
   const { data, error } = await supabase.functions.invoke("player-briefing", { body });

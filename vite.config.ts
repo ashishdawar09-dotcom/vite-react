@@ -64,6 +64,8 @@ export default defineConfig({
           'assets/TvShowPage-*',
           'assets/geist-*',
           'images/**',
+          // Pictures for emails (public/email): only mail apps load them.
+          'email/**',
           'assets/*-cyrillic-*.woff2',
           'assets/*-cyrillic-ext-*.woff2',
           'assets/*-greek-*.woff2',

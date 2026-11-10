@@ -1,7 +1,8 @@
 // supabase/functions/player-briefing/index.ts
 //
-// The day-before and morning-of player briefings, and the one-off "full
-// house" thank-you, sent from the admin app's Emails tab. Admin-only. Actions:
+// The day-before and morning-of player briefings, the one-off "full house"
+// thank-you and the photo invite, sent from the admin app's Emails tab.
+// Admin-only. Actions:
 //   preview  → counts and one rendered email (nothing is sent)
 //   test     → that rendered email, sent only to the signed-in admin
 //   send     → the next batch of players (BATCH at a time; the app calls again
@@ -15,13 +16,18 @@
 // database says every entry is taken (registration_capacity), so a slip of
 // the finger can't tell 100 players they're sold out early.
 //
+// The photo invite gives each player their own /photo/<token> link
+// (player_photo_links, made here as each batch goes out). Previews and test
+// emails carry the demo link /photo/preview instead, so a test can never
+// change a real player's photo.
+//
 // Replies go to the tournament's reply_to_email. Delivery problems come back
 // through resend-webhook into briefing_emails.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { requireAdmin } from "../_shared/admin.ts";
 import { isUuid, json, serveWithCors, SITE_URL } from "../_shared/http.ts";
-import { type EmailTournament, fullHouseEmail, playerBriefing, type RenderedEmail } from "../_shared/emails.ts";
+import { type EmailTournament, fullHouseEmail, photoInviteEmail, playerBriefing, type RenderedEmail } from "../_shared/emails.ts";
 import { cancelScheduledEmail, sendEmailDetailed } from "../_shared/mailer.ts";
 import {
   BRIEFING_KINDS, type BriefingKind, briefingRecipients, type PlanMatch, type PlanTeam, playerPlan, scheduleWindow,
@@ -34,6 +40,8 @@ const APP_ASSET_BASE = Deno.env.get("EMAIL_APP_ASSET_BASE") ?? `${SITE_URL}/emai
 const BATCH = 25;
 const GAP_MS = 150; // stays under Resend's 10 requests a second, shared with court calls
 const NOTES_MAX = 600;
+// The photo page shows a demo (and saves nothing) for this link.
+const DEMO_PHOTO_URL = `${SITE_URL}/photo/preview`;
 
 const T_COLUMNS =
   "id, name, slug, event_date, event_time, venue_name, venue_address, venue_map_url, rules_url, waiver_url, contact_info, reply_to_email, entry_cap";
@@ -48,7 +56,7 @@ serveWithCors(async (req: Request) => {
   const tournamentId = body.tournament_id;
   const kind = body.kind as BriefingKind;
   if (!isUuid(tournamentId)) return json({ error: "tournament_id required" }, 400);
-  if (!BRIEFING_KINDS.includes(kind)) return json({ error: "kind must be day_before, morning_of or full_house" }, 400);
+  if (!BRIEFING_KINDS.includes(kind)) return json({ error: "kind must be day_before, morning_of, full_house or photo_invite" }, 400);
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, NOTES_MAX) || null : null;
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -60,7 +68,7 @@ serveWithCors(async (req: Request) => {
       ? ctx.recipients.find((r) => r.id === body.player_id)
       : ctx.recipients[0];
     if (!pick) return json({ error: "No players with an email address yet." }, 400);
-    const email = render(ctx, kind, pick, notes);
+    const email = render(ctx, kind, pick, notes, DEMO_PHOTO_URL);
     if (action === "preview") {
       const done = await doneIds(supabase, tournamentId, kind);
       return json({
@@ -79,7 +87,7 @@ serveWithCors(async (req: Request) => {
   }
 
   if (action === "send") {
-    const when = kind === "full_house"
+    const when = kind === "full_house" || kind === "photo_invite"
       ? { at: null, error: null }
       : scheduleWindow(typeof body.scheduled_at === "string" ? body.scheduled_at : null);
     if (when.error) return json({ error: when.error }, 400);
@@ -94,13 +102,20 @@ serveWithCors(async (req: Request) => {
     const todo = ctx.recipients.filter((r) => !done.has(r.id));
     let sent = 0, scheduled = 0, failed = 0;
     const errors: string[] = [];
+    const links = kind === "photo_invite" ? await photoLinks(supabase, todo.slice(0, BATCH).map((r) => r.id)) : new Map<string, string>();
     for (const r of todo.slice(0, BATCH)) {
+      const token = links.get(r.id);
+      if (kind === "photo_invite" && !token) {
+        failed++;
+        if (errors.length < 3) errors.push(`${r.name}: no photo link`);
+        continue;
+      }
       const { data: rowId, error: claimErr } = await supabase.rpc("claim_briefing", {
         p_tournament_id: tournamentId, p_player_id: r.id, p_kind: kind, p_email: r.email,
       });
       if (claimErr) return json({ error: `Couldn't claim: ${claimErr.message}` }, 500);
       if (!rowId) continue; // another admin got there first
-      const email = render(ctx, kind, r, notes);
+      const email = render(ctx, kind, r, notes, token ? `${SITE_URL}/photo/${token}` : DEMO_PHOTO_URL);
       const res = await sendEmailDetailed(
         { to: r.email, subject: email.subject, html: email.html, text: email.text, fromName: ctx.t.name, replyTo: ctx.replyTo },
         {
@@ -162,6 +177,7 @@ type Ctx = {
   replyTo: string | null;
   recipients: { id: string; name: string; email: string }[];
   activeCount: number;
+  hasPhoto: Set<string>;             // players whose profile already has a photo
   plan: (playerId: string) => ReturnType<typeof playerPlan>;
   doublesNames: Set<string>;         // events played in pairs, by name (as playerPlan reports them)
   teamsByEvent: Map<string, number>; // teams entered in each event right now, by name
@@ -171,7 +187,7 @@ async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx
   const { data: t } = await supabase.from("tournaments").select(T_COLUMNS).eq("id", tournamentId).maybeSingle();
   if (!t) return null;
   const [players, cats, pcs, teams, matches] = await Promise.all([
-    supabase.from("players").select("id, name, email, active").eq("tournament_id", tournamentId),
+    supabase.from("players").select("id, name, email, active, photo_url").eq("tournament_id", tournamentId),
     supabase.from("categories").select("id, name, sort_order, team_size").eq("tournament_id", tournamentId).order("sort_order"),
     supabase.from("player_categories").select("player_id, category_id"),
     supabase.from("teams").select("id, category_id, p1_id, p2_id").eq("tournament_id", tournamentId),
@@ -198,6 +214,7 @@ async function load(supabase: SupabaseClient, tournamentId: string): Promise<Ctx
     replyTo: (t.reply_to_email as string | null)?.trim() || null,
     recipients: briefingRecipients(roster as { id: string; name: string; email: string | null; active: boolean }[]),
     activeCount: roster.filter((p) => p.active).length,
+    hasPhoto: new Set(roster.filter((p) => !!p.photo_url).map((p) => p.id as string)),
     plan: (playerId) => playerPlan(playerId, { ...shared, playerCategoryIds: catsByPlayer.get(playerId) ?? [] }),
     doublesNames: new Set((cats.data ?? []).filter((c) => c.team_size === 2).map((c) => c.name as string)),
     teamsByEvent: new Map((cats.data ?? []).map((c) => [
@@ -215,7 +232,19 @@ async function doneIds(supabase: SupabaseClient, tournamentId: string, kind: Bri
   return new Set((data ?? []).map((r) => r.player_id as string));
 }
 
-function render(ctx: Ctx, kind: BriefingKind, p: { id: string; name: string }, notes: string | null): RenderedEmail {
+function render(ctx: Ctx, kind: BriefingKind, p: { id: string; name: string }, notes: string | null, photoUrl: string): RenderedEmail {
+  if (kind === "photo_invite") {
+    return photoInviteEmail({
+      tournament: ctx.t,
+      player: { name: p.name },
+      photoUrl,
+      hasPhoto: ctx.hasPhoto.has(p.id),
+      notes,
+      appAssetBase: APP_ASSET_BASE,
+      assetBase: ASSET_BASE,
+      privacyUrl: PRIVACY_URL,
+    });
+  }
   const plan = ctx.plan(p.id);
   if (kind === "full_house") {
     return fullHouseEmail({
@@ -242,4 +271,17 @@ function render(ctx: Ctx, kind: BriefingKind, p: { id: string; name: string }, n
     assetBase: ASSET_BASE,
     privacyUrl: PRIVACY_URL,
   });
+}
+
+// Each player's own photo link, made the first time it's needed. The token is
+// the only credential the photo page takes, so it lives in a table only the
+// service role can read (player_photo_links).
+async function photoLinks(supabase: SupabaseClient, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const { error: insErr } = await supabase.from("player_photo_links")
+    .upsert(ids.map((id) => ({ player_id: id })), { onConflict: "player_id", ignoreDuplicates: true });
+  if (insErr) throw new Error(insErr.message);
+  const { data, error } = await supabase.from("player_photo_links").select("player_id, token").in("player_id", ids);
+  if (error) throw new Error(error.message);
+  return new Map((data ?? []).map((r) => [r.player_id as string, r.token as string]));
 }
