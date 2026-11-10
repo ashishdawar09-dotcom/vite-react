@@ -26,6 +26,28 @@ export async function notifyCourtAllocated(matchId: string): Promise<void> {
 }
 
 /**
+ * "You're up soon" for a match about to be called (useOnDeckAlerts). Fire and
+ * forget, like the court call: notify-on-deck sends once per match and
+ * decides whether to send at all (alerts off, match already called…).
+ */
+export async function notifyOnDeck(matchId: string, expectedAt: string | null): Promise<void> {
+  try {
+    const { error } = await supabase.functions.invoke("notify-on-deck", {
+      body: { match_id: matchId, expected_at: expectedAt },
+    });
+    if (error) throw error;
+  } catch (e) {
+    Sentry.addBreadcrumb({
+      category: "notification",
+      level: "warning",
+      message: "notify-on-deck failed",
+      data: { matchId, error: String(e) },
+    });
+    console.warn("notify-on-deck failed for", matchId, e);
+  }
+}
+
+/**
  * Sends the "You're in!" email (player + partner) for an approved
  * registration via the `registration-email` edge function. Never throws:
  * returns whether it was sent so the admin can be told, and the approval

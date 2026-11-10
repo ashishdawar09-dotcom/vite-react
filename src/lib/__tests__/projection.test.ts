@@ -53,14 +53,50 @@ describe("projectSchedule: events share the venue's courts", () => {
     expect(peakOnCourt(starts, 12)).toBe(4);
     // 60 matches, 4 courts, 12 minutes each: 15 waves, the last at +168 min.
     expect(minutesFrom(DAY_START)(Math.max(...starts))).toBe(168);
-    // An event's 5th match no longer looks like it starts with its 1st.
+    // The first event in the order gets the courts first; the last waits for the nine before it.
     const e1 = event("e1", 6).map(m => minutesFrom(DAY_START)(startOf(s, m.id)));
     expect(e1[0]).toBe(0);
-    expect(e1[4]).toBeGreaterThanOrEqual(4 * 12);
+    expect(e1[4]).toBe(12);
+    expect(minutesFrom(DAY_START)(startOf(s, "e10-0"))).toBe(13 * 12);
   });
 
-  it("takes events in turn: each wave of free courts goes to the events that have waited longest", () => {
-    const cats = Array.from({ length: 10 }, (_, i) => category(`e${i + 1}`, i + 1));
+  it("gives each free court to the event earliest in the event order", () => {
+    const cats = [category("e1", 1), category("e2", 2), category("e3", 3)];
+    const matches = cats.flatMap(c => event(c.id, 3));
+    const s = noGaps(matches, cats, 4, DAY_START);
+    const at = (min: number) => matches.filter(m => startOf(s, m.id) === DAY_START + min * MIN).map(m => m.id).sort();
+
+    expect(at(0)).toEqual(["e1-0", "e1-1", "e1-2", "e2-0"]);
+    expect(at(12)).toEqual(["e2-1", "e2-2", "e3-0", "e3-1"]);
+    expect(at(24)).toEqual(["e3-2"]);
+  });
+
+  it("follows the event order, not the order the events are listed in", () => {
+    const cats = [category("late", 2), category("early", 1)];
+    const matches = [...event("late", 2), ...event("early", 2)];
+    const s = noGaps(matches, cats, 2, DAY_START);
+    expect(startOf(s, "early-0")).toBe(DAY_START);
+    expect(startOf(s, "early-1")).toBe(DAY_START);
+    expect(startOf(s, "late-0")).toBe(DAY_START + 12 * MIN);
+  });
+
+  it("lets a later event use a court the earlier event can't fill, so no court waits", () => {
+    // Every match of "a" has team a1 in it, so "a" can only use one court at a time.
+    const cats = [category("a", 1), category("b", 2)];
+    const matches = [
+      ...[2, 3, 4].map((t, i) => match(`a-${i}`, "a", { slot_idx: i, team_a_id: "a1", team_b_id: `a${t}` })),
+      ...event("b", 3),
+    ];
+    const s = noGaps(matches, cats, 2, DAY_START);
+    expect(startOf(s, "a-0")).toBe(DAY_START);
+    expect(startOf(s, "b-0")).toBe(DAY_START);
+    expect(startOf(s, "a-1")).toBe(DAY_START + 12 * MIN);
+    expect(startOf(s, "b-1")).toBe(DAY_START + 12 * MIN);
+    expect(startOf(s, "a-2")).toBe(DAY_START + 24 * MIN);
+  });
+
+  it("takes events in turn when they share the same place in the order: each wave goes to those that have waited longest", () => {
+    const cats = Array.from({ length: 10 }, (_, i) => category(`e${i + 1}`, 0));
     const matches = cats.flatMap(c => event(c.id, 3));
     const s = noGaps(matches, cats, 4, DAY_START);
     const at = (min: number) => matches.filter(m => startOf(s, m.id) === DAY_START + min * MIN).map(m => m.id).sort();
@@ -77,7 +113,7 @@ describe("projectSchedule: events share the venue's courts", () => {
       ...event("a", 4).map((m, i) => ({ ...m, queue_position: 3 - i })), // reversed by the admin
       ...event("b", 4),
     ];
-    const s = noGaps(matches, cats, 2, DAY_START);
+    const s = noGaps(matches, cats, 1, DAY_START);
     const aOrder = matches.filter(m => m.category_id === "a").sort((x, y) => startOf(s, x.id) - startOf(s, y.id)).map(m => m.id);
     expect(aOrder).toEqual(["a-3", "a-2", "a-1", "a-0"]);
   });
@@ -165,17 +201,19 @@ describe("projectSchedule: who can play when", () => {
     expect(peakOnCourt(matches.map(x => startOf(s, x.id)), 12)).toBeLessThanOrEqual(3);
   });
 
-  it("holds an event until its own start time, then gives it the next free court", () => {
-    const cats = [category("early", 1, { starts_at: iso(DAY_START) }), category("late", 2, { starts_at: iso(DAY_START + 60 * MIN) })];
+  it("holds an event until its own start time, then gives it the next free courts", () => {
+    // "late" comes first in the event order but may not start before +60;
+    // "early" uses both courts until then.
+    const cats = [category("early", 2, { starts_at: iso(DAY_START) }), category("late", 1, { starts_at: iso(DAY_START + 60 * MIN) })];
     const matches = [...event("early", 12), ...event("late", 2)];
     const s = noGaps(matches, cats, 2, DAY_START);
     const m = minutesFrom(DAY_START);
     expect(m(startOf(s, "early-0"))).toBe(0);
-    // Both courts free up at +60: the late event gets one, the early event
-    // (which last started at +48) keeps the other; then they take turns.
+    expect(matches.filter(x => x.category_id === "early" && m(startOf(s, x.id)) < 60)).toHaveLength(10);
+    // Both courts free up at +60 and go to "late"; "early" carries on after.
     expect(m(startOf(s, "late-0"))).toBe(60);
-    expect(matches.filter(x => x.category_id === "early" && m(startOf(s, x.id)) === 60)).toHaveLength(1);
-    expect(m(startOf(s, "late-1"))).toBe(72);
+    expect(m(startOf(s, "late-1"))).toBe(60);
+    expect(m(startOf(s, "early-10"))).toBe(72);
   });
 });
 
@@ -225,9 +263,10 @@ describe("projectSchedule: output", () => {
     expect(Object.keys(s.byId).sort()).toEqual(["a-0", "a-1", "b-0", "b-1", "bye"]);
     // A bye takes no court time.
     expect(s.byId.bye.delta_label).toBe("BYE");
-    expect(s.byId["a-1"].projected_start_at).toBe(iso(DAY_START + 12 * MIN));
-    expect(s.byId["b-0"].delta_label).toBe("STARTS NOW");
-    expect(s.byId["b-1"].delta_label).toBe("IN 12M");
+    // "a" is first in the event order, so it takes both courts first.
+    expect(s.byId["a-1"].projected_start_at).toBe(iso(DAY_START));
+    expect(s.byId["a-0"].delta_label).toBe("STARTS NOW");
+    expect(s.byId["b-0"].delta_label).toBe("IN 12M");
   });
 
   it("keeps the tournament delta from completed matches", () => {

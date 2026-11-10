@@ -41,6 +41,11 @@ const PublicRegistrationPage = lazyWithReload(() =>
     default: m.PublicRegistrationPage,
   })),
 )
+const PlayerPhotoPage = lazyWithReload(() =>
+  import('./features/playerPhoto/PlayerPhotoPage').then((m) => ({
+    default: m.PlayerPhotoPage,
+  })),
+)
 const PartnerWaiverPage = lazyWithReload(() =>
   import('./features/publicRegistration/PartnerWaiverPage').then((m) => ({
     default: m.PartnerWaiverPage,
@@ -132,6 +137,7 @@ createRoot(document.getElementById('root')!).render(
             <Routes>
               <Route path="/register/:tournamentId" element={<PublicRegistrationPage />} />
               <Route path="/waiver/:token" element={<PartnerWaiverPage />} />
+              <Route path="/photo/:token" element={<PlayerPhotoPage />} />
               {/* Public share surfaces — anonymous read of tournament state.
                   Specific sub-paths must come BEFORE the bare /t/:slug match. */}
               <Route path="/t/:slug/tv" element={<TvShowPage />} />

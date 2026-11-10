@@ -977,6 +977,36 @@ export async function callWaiverConsent<T = Record<string, unknown>>(
   }
 }
 
+// Player photo page (/photo/:token) → player-photo Edge Function. Public:
+// the token from the photo invite email is the only credential.
+export type PlayerPhotoInfo = {
+  first_name: string;
+  name: string;
+  tournament: { name: string; event_date: string | null };
+  photo_url: string | null;
+  consent_text: string;
+  profile_path: string | null;
+};
+
+export async function callPlayerPhoto<T = Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: T } | { ok: false; error: string; status?: number }> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/player-photo`;
+  const apikey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey },
+      body: JSON.stringify(body),
+    });
+    const json = (await resp.json().catch(() => ({}))) as { success?: boolean; error?: string } & T;
+    if (!resp.ok || !json.success) return { ok: false, error: json.error ?? "Something went wrong. Please try again.", status: resp.status };
+    return { ok: true, data: json };
+  } catch {
+    return { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
+  }
+}
+
 // Waiver acceptances for a tournament (admin-only via RLS). Newest first.
 export async function listWaiverConsents(tournament_id: string): Promise<WaiverConsent[]> {
   const { data, error } = await supabase
@@ -1190,6 +1220,64 @@ export async function getCourtCallProblems(tournament_id: string): Promise<Brief
   }));
 }
 
+// ---------- race-day desk: "you're up soon" alerts, desk monitor ----------
+
+export type RaceDaySettings = {
+  on_deck_alerts: boolean;
+  monitor_on: boolean;
+  monitor_email_to: string | null;
+  monitor_plan: { ends?: string[]; finish_by?: string | null; finale_category_id?: string | null } | null;
+  monitor_state: { last_email_at?: string; last_run_at?: string } | null;
+};
+
+/** The tournament's race-day settings, or the defaults when none are saved yet (admin only). */
+export async function getRaceDaySettings(tournament_id: string): Promise<RaceDaySettings> {
+  const { data, error } = await supabase
+    .from("race_day_settings")
+    .select("on_deck_alerts, monitor_on, monitor_email_to, monitor_plan, monitor_state")
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as RaceDaySettings | null) ?? { on_deck_alerts: true, monitor_on: false, monitor_email_to: null, monitor_plan: null, monitor_state: null };
+}
+
+/** Changes only what's given; "" clears the monitor's addresses. */
+export async function setRaceDaySettings(
+  tournament_id: string,
+  patch: { on_deck_alerts?: boolean; monitor_on?: boolean; monitor_email_to?: string },
+): Promise<void> {
+  const { error } = await supabase.rpc("set_race_day_settings", {
+    p_tournament_id: tournament_id,
+    p_on_deck_alerts: patch.on_deck_alerts ?? null,
+    p_monitor_on: patch.monitor_on ?? null,
+    p_monitor_email_to: patch.monitor_email_to ?? null,
+  });
+  if (error) throw error;
+}
+
+/** How many matches have had their "you're up soon" alert. */
+export async function countOnDeckAlerts(tournament_id: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("on_deck_alerts")
+    .select("match_id", { count: "exact", head: true })
+    .eq("tournament_id", tournament_id);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** The desk monitor's status email, sent now (marked [Test]; any day). */
+export async function sendMonitorStatusNow(tournament_id: string): Promise<{ sent: boolean; error: string | null; alerts: number }> {
+  const { data, error } = await supabase.functions.invoke("race-monitor", { body: { tournament_id } });
+  if (error) {
+    // A 4xx carries a message for the admin, e.g. no email address yet.
+    const res = (error as { context?: Response }).context;
+    const body = res && typeof res.json === "function" ? await res.json().catch(() => null) : null;
+    throw new Error((body as { error?: string } | null)?.error ?? error.message);
+  }
+  const r = (data as { results?: { sent: boolean; error: string | null; alerts: number }[] } | null)?.results?.[0];
+  return r ?? { sent: false, error: "No settings saved for this tournament yet.", alerts: 0 };
+}
+
 export type BriefingAction = "preview" | "test" | "send" | "cancel";
 export type BriefingResponse = {
   subject?: string; html?: string; text?: string; player?: string;
@@ -1200,7 +1288,7 @@ export type BriefingResponse = {
 
 /** Calls the player-briefing function; a refusal comes back as `error`, never thrown. */
 export async function playerBriefing(body: {
-  action: BriefingAction; tournament_id: string; kind: "full_house" | "day_before" | "morning_of";
+  action: BriefingAction; tournament_id: string; kind: "full_house" | "day_before" | "morning_of" | "photo_invite";
   notes?: string | null; scheduled_at?: string | null; player_id?: string;
 }): Promise<BriefingResponse> {
   const { data, error } = await supabase.functions.invoke("player-briefing", { body });
