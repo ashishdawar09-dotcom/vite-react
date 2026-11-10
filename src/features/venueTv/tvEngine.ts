@@ -10,7 +10,7 @@
 import "./tvShow.css";
 import { bracketOf, standingsOf, type TvCategory, type TvMatch, type TvModel } from "./tvModel";
 import { annList, callItem, deskItem, matchPointItem, CALL_WINDOW_MIN, type AnnItem } from "./tvAnnouncements";
-import { catStage, shortPersonName, shortStage, sideLabel, sideNames, teamName, type NameMode } from "./tvNames";
+import { catStage, shortPersonName, shortStage, shortTeamName, sideLabel, sideNames, teamName, type NameMode } from "./tvNames";
 import { ampm, hm } from "./tvTime";
 import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
 import { buildStats, leadersReady, matchupMatches, spotlightPeople, type TvStats } from "./tvStats";
@@ -99,28 +99,46 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (m.ending) return { text: "Final score", cls: "soft" };
     return matchPointAt(m) ? { text: "Match point", cls: "" } : null;
   }
+  /** Attributes for text that fitText() shortens when the full form doesn't fit its box (none when there's nothing shorter). */
+  const fitAttrs = (full: string, short: string) => (short && short.length < full.length ? ` data-full="${esc(full)}" data-short="${esc(short)}"` : "");
   function namesHTML(m: TvMatch, s: "a" | "b", mode: "lines" | "lastlines" | NameMode, max?: number) {
-    // Full names, each with a short form that fitNames() swaps in when the full one doesn't fit its box.
-    if (m[s] && mode === "lines") return sideNames(M!, m, s).map(n => `<span data-full="${esc(n)}" data-short="${esc(shortPersonName(n))}">${esc(n)}</span>`).join("");
+    // Full names, each with a short form that fitText() swaps in when the full one doesn't fit its box.
+    if (m[s] && mode === "lines") return sideNames(M!, m, s).map(n => `<span${fitAttrs(n, shortPersonName(n))}>${esc(n)}</span>`).join("");
     if (m[s] && mode === "lastlines") return sideNames(M!, m, s, true).map(n => `<span>${esc(n)}</span>`).join("");
     return `<span>${esc(sideLabel(M!, m, s, mode === "lines" || mode === "lastlines" ? "full" : mode, max))}</span>`;
   }
   const scoreOf = (m: TvMatch, s: "a" | "b") => m.cur[s === "a" ? 0 : 1];
   /**
-   * A full name that doesn't fit its box ("Gurmeet Singh Ghera" on a court map half)
-   * becomes its short form ("G. Ghera") instead of ending in "…". Runs after every render,
-   * when Floor home shows its court map again (hidden boxes measure 0) and when fonts load.
-   * Every name goes back to its full form first, so a box that has room again shows it.
+   * Text that doesn't fit its box becomes its short form instead of ending in "…": a name on a
+   * court ("Gurmeet Singh Ghera" → "G. Ghera"), a result's event line ("Women's Doubles 18–34 ·
+   * Quarterfinal 1" → "Women's 18–34 · Quarterfinal 1") or a result's pair ("R. Sachdeva & Nilesh").
+   * Everything goes back to its full form first, so a box that has room again shows it.
    */
-  function fitNames(root: ParentNode) {
-    const els = Array.from(root.querySelectorAll<HTMLElement>(".who span[data-short]"));
+  function fitText(root: ParentNode) {
+    const els = Array.from(root.querySelectorAll<HTMLElement>("[data-short]"));
     for (const el of els) { const full = el.dataset.full; if (full && el.textContent !== full) el.textContent = full; }
     // All reads after all writes: one layout for the whole set.
     const over = els.filter(el => el.scrollWidth > el.clientWidth + 1);
     for (const el of over) el.textContent = el.dataset.short ?? el.textContent;
   }
+  /**
+   * A bracket taller than its panel (four quarterfinals on Everything pinned) goes "tight": its
+   * cards drop the "Live on court 3" / "About 1:40" line, which the court tiles and Up next on the
+   * same screen already show, and the gaps narrow. The card borders still mark live and called.
+   */
+  function fitBrackets(root: ParentNode) {
+    const bs = Array.from(root.querySelectorAll<HTMLElement>(".bracket"));
+    for (const b of bs) b.classList.remove("tight");
+    const over = bs.filter(b => b.scrollHeight > b.clientHeight + 1);
+    for (const b of over) b.classList.add("tight");
+  }
+  /**
+   * Runs after every render, when Floor home shows its court map again (hidden boxes
+   * measure 0) and when fonts load.
+   */
+  function fit(root: ParentNode) { fitBrackets(root); fitText(root); }
   const fontSet = (document as Document & { fonts?: FontFaceSet }).fonts;
-  const onFontsLoaded = () => { if (!destroyed) fitNames(stageEl); };
+  const onFontsLoaded = () => { if (!destroyed) fit(stageEl); };
   fontSet?.addEventListener?.("loadingdone", onFontsLoaded);
 
   /* ---------- player boards: stats once per feed update, photos loaded ahead ---------- */
@@ -222,9 +240,11 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   /* ---------- boards: results, tables, brackets, champions ---------- */
   function resultHTML(m: TvMatch) {
     const wa = m.winner === m.a;
-    return `<article class="res"><p class="res-cat">${esc(catStage(M!, m))}</p>
-      <div class="res-row${wa ? " win" : ""}"><span>${esc(teamName(M!, m.a, "fit", 24))}</span><b>${m.walkover ? "" : m.cur[0]}</b></div>
-      <div class="res-row${wa ? "" : " win"}"><span>${esc(teamName(M!, m.b, "fit", 24))}</span><b>${m.walkover ? "" : m.cur[1]}</b></div>
+    // The full event line and pairs, with short forms for a narrow card (Sports TV's results).
+    const cat = catStage(M!, m), pair = (s: "a" | "b") => { const t = teamName(M!, m[s], "fit", 24); return `<span${fitAttrs(t, shortTeamName(M!, m[s]))}>${esc(t)}</span>`; };
+    return `<article class="res"><p class="res-cat"${fitAttrs(cat, shortStage(M!, m))}>${esc(cat)}</p>
+      <div class="res-row${wa ? " win" : ""}">${pair("a")}<b>${m.walkover ? "" : m.cur[0]}</b></div>
+      <div class="res-row${wa ? "" : " win"}">${pair("b")}<b>${m.walkover ? "" : m.cur[1]}</b></div>
       <p class="res-when">${m.walkover ? "Walkover · " : ""}${m.bestOf3 && m.games.length && !m.walkover ? `${esc(gamesText(m))} · ` : ""}${ago(m.doneAt)}</p></article>`;
   }
   function tableHTML(cat: TvCategory, gIdx: number, max: number, compact: boolean) {
@@ -779,7 +799,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   }
   function renderPart(name: string, enter: boolean) {
     const fn = partFn(name); if (!fn || !M) return;
-    $$(`[data-part="${name}"]`).forEach(p => { if (!p.closest(".scene.out,.show.leaving")) { p.innerHTML = fn({ v: VIEW, enter }); fitNames(p); } });
+    $$(`[data-part="${name}"]`).forEach(p => { if (!p.closest(".scene.out,.show.leaving")) { p.innerHTML = fn({ v: VIEW, enter }); fit(p); } });
   }
   function refreshParts() {
     if (!M) return;
@@ -797,7 +817,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       const tmp = document.createElement("div"); tmp.innerHTML = fn(c);
       const neu = tmp.firstElementChild as HTMLElement | null; if (!neu) return;
       el.replaceWith(neu);
-      fitNames(neu);
+      fit(neu);
       if (RM.matches) return;
       for (const s of ["a", "b"] as const) if (old[s] !== undefined && old[s] !== neu.dataset[s]) $$(`.pts[data-s="${s}"] i`, neu).forEach(i => i.classList.add("bump"));
     });
@@ -812,7 +832,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     for (const name in VIEWS[v].parts) $$(`[data-part="${name}"]`, el).forEach(p => { p.innerHTML = VIEWS[v].parts[name](ctx); });
     const old = $$(".scene", wrap);
     wrap.appendChild(el);
-    fitNames(el);
+    fit(el);
     if (!animate || instant || RM.matches) { old.forEach(o => o.remove()); return; }
     el.classList.add("in");
     old.forEach(o => { o.classList.remove("in"); o.classList.add("out"); window.setTimeout(() => o.remove(), 520); });
@@ -824,7 +844,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     const els = $$(".fh-court", fh), move = animate && !instant && !RM.matches && els.length > 0 && typeof els[0].animate === "function";
     const first = move ? els.map(e => e.getBoundingClientRect()) : null;
     fh.classList.toggle("away", away); fh.classList.toggle("home", !away);
-    fitNames(fh);
+    fit(fh);
     if (!move || !first) return;
     const k = stageScale();
     morphing = true;

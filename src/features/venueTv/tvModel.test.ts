@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Category, Match, Player, Team, Tournament } from "../../types";
-import { bracketOf, buildTvModel, FINAL_SCORE_HOLD_MS, parseMessages, shortCategoryName, standingsOf, tvStatus, type TvSnapshot } from "./tvModel";
+import { bracketOf, buildTvModel, FINAL_SCORE_HOLD_MS, parseMessages, shortCategoryName, standingsOf, tvStatus, type TvModel, type TvSnapshot } from "./tvModel";
 import { annList, matchPointItem } from "./tvAnnouncements";
 import { matchPointAt } from "./tvMatchPoint";
-import { teamName } from "./tvNames";
+import { shortTeamName, teamName } from "./tvNames";
 import { ampm, clockSkewMs, hm } from "./tvTime";
 import { projectSchedule } from "../../lib/projection";
 
@@ -184,6 +184,16 @@ describe("venue TV model", () => {
     expect(teamName(m, "tA", "fit", 12)).toBe("Mann & Dhillon");
     expect(teamName(m, "tA", "last")).toBe("Mann & Dhillon");
     expect(teamName(m, null, "fit")).toBe("To be decided");
+  });
+
+  it("never gives a one-word name a made-up initial", () => {
+    const m = { teams: { t1: { names: ["Christopher Johnson", "Nilesh"] }, t2: { names: ["Rudhar Sachdeva", "Nilesh"] }, t3: { names: ["Arif"] } } } as unknown as TvModel;
+    expect(teamName(m, "t1", "fit", 22)).toBe("C. Johnson & Nilesh");
+    expect(teamName(m, "t1", "fit", 12)).toBe("Johnson & Nilesh");
+    expect(shortTeamName(m, "t2")).toBe("R. Sachdeva & Nilesh");
+    expect(shortTeamName(m, "t3")).toBe("Arif");
+    expect(shortTeamName(m, null)).toBe("To be decided");
+    expect(shortTeamName(m, "gone")).toBe("To be decided");
   });
 
   it("returns nothing without a tournament row", () => {
