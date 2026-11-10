@@ -18,7 +18,11 @@ export const MAX_TV_COURTS = 8;
 export type TvStatus = "queued" | "called" | "live" | "done";
 export type TvKind = "group" | "round" | "qf" | "sf" | "final" | "bronze";
 
-export type TvTeam = { id: string; category_id: string; names: string[] };
+/** `pids` are the players' ids in the same order as `names` (empty when the team has no named players yet). */
+export type TvTeam = { id: string; category_id: string; names: string[]; pids: string[] };
+
+/** One person across all their events, for the player cards. `photo` is a checked https link or null. */
+export type TvPerson = { id: string; name: string; photo: string | null; teamIds: string[] };
 
 export type TvMatch = {
   id: string;
@@ -92,6 +96,8 @@ export type TvModel = {
   /** Finished matches with a winner, newest first. */
   results: TvMatch[];
   players: TvPlayer[];
+  /** Everyone entered in an event, by player id, with their photo. */
+  people: Record<string, TvPerson>;
   messages: TvMessage[];
   /** The admin switched the Shuttle Storm film on (before play starts, or in a break). */
   film: boolean;
@@ -128,6 +134,17 @@ export function shortCategoryName(name: string): string {
   m = /^Youth\s+(Boys['’]?|Girls['’]?)\s+Singles$/i.exec(n);
   if (m) return `Youth ${m[1]}`;
   return n;
+}
+
+/** A player's photo link as the TV may use it: https only, so nothing else ever reaches an image tag. */
+export function safePhotoUrl(url: string | null | undefined): string | null {
+  if (typeof url !== "string" || !url.trim()) return null;
+  try {
+    const u = new URL(url.trim());
+    return u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Desk announcements as stored on the tournament row, keeping only valid, current ones. */
@@ -179,8 +196,16 @@ export function buildTvModel(snap: TvSnapshot, now: number): TvModel | null {
 
   const teams: Record<string, TvTeam> = {};
   for (const tm of snap.teams) {
-    const names = [tm.p1_id, tm.p2_id].filter((x): x is string => !!x).map(id => players.get(id)?.name?.trim()).filter((x): x is string => !!x);
-    teams[tm.id] = { id: tm.id, category_id: tm.category_id, names: names.length ? names : [tm.name || "To be decided"] };
+    const members = [tm.p1_id, tm.p2_id]
+      .filter((x): x is string => !!x)
+      .map(id => ({ id, name: players.get(id)?.name?.trim() ?? "" }))
+      .filter(p => !!p.name);
+    teams[tm.id] = {
+      id: tm.id,
+      category_id: tm.category_id,
+      names: members.length ? members.map(p => p.name) : [tm.name || "To be decided"],
+      pids: members.map(p => p.id),
+    };
   }
 
   const real = snap.matches.filter(m => !m.is_bye && catRaw.has(m.category_id));
@@ -317,6 +342,18 @@ export function buildTvModel(snap: TvSnapshot, now: number): TvModel | null {
   }
   const playerList: TvPlayer[] = [...pmap.entries()].map(([name, teamIds]) => ({ name, teamIds })).sort((a, b) => a.name.localeCompare(b.name));
 
+  // The same people by id, with their photo, for the player cards.
+  const people: Record<string, TvPerson> = {};
+  for (const tm of Object.values(teams)) {
+    if (!catById[tm.category_id]) continue;
+    tm.pids.forEach((id, i) => {
+      const p = players.get(id);
+      if (!p) return;
+      const person = (people[id] ??= { id, name: tm.names[i], photo: safePhotoUrl(p.photo_url), teamIds: [] });
+      person.teamIds.push(tm.id);
+    });
+  }
+
   const played = matches.filter(m => m.status === "done" && !m.cancelled).length;
   const generatedAt = typeof snap.generated_at === "number" && Number.isFinite(snap.generated_at) ? snap.generated_at * 1000 : null;
 
@@ -333,6 +370,7 @@ export function buildTvModel(snap: TvSnapshot, now: number): TvModel | null {
     queue,
     results,
     players: playerList,
+    people,
     messages: parseMessages(t.tv_messages, now),
     film: t.tv_film_on === true,
     played,
