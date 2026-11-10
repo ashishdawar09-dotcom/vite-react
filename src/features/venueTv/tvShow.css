@@ -147,6 +147,10 @@
 .tvs-stage .b-tag{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:20px;line-height:28px;color:var(--fg-3)}
 .tvs-stage .b-tag.live{color:var(--live)}
 .tvs-stage .b-tag.called{color:var(--call)}
+/* A bracket taller than its panel (fitBrackets): the court tiles and Up next on the same screen
+   already say who is on court and when, so the cards drop their tag line; borders still mark live and called. */
+.tvs-stage .bracket.tight .b-col,.tvs-stage .bracket.tight .b-list{gap:10px}
+.tvs-stage .bracket.tight .b-tag{display:none}
 .tvs-stage .champ{display:flex;align-items:center;gap:48px;height:100%}
 .tvs-stage .champ svg{width:160px;height:160px;flex:none;color:var(--accent)}
 .tvs-stage .champ-cat{font-size:30px;line-height:36px;color:var(--fg-2)}

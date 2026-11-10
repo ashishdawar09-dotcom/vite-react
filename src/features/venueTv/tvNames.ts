@@ -22,7 +22,7 @@ export function teamName(model: TvModel, id: string | null, mode: NameMode, max 
   if (p.length === 1) {
     if (mode === "last") return surname(p[0]);
     if (mode === "fit" && p[0].length > max) {
-      const ini = `${p[0][0]}. ${surname(p[0])}`;
+      const ini = shortPersonName(p[0]);
       return ini.length <= max ? ini : surname(p[0]);
     }
     return p[0];
@@ -30,8 +30,16 @@ export function teamName(model: TvModel, id: string | null, mode: NameMode, max 
   if (mode === "last") return `${surname(p[0])} & ${surname(p[1])}`;
   const full = `${p[0]} & ${p[1]}`;
   if (mode === "full" || full.length <= max) return full;
-  const ini = `${p[0][0]}. ${surname(p[0])} & ${p[1][0]}. ${surname(p[1])}`;
+  // A one-word name stays as it is ("R. Sachdeva & Nilesh", never "N. Nilesh").
+  const ini = `${shortPersonName(p[0])} & ${shortPersonName(p[1])}`;
   return ini.length <= max ? ini : `${surname(p[0])} & ${surname(p[1])}`;
+}
+
+/** A pair's short form, "R. Sachdeva & Nilesh", for a box where the full one doesn't fit. */
+export function shortTeamName(model: TvModel, id: string | null): string {
+  const t = id ? model.teams[id] : null;
+  if (!t) return "To be decided";
+  return t.names.map(shortPersonName).join(" & ");
 }
 
 export function sideLabel(model: TvModel, m: TvMatch, s: "a" | "b", mode: NameMode, max?: number): string {
