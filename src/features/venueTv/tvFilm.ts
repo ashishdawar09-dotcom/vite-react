@@ -5,7 +5,8 @@
 // engine stops it at once for anything live: a court call, a match point or a
 // full-screen desk post.
 
-export const FILM_SRC = "/images/tv/shuttlestorm-tv-launch.mp4";
+// ?v= changes with each new cut so TVs never replay a cached older film (images are cached for a day).
+export const FILM_SRC = "/images/tv/shuttlestorm-tv-launch.mp4?v=15pt";
 const FADE_MS = 600;
 
 export type TvFilm = {

@@ -1,5 +1,5 @@
-// Best-of-3 knockout matches (Shuttle Storm rules: semifinals and finals are
-// best of 3 games to 15; every other match is one game to 21).
+// Best-of-3 knockout matches (each event's "Best of 3 games from" setting;
+// Shuttle Storm plays finals best of 3 games to 15, every other match one game to 15).
 //
 // How a best-of-3 match is stored (see the 20261109120000_best_of_3 migration):
 // - matches.best_of = 3. Every screen asks isBestOf3(m), nothing else.

@@ -27,7 +27,6 @@ import { TeamDetailModal } from "./TeamDetailModal";
  * by hand on request, never from the app.
  */
 export function TeamsTab({
-  tournament,
   categories,
   currentCategoryId,
   setCurrentCategoryId,
@@ -74,8 +73,6 @@ export function TeamsTab({
   const openCard = openIndex >= 0 ? cards[openIndex] : null;
   const formatOptions = cards.length >= 2 ? recommendFormats(cards.length) : [];
   const selectedPlan = formatOptions.find(o => o.label === selectedFormatLabel) ?? formatOptions[0];
-  const courts = Math.max(1, tournament.num_courts || 1);
-  const matchMinutes = currentCategory?.match_minutes ?? 12;
   const accentFor = (label: FormatPlan["label"]) =>
     label === "Recommended" ? "#84cc16" :
     label === "More games" ? "#a855f7" :
@@ -187,9 +184,6 @@ export function TeamsTab({
                   <div className="font-display" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2.5, color: "#93c5fd", textTransform: "uppercase", marginBottom: 4 }}>Tournament Format</div>
                   <div style={{ fontSize: 14, color: "#cbd5e1" }}>Choose how the {cards.length} {singlesDraw ? "players" : "teams"} will compete.</div>
                 </div>
-                <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "right", lineHeight: 1.6 }}>
-                  Estimates assume<br />{courts} court{courts === 1 ? "" : "s"} · {matchMinutes} min/match
-                </div>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`, gap: 12, marginBottom: 22 }}>
@@ -219,7 +213,6 @@ export function TeamsTab({
                       <div style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0", marginBottom: 8, lineHeight: 1.35 }}>{describeFormat(opt)}</div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11, color: "#94a3b8", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8 }}>
                         <span><strong style={{ color: "#fff", fontSize: 13 }}>{opt.totalMatches}</strong> matches</span>
-                        <span>~{opt.estimatedMinutes(matchMinutes, courts)} min</span>
                       </div>
                     </button>
                   );
