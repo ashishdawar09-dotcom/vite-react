@@ -13,6 +13,8 @@ import { annList, callItem, deskItem, matchPointItem, CALL_WINDOW_MIN, type AnnI
 import { catStage, shortStage, sideLabel, sideNames, teamName, type NameMode } from "./tvNames";
 import { ampm, hm } from "./tvTime";
 import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
+import { buildStats, leadersReady, matchupMatches, spotlightPeople, type TvStats } from "./tvStats";
+import { leadersHTML, matchupHTML, spotlightHTML } from "./tvCards";
 
 export type DesignKey = "rotation" | "pinned" | "floorhome" | "sportstv";
 export const DESIGN_ORDER: DesignKey[] = ["rotation", "pinned", "floorhome", "sportstv"];
@@ -62,10 +64,11 @@ const ART_SVG = COURT_SVG.replace('class="mc-lines"', 'class="art"');
 /** Shuttle Storm '26 sponsors, from the tournament website. */
 const SPONSORS = ["Abbotsford Dental Centre", "IBJ Cafe Burgers &amp; Boba", "Kirti Law Corporation", "Novelty Physiotherapy &amp; Wellness", "Pizza 24", "The Polly Fox Bakery &amp; Bistro"];
 
-type Counters = { slide: number; q: number; feat: number; page: number; chan: number; dep: number };
+// pl, mu and ld turn the player spotlight, match-up and leaders boards.
+type Counters = { slide: number; q: number; feat: number; page: number; chan: number; dep: number; pl: number; mu: number; ld: number };
 type Ctx = { v: Counters; enter: boolean };
 type PartFn = (ctx: Ctx) => string;
-type DashKey = "courtside" | "floor" | "broadcast" | "departures" | "finder" | "channels";
+type DashKey = "courtside" | "floor" | "broadcast" | "departures" | "finder" | "channels" | "spotlight" | "matchup" | "leaders";
 type ViewDef = { layout: () => string; parts: Record<string, PartFn>; rot: Partial<Record<keyof Counters, number>> };
 type Scene = { v?: DashKey; name?: string; k?: string; home?: boolean; feat?: boolean; dur: number };
 type ShowDef = { layout: () => string; parts: Record<string, PartFn>; scenes: () => Scene[] };
@@ -106,6 +109,35 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     return `<span>${esc(sideLabel(M!, m, s, mode === "lines" || mode === "lastlines" ? "full" : mode, max))}</span>`;
   }
   const scoreOf = (m: TvMatch, s: "a" | "b") => m.cur[s === "a" ? 0 : 1];
+
+  /* ---------- player boards: stats once per feed update, photos loaded ahead ---------- */
+  let ST: { m: TvModel | null; s: TvStats | null; spot: boolean; mu: boolean; ld: boolean } = { m: null, s: null, spot: false, mu: false, ld: false };
+  function stats(): TvStats {
+    if (ST.m !== M || !ST.s) {
+      const s = buildStats(M!);
+      ST = { m: M, s, spot: spotlightPeople(s).length > 0, mu: matchupMatches(M!).length > 0, ld: leadersReady(s) };
+    }
+    return ST.s!;
+  }
+  /** A photo that failed to load is dropped, so the card shows initials instead of a broken image. */
+  const badPhotos = new Set<string>();
+  const photoOk = (url: string) => !badPhotos.has(url);
+  const preloaded = new Set<string>();
+  function preloadPhotos() {
+    if (!M) return;
+    const s = stats(), urls: string[] = [];
+    for (const p of spotlightPeople(s)) if (p.person.photo) urls.push(p.person.photo);
+    for (const p of s.ranking.slice(0, 5)) if (p.person.photo) urls.push(p.person.photo);
+    for (const m of matchupMatches(M)) for (const t of [m.a, m.b]) for (const id of M.teams[t ?? ""]?.pids ?? []) { const u = M.people[id]?.photo; if (u) urls.push(u); }
+    for (const u of urls) {
+      if (preloaded.has(u)) continue;
+      preloaded.add(u);
+      const im = new Image();
+      im.decoding = "async";
+      im.onerror = () => { if (destroyed || badPhotos.has(u)) return; badPhotos.add(u); refreshParts(); };
+      im.src = u;
+    }
+  }
 
   /* ---------- frame: header with announcements, the moving strip ---------- */
   function clockHTML() { const t = now(); return `${hm(t)}<small>${ampm(t)}</small>`; }
@@ -471,19 +503,44 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       parts: { strip: stripHTML, channel: channelHTML },
       rot: { chan: 12_000 },
     },
+    // The player boards (tvCards.ts). Each only joins the rotation once it has something to show.
+    spotlight: {
+      layout: () => `<div class="tv v-card"><section data-part="spot"></section></div>`,
+      parts: { spot: ctx => spotlightHTML(M!, stats(), ctx.v.pl, ctx.enter, photoOk) },
+      rot: { pl: 8000 },
+    },
+    matchup: {
+      layout: () => `<div class="tv v-card"><section data-part="matchup"></section></div>`,
+      parts: { matchup: ctx => matchupHTML(M!, stats(), ctx.v.mu, ctx.enter, photoOk) },
+      rot: { mu: 10_000 },
+    },
+    leaders: {
+      layout: () => `<div class="tv v-card"><section class="ld-wrap" data-part="leaders"></section></div>`,
+      parts: { leaders: ctx => leadersHTML(M!, stats(), ctx.v.ld, ctx.enter, photoOk) },
+      rot: { ld: 12_000 },
+    },
   };
 
   /* ---------- the four designs ---------- */
   const A_SCENES: Scene[] = [
     { v: "courtside", name: "All courts", dur: 30_000 },
+    { v: "spotlight", name: "Player spotlight", dur: 24_000 },
     { v: "departures", name: "Next to play", dur: 24_000 },
     { v: "floor", name: "Court map", dur: 24_000 },
+    { v: "matchup", name: "Match-up", dur: 20_000 },
     { v: "finder", name: "Find your name", dur: 30_000 },
     { v: "broadcast", name: "Featured match", dur: 24_000 },
+    { v: "leaders", name: "Leaders", dur: 24_000 },
     { v: "departures", name: "Next to play", dur: 24_000 },
     { v: "channels", name: "Categories", dur: 24_000 },
     { v: "finder", name: "Find your name", dur: 30_000 },
   ];
+  /** The rotation's dashboards, leaving out a player board that has nothing to show yet. */
+  function rotationScenes(): Scene[] {
+    if (!M) return A_SCENES.filter(s => s.v !== "spotlight" && s.v !== "matchup" && s.v !== "leaders");
+    stats();
+    return A_SCENES.filter(s => (s.v === "spotlight" ? ST.spot : s.v === "matchup" ? ST.mu : s.v === "leaders" ? ST.ld : true));
+  }
   function stageHTML(ctx: Ctx) {
     const list = boards(), j = (show === "pinned" ? SC.i : Math.floor(SC.i / 2)) % list.length, s = slide(list[j], ctx.v);
     return `<div class="slide-h"><h2>${s.title}</h2><div class="dots">${list.map((_, n) => `<i class="${n === j ? "on" : ""}"></i>`).join("")}</div></div><div class="slide-b${ctx.enter ? " enter" : ""}">${s.body}</div>`;
@@ -501,7 +558,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     rotation: {
       layout: () => `<div class="show">${showHeader()}<main class="scene-wrap" data-slot="scene"></main>${stripFrame()}</div>`,
       parts: {},
-      scenes: () => A_SCENES,
+      scenes: rotationScenes,
     },
     pinned: {
       layout: () => `<div class="show">${showHeader()}<main class="sb">${N() <= 4 ? `<section class="courts" data-part="courts" style="--cols:${N()}"></section>` : `<section class="strip" data-part="strip" style="--cols:${N()}"></section>`}<div class="sb-mid"><section class="panel slides" data-part="stage"></section><section class="panel queue" data-part="queue"></section></div></main>${stripFrame()}</div>`,
@@ -669,7 +726,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   let show: DesignKey = order[0];
   let curView: DashKey | null = null;
   let morphing = false;
-  const VIEW: Counters = { slide: 0, q: 0, feat: 0, page: 0, chan: 0, dep: 0 };
+  const VIEW: Counters = { slide: 0, q: 0, feat: 0, page: 0, chan: 0, dep: 0, pl: 0, mu: 0, ld: 0 };
   const SC = { i: 0, start: Date.now() };
   const resume: Partial<Record<DesignKey, number>> = {};
   let designStart = Date.now();
@@ -840,6 +897,9 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     else if (k === "page") renderPart("finder", true);
     else if (k === "chan") renderPart("channel", true);
     else if (k === "dep") renderPart("nextboard", true);
+    else if (k === "pl") renderPart("spot", true);
+    else if (k === "mu") renderPart("matchup", true);
+    else if (k === "ld") renderPart("leaders", true);
   }
   function rotate(t: number) {
     if (film?.playing()) return;
@@ -863,6 +923,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (destroyed) return;
     const prev = M;
     M = model;
+    preloadPhotos();
     if (!prev || prev.tournament.numCourts !== model.tournament.numCourts) { renderFrame(false); return; }
     // Calls and match points go to the front of the announcement line.
     for (const m of model.courts) {
@@ -938,10 +999,10 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       filmStop: () => { film?.stop(); },
       check() {
         const R0 = stageEl.getBoundingClientRect(), out: string[][] = [];
-        const BOX = ".scene,.panel,.court,.chip,.mcourt,.board,.feature,.bd-hero,.ann,.st,.takeover,.d-row,.q-row,.cl-row,.b-match,.res,.pl,.call-item,.ch-champ,.cl-mini,.channel,.hall,.fh-court,.sh-h,.ti";
+        const BOX = ".scene,.panel,.court,.chip,.mcourt,.board,.feature,.bd-hero,.ann,.st,.takeover,.d-row,.q-row,.cl-row,.b-match,.res,.pl,.call-item,.ch-champ,.cl-mini,.channel,.hall,.fh-court,.sh-h,.ti,.sp,.sp-main,.sp-chips,.sp-ev,.sp-st,.sp-next,.sp-tag,.mu,.mu-head,.mu-side,.mu-pl,.mu-rec,.mu-r,.ld,.ld-hero,.ld-mid,.ld-row,.ld-er";
         const desc = (el: Element) => el.tagName.toLowerCase() + (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).join(".") : "");
         for (const el of Array.from(stageEl.querySelectorAll("*"))) {
-          if (el.closest(".scene.out,.art,.mc-lines,.qr")) continue;
+          if (el.closest(".scene.out,.art,.mc-lines,.qr,.deco")) continue;
           const r = el.getBoundingClientRect(); if (r.width < 0.5 && r.height < 0.5) continue;
           const cs = getComputedStyle(el); if (cs.visibility === "hidden") continue;
           const moving = el.closest(".st-track"), inWin = el.closest(".q-window");
