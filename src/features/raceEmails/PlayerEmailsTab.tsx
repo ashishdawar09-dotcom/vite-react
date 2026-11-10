@@ -4,6 +4,7 @@ import * as db from "../../lib/db";
 import { toast } from "../../components/Toast";
 import { hm, ampm } from "../venueTv/tvTime";
 import { briefingCounts, type BriefingCounts } from "./model";
+import { DeskAlertsCard } from "./DeskAlertsCard";
 
 /**
  * Admin Emails tab: the full-house thank-you, the two player briefings (the
@@ -94,6 +95,8 @@ export function PlayerEmailsTab({ tournament, players }: { tournament: Tournamen
         <span style={{ fontSize: 28 }} aria-hidden="true">✉️</span>
         <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#f8fafc" }}>Player emails</h2>
       </div>
+
+      <DeskAlertsCard tournament={tournament} />
 
       {unavailable ? (
         <section style={card}>

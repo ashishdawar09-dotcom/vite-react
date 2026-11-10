@@ -22,13 +22,17 @@
 // 1. Live matches hold their court until their expected finish.
 // 2. Called matches (court allocated, warming up) hold their court next.
 // 3. Then, whichever court frees first takes the next match the desk would
-//    call: the one that can be called soonest. A match waits for its event's
-//    start time, for its players to be off court (a player entered in two
-//    events counts in both), and (knockout) for the matches that feed it.
-//    Ties go to the event that has waited longest for a court, then the
-//    earlier event start, then the event order. Inside an event the admin's
-//    queue order decides, looking at most LOOKAHEAD matches down the queue for
-//    one whose players are free.
+//    call: the one that can be called soonest, so no court waits while a
+//    match could go on. A match waits for its event's start time, for its
+//    players to be off court (a player entered in two events counts in both),
+//    and (knockout) for the matches that feed it. Ties go to the event earlier
+//    in the tournament's event order (categories.sort_order, the order the
+//    Categories tab shows): the desk finishes the events it started first, and
+//    a later event only takes a court the earlier ones can't use. Events with
+//    the same order take turns (the one that has waited longest for a court),
+//    then the earlier event start. Inside an event the admin's queue order
+//    decides, looking at most LOOKAHEAD matches down the queue for one whose
+//    players are free.
 //
 // An event without its own start time starts with the earliest event that
 // has one, until play is underway; from then on it can go as soon as a court
@@ -456,14 +460,15 @@ export function projectVenue(matches: Match[], categories: Category[], numCourts
         const start = Math.max(at, ready);
         if (!best || start < best.start - TIE_MS) { best = { ev, idx, start }; continue; }
         if (start > best.start + TIE_MS) continue;
-        // Same time: the event that has waited longest, then the earlier
-        // event start, then event order, then queue order.
+        // Same time: the event earlier in the event order, then (same order)
+        // the event that has waited longest, then the earlier event start,
+        // then queue order.
         const b = best.ev;
         const better =
           ev !== b
-            ? ev.last !== b.last ? ev.last < b.last
+            ? ev.cat.sort_order !== b.cat.sort_order ? ev.cat.sort_order < b.cat.sort_order
+              : ev.last !== b.last ? ev.last < b.last
               : ev.start !== b.start ? ev.start < b.start
-              : ev.cat.sort_order !== b.cat.sort_order ? ev.cat.sort_order < b.cat.sort_order
               : ev.index < b.index
             : idx < best.idx;
         if (better) best = { ev, idx, start };

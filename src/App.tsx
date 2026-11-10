@@ -1,4 +1,4 @@
-import React, { Suspense, createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { Suspense, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { lazyWithReload } from "./lib/lazyWithReload";
 import { motion } from "framer-motion"; /* NEW: makeover motion */
 import * as Sentry from "@sentry/react";
@@ -6,6 +6,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useIsMobile } from "./hooks/useIsMobile"; /* NEW: mobile IA detection */
 import { useTournamentData } from "./hooks/useTournamentData";
 import { useTournamentDerived } from "./hooks/useTournamentDerived";
+import { useOnDeckAlerts } from "./hooks/useOnDeckAlerts";
 import * as db from "./lib/db";
 import { supabase } from "./lib/supabase";
 import { closeChannel, openChannel } from "./lib/realtimeChannels";
@@ -233,6 +234,10 @@ export default function App() {
     tournamentDeltaLabel,
     liveByCourt,
   } = useTournamentDerived(current, players, teams, matches, categories, playerCategories, currentCategoryId);
+
+  // "You're up soon" for the players of each match about to be called (admins' devices, on the day).
+  const sittingOutTeam = useCallback((teamId: string) => teamSittingOut(allTeamById[teamId]), [allTeamById]);
+  useOnDeckAlerts({ enabled: isAdmin && !!current, eventDate: current?.event_date ?? null, projected: projectedMatches, numCourts, sittingOut: sittingOutTeam });
 
   // Sync the in-progress inline category-edit set with the underlying map.
   // - Open editor: seed local set from current memberships
@@ -628,6 +633,19 @@ export default function App() {
     if (!last || !last[0] || !last[0].confirmed || !last[0].winner_id) return null;
     return teamById[last[0].winner_id] ?? null;
   })();
+
+  // Courts the picker shows as busy: playing, or holding a called match whose
+  // players are warming up (picking one of those is refused anyway).
+  const busyCourtSet = new Set<number>([
+    ...Object.keys(liveByCourt).map(Number),
+    ...matches.filter(m => m.court_allocated_at && !m.started_at && !m.confirmed && m.court_number != null).map(m => m.court_number!),
+  ]);
+
+  // The Live tab's "groups done" prompt: that event's Groups tab, where Start Knockout is.
+  const openGroupsFor = (categoryId: string) => {
+    setCurrentCategoryId(categoryId);
+    setTab("groups");
+  };
 
   // Open the court picker for a pending match (must have both teams)
   const startMatchHandler = (id: string) => {
@@ -1102,7 +1120,7 @@ export default function App() {
           </div>
         )}
 
-        {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} players={players} playerCategories={playerCategories} onShowProfile={showProfile} />}
+        {current && tab === "live" && <LiveTab teamsView={allTeamsView} allTeamById={allTeamById} matches={matches} groupMatches={groupMatches} knockoutMatches={knockoutMatches} phase={phase} groups={groups} getStandings={getStandings} categories={categories} numCourts={numCourts} liveByCourt={liveByCourt} projectedById={projectedById} projectedMatches={projectedMatches} players={players} playerCategories={playerCategories} onShowProfile={showProfile} onCall={isAdmin ? startMatchHandler : undefined} onOpenGroups={isAdmin ? openGroupsFor : undefined} />}
 
         {current && tab === "matches" && (
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
@@ -1403,7 +1421,7 @@ export default function App() {
       {pickingCourtFor && (
         <CourtPicker
           numCourts={numCourts}
-          busyCourts={new Set(Object.keys(liveByCourt).map(Number))}
+          busyCourts={busyCourtSet}
           onPick={c => startMatchOnCourt(pickingCourtFor, c)}
           onCancel={() => setPickingCourtFor(null)}
         />
