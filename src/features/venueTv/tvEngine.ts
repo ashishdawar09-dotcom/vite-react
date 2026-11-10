@@ -15,6 +15,7 @@ import { ampm, hm } from "./tvTime";
 import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
 import { buildStats, leadersReady, matchupMatches, spotlightPeople, type TvStats } from "./tvStats";
 import { leadersHTML, matchupHTML, spotlightHTML } from "./tvCards";
+import { matchPointAt, matchPointKey } from "./tvMatchPoint";
 
 export type DesignKey = "rotation" | "pinned" | "floorhome" | "sportstv";
 export const DESIGN_ORDER: DesignKey[] = ["rotation", "pinned", "floorhome", "sportstv"];
@@ -73,8 +74,6 @@ type ViewDef = { layout: () => string; parts: Record<string, PartFn>; rot: Parti
 type Scene = { v?: DashKey; name?: string; k?: string; home?: boolean; feat?: boolean; dur: number };
 type ShowDef = { layout: () => string; parts: Record<string, PartFn>; scenes: () => Scene[] };
 
-function gameOver(a: number, b: number, to: number, cap: number) { const hi = Math.max(a, b), lo = Math.min(a, b); return (hi >= to && hi - lo >= 2) || hi >= cap; }
-
 export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow {
   const RM = window.matchMedia("(prefers-reduced-motion: reduce)");
   const now = opts.now;
@@ -98,10 +97,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
   function ago(t: number | null) { if (!t) return ""; const d = Math.floor((now() - t) / MIN); return d < 1 ? "Just now" : d < 60 ? `${d} min ago` : `${hm(t)} ${ampm(t)}`; }
   function pointBadge(m: TvMatch): { text: string; cls: string } | null {
     if (m.ending) return { text: "Final score", cls: "soft" };
-    if (m.bestOf3 || m.status !== "live") return null;
-    const [a, b] = m.cur;
-    if (!gameOver(a, b, 21, 30) && (gameOver(a + 1, b, 21, 30) || gameOver(a, b + 1, 21, 30))) return { text: "Match point", cls: "" };
-    return null;
+    return matchPointAt(m) ? { text: "Match point", cls: "" } : null;
   }
   function namesHTML(m: TvMatch, s: "a" | "b", mode: "lines" | "lastlines" | NameMode, max?: number) {
     if (m[s] && mode === "lines") return sideNames(M!, m, s).map(n => `<span>${esc(n)}</span>`).join("");
@@ -929,8 +925,8 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     for (const m of model.courts) {
       if (!m) continue;
       if (m.status === "called" && !ANN.calls.has(m.id)) { ANN.calls.add(m.id); if (prev.courts.every(x => x?.id !== m.id || x.status !== "called")) { filmYield(); annForce(callItem(model, m)); } }
-      const b = pointBadge(m);
-      if (b && b.text === "Match point" && !ANN.mp.has(m.id)) { ANN.mp.add(m.id); filmYield(); annForce(matchPointItem(model, m)); cutTo(m.court!, m); }
+      const mp = matchPointAt(m) ? matchPointKey(m) : null;
+      if (mp && !ANN.mp.has(mp)) { ANN.mp.add(mp); filmYield(); annForce(matchPointItem(model, m)); cutTo(m.court!, m); }
     }
     // Desk posts marked full screen take over once, when they are new.
     for (const d of model.messages) {
@@ -948,10 +944,10 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       if (a && b && (a.cur[0] !== b.cur[0] || a.cur[1] !== b.cur[1])) patchCourt(c);
     }
   }
-  /* sports TV: cut to a court the first time its match reaches match point */
+  /* sports TV: cut to a court the first time its match (each game of a best of 3) reaches match point */
   function cutTo(c: number, m: TvMatch) {
-    if (show !== "sportstv" || D.cutFor === m.id) return;
-    D.cutFor = m.id;
+    if (show !== "sportstv" || D.cutFor === matchPointKey(m)) return;
+    D.cutFor = matchPointKey(m);
     const sc = curScene();
     if (!sc.feat || heroCourt({ v: VIEW, enter: false }) === c) return;
     D.cut = { court: c, until: now() + 15_000 };
