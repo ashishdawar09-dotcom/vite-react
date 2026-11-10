@@ -12,14 +12,14 @@ export function CategoryEditor({
   category,
   players,
   playerCategories,
-  numCourts,
   onClose,
 }: {
   tournamentId: string;
   category?: Category;
   players: Player[];
   playerCategories: PlayerCategory[];
-  numCourts: number;
+  /** Kept for callers; the format cards no longer estimate minutes (they divided by courts). */
+  numCourts?: number;
   onClose: () => void;
 }) {
   const [name, setName] = useState(category?.name ?? "");
@@ -294,14 +294,11 @@ export function CategoryEditor({
                     </div>
                     <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 4, lineHeight: 1.3 }}>{describeFormat(opt)}</div>
                     <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                      {opt.totalMatches} match{opt.totalMatches === 1 ? "" : "es"} · ~{opt.estimatedMinutes(matchMin, Math.max(1, numCourts))} min
+                      {opt.totalMatches} match{opt.totalMatches === 1 ? "" : "es"}
                     </div>
                   </button>
                 );
               })}
-            </div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
-              Time estimates assume {numCourts} court{numCourts === 1 ? "" : "s"} running in parallel · {matchMin} min/match.
             </div>
           </Field>
         )}
@@ -401,8 +398,8 @@ function pricePreview(raw: string, teamSize: 1 | 2, basis: PriceBasis): string {
 
 /** Which knockout rounds the setting makes best of 3, for the hint under it. */
 function bestOf3Help(v: BestOf3From | null): string {
-  if (v === "qf") return "Quarterfinals, semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 21.";
-  if (v === "sf") return "Semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 21.";
-  if (v === "final") return "Final and bronze match: best of 3 games to 15. Earlier rounds: one game to 21.";
-  return "Every match is one game to 21.";
+  if (v === "qf") return "Quarterfinals, semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 15.";
+  if (v === "sf") return "Semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 15.";
+  if (v === "final") return "Final and bronze match: best of 3 games to 15. Earlier rounds: one game to 15.";
+  return "Every match is one game to 15.";
 }
