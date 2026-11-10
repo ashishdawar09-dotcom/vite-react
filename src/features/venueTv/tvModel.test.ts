@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Category, Match, Player, Team, Tournament } from "../../types";
 import { bracketOf, buildTvModel, FINAL_SCORE_HOLD_MS, parseMessages, shortCategoryName, standingsOf, tvStatus, type TvSnapshot } from "./tvModel";
-import { annList } from "./tvAnnouncements";
+import { annList, matchPointItem } from "./tvAnnouncements";
+import { matchPointAt } from "./tvMatchPoint";
 import { teamName } from "./tvNames";
 import { ampm, clockSkewMs, hm } from "./tvTime";
 import { projectSchedule } from "../../lib/projection";
@@ -250,5 +251,39 @@ describe("venue TV announcements", () => {
     const l = annList(m, 0, "x");
     expect(l.filter(x => x.type === "desk").length).toBeGreaterThanOrEqual(3);
     for (let i = 0; i < l.length; i += 3) expect(l[i].type).toBe("desk");
+  });
+});
+
+describe("venue TV match point, from the feed", () => {
+  it("a live one-game match at 14–10 is at match point, and its announcement names the court", () => {
+    const snap = fixture();
+    Object.assign(snap.matches.find(x => x.id === "g3")!, { score_a: 14, score_b: 10 });
+    const m = buildTvModel(snap, NOW)!, g3 = m.courts[0]!;
+    expect(g3.id).toBe("g3");
+    expect(matchPointAt(g3)).toBe(true);
+    const ann = matchPointItem(m, g3);
+    expect(ann.tag).toBe("Match point");
+    expect(ann.main.startsWith("Court 1:")).toBe(true);
+  });
+
+  it("a game to 21 left over from before (20–17) is not match point", () => {
+    const m = buildTvModel(fixture(), NOW)!;
+    expect(m.courts[0]!.cur).toEqual([20, 17]);
+    expect(matchPointAt(m.courts[0]!)).toBe(false);
+  });
+
+  it("reads a live best-of-3 match's games: game 2 for the side a game up, never game 1", () => {
+    const snap = fixture();
+    const k2 = snap.matches.find(x => x.id === "k2")!;
+    Object.assign(k2, { status: "live", best_of: 3, games: [[15, 12]], score_a: 14, score_b: 10, court_number: 4, court_allocated_at: iso(NOW - 20 * MIN), started_at: iso(NOW - 18 * MIN) });
+    let m = buildTvModel(snap, NOW)!;
+    expect(m.courts[3]!.id).toBe("k2");
+    expect(matchPointAt(m.courts[3]!)).toBe(true);
+    Object.assign(k2, { score_a: 10, score_b: 14 });
+    m = buildTvModel(snap, NOW)!;
+    expect(matchPointAt(m.courts[3]!)).toBe(false);
+    Object.assign(k2, { games: null, score_a: 14, score_b: 10 });
+    m = buildTvModel(snap, NOW)!;
+    expect(matchPointAt(m.courts[3]!)).toBe(false);
   });
 });
