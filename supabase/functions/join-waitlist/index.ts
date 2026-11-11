@@ -1,12 +1,15 @@
 // supabase/functions/join-waitlist/index.ts
 //
 // Public endpoint behind the "we're full" page: puts someone on a
-// tournament's waitlist (name, mobile number, email) and emails the
-// directors (tournaments.admin_notify_emails), who contact them if a spot
-// opens up. Joining again with the same email updates the name and number
-// and sends no second email.
+// tournament's waitlist (name, mobile number, email and the event they'd
+// like to play) and emails the directors (tournaments.admin_notify_emails),
+// who contact them if a spot opens up. Joining again with the same email
+// updates the name, number and event and sends no second email.
 //
-//   POST { tournament_id, name, email, phone, website? } → { success, already? }
+//   POST { tournament_id, name, email, phone, category_id?, website? } → { success, already? }
+//
+// category_id must be one of the tournament's events. It's optional so a form
+// cached from before the event field still works; the form itself requires it.
 //
 // `website` is the form's hidden honeypot: bots that fill it get a normal
 // answer and nothing is stored.
@@ -50,6 +53,8 @@ serveWithCors(async (req: Request) => {
     return json({ success: false, error: "Enter a mobile number with 10 to 15 digits." }, 400);
   }
   if (!email || !EMAIL_RE.test(email)) return json({ success: false, error: "Enter an email address like name@example.com." }, 400);
+  const hasCategory = body.category_id !== undefined && body.category_id !== null && body.category_id !== "";
+  if (hasCategory && !isUuid(body.category_id)) return json({ success: false, error: "Choose the event you'd like to play." }, 400);
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   if (!(await allowClient(supabase, req, "join-waitlist", 10, 600))) {
@@ -64,17 +69,26 @@ serveWithCors(async (req: Request) => {
     return json({ success: false, error: "Too many requests" }, 429);
   }
 
+  let category: { id: string; name: string } | null = null;
+  if (hasCategory) {
+    const { data: c } = await supabase.from("categories")
+      .select("id, name").eq("id", body.category_id).eq("tournament_id", t.id).maybeSingle();
+    if (!c) return json({ success: false, error: "Choose the event you'd like to play." }, 400);
+    category = c;
+  }
+
   const { data: existing } = await supabase.from("registration_waitlist")
     .select("id").eq("tournament_id", t.id).eq("email", email).maybeSingle();
   if (existing) {
     const { error } = await supabase.from("registration_waitlist")
-      .update({ name, phone, updated_at: new Date().toISOString() }).eq("id", existing.id);
+      .update({ name, phone, ...(category ? { category_id: category.id } : {}), updated_at: new Date().toISOString() })
+      .eq("id", existing.id);
     if (error) console.error("join-waitlist update failed:", error.message);
     return json({ success: true, already: true }, 200);
   }
 
   const { data: row, error } = await supabase.from("registration_waitlist")
-    .insert({ tournament_id: t.id, name, email, phone }).select("id").single();
+    .insert({ tournament_id: t.id, name, email, phone, category_id: category?.id ?? null }).select("id").single();
   if (error || !row) {
     // Two joins with one address at once: the other one saved it.
     if (error && /duplicate key/i.test(error.message)) return json({ success: true, already: true }, 200);
@@ -89,7 +103,7 @@ serveWithCors(async (req: Request) => {
   if (directors.length) {
     const err = await sendEmail({
       to: directors, fromName: t.name, replyTo: email,
-      ...waitlistAlert({ tournament: t.name, name, email, phone, position: count ?? 1 }),
+      ...waitlistAlert({ tournament: t.name, name, email, phone, event: category?.name ?? null, position: count ?? 1 }),
     });
     status = err ? `failed: ${err.slice(0, 160)}` : "sent";
     if (err) console.error("join-waitlist alert failed:", err);

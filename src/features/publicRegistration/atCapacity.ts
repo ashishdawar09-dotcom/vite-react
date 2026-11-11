@@ -38,7 +38,7 @@ export function phoneHref(kind: "tel" | "sms", phone: string): string {
   return `${kind}:${digits}`;
 }
 
-export type WaitlistForm = { name: string; phone: string; email: string };
+export type WaitlistForm = { name: string; phone: string; email: string; category_id: string };
 export type WaitlistErrors = Partial<Record<keyof WaitlistForm, string>>;
 
 export function waitlistErrors(f: WaitlistForm): WaitlistErrors {
@@ -49,6 +49,7 @@ export function waitlistErrors(f: WaitlistForm): WaitlistErrors {
   else if (digits.length < 10 || digits.length > 15) e.phone = "Enter a mobile number with 10 to 15 digits.";
   if (!f.email.trim()) e.email = "Enter your email address.";
   else if (!EMAIL_RE.test(f.email.trim())) e.email = "Enter an email address like name@example.com.";
+  if (!f.category_id) e.category_id = "Choose the event you'd like to play.";
   return e;
 }
 

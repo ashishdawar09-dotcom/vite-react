@@ -1048,6 +1048,7 @@ export type WaitlistEntry = {
   name: string;
   email: string;
   phone: string;
+  category_id?: string; // the event they'd like to play
   website?: string; // honeypot, left empty by people
 };
 
@@ -1057,11 +1058,14 @@ export type WaitlistEntry = {
 export async function listRegistrationWaitlist(tournament_id: string): Promise<WaitlistRow[]> {
   const { data, error } = await supabase
     .from("registration_waitlist")
-    .select("id, name, email, phone, created_at, admin_email_status")
+    .select("id, name, email, phone, created_at, admin_email_status, category_id, categories(name)")
     .eq("tournament_id", tournament_id)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as WaitlistRow[];
+  return (data ?? []).map(({ categories, ...r }) => ({
+    ...r,
+    category_name: (categories as { name: string } | null)?.name ?? null,
+  })) as WaitlistRow[];
 }
 
 export type WaitlistRow = {
@@ -1071,6 +1075,8 @@ export type WaitlistRow = {
   phone: string; // digits only, as join-waitlist stores it
   created_at: string;
   admin_email_status: string | null;
+  category_id: string | null; // the event they'd like to play (null before Nov 11 2026)
+  category_name: string | null;
 };
 
 // Puts someone on a full tournament's waitlist (join-waitlist Edge Function,

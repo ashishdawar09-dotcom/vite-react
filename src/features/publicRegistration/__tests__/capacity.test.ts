@@ -114,14 +114,15 @@ describe("parseContacts", () => {
 });
 
 describe("waitlist form checks", () => {
-  it("needs a name, a 10 to 15 digit number and a real email", () => {
-    expect(waitlistErrors({ name: "", phone: "", email: "" })).toEqual({
+  it("needs a name, a 10 to 15 digit number, a real email and an event", () => {
+    expect(waitlistErrors({ name: "", phone: "", email: "", category_id: "" })).toEqual({
       name: "Enter your full name.", phone: "Enter your mobile number.", email: "Enter your email address.",
+      category_id: "Choose the event you'd like to play.",
     });
-    expect(waitlistErrors({ name: "Jas Gill", phone: "604555", email: "jas@" })).toEqual({
+    expect(waitlistErrors({ name: "Jas Gill", phone: "604555", email: "jas@", category_id: "c1" })).toEqual({
       phone: "Enter a mobile number with 10 to 15 digits.", email: "Enter an email address like name@example.com.",
     });
-    expect(waitlistErrors({ name: "Jas Gill", phone: "6045550123", email: "jas@example.com" })).toEqual({});
+    expect(waitlistErrors({ name: "Jas Gill", phone: "6045550123", email: "jas@example.com", category_id: "c1" })).toEqual({});
   });
 });
 

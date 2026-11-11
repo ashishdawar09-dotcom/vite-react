@@ -462,8 +462,8 @@ export function PublicRegistrationPage() {
           <FullHouse
             tournament={tournament}
             capacity={capacity}
-            eventCount={categories.length}
-            prefill={{ name: flow.player_name, email: flow.player_email, phone: flow.player_phone }}
+            categories={categories}
+            prefill={{ name: flow.player_name, email: flow.player_email, phone: flow.player_phone, category_id: wantedCategory ?? flow.category_ids[0] ?? "" }}
             socials={TOURNAMENT_SOCIALS[tournament.id]}
           />
         </Suspense>
