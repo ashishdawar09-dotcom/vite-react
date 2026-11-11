@@ -20,3 +20,13 @@ Deno.test("waitlistAlert escapes what people type", () => {
   assert(!m.html.includes("<b>x</b>"));
   assertStringIncludes(m.html, "&lt;b&gt;x&lt;/b&gt;");
 });
+
+Deno.test("waitlistAlert names the event when one was chosen", () => {
+  const m = waitlistAlert({
+    tournament: "Shuttle Storm Abbotsford 2026", name: "Jas Gill", email: "jas@example.com", phone: "6045550123",
+    event: "Mixed Doubles 18–34", position: 4,
+  });
+  assertEquals(m.subject, "Waitlist #4: Jas Gill wants a spot in Mixed Doubles 18–34 at Shuttle Storm Abbotsford 2026");
+  assertStringIncludes(m.text, "Event: Mixed Doubles 18–34");
+  assert(!waitlistAlert({ tournament: "T", name: "A B", email: "a@b.co", phone: "6045550123", event: null, position: 1 }).text.includes("Event:"));
+});

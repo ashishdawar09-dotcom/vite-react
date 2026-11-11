@@ -59,12 +59,13 @@ function csvPhone(digits: string): string {
 }
 
 export function waitlistCsv(rows: WaitlistRow[]): string {
-  const head = ["Place", "Name", "Mobile", "Email", "Joined date", "Joined time", "Alert email"];
+  const head = ["Place", "Name", "Event", "Mobile", "Email", "Joined date", "Joined time", "Alert email"];
   const lines = rows.map((r, i) => {
     const at = new Date(r.created_at);
     return [
       String(i + 1),
       r.name,
+      r.category_name ?? "",
       csvPhone(r.phone),
       r.email,
       dateFmt.format(at),

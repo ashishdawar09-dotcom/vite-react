@@ -10,6 +10,8 @@ const row = (over: Partial<WaitlistRow> = {}): WaitlistRow => ({
   // Nov 8 2026, 3:12 pm in Abbotsford (UTC-7 year-round from Nov 1, 2026).
   created_at: "2026-11-08T22:12:00Z",
   admin_email_status: "sent",
+  category_id: "c1",
+  category_name: "Mixed Doubles 18–34",
   ...over,
 });
 
@@ -47,12 +49,15 @@ describe("alertProblem", () => {
 
 describe("waitlistCsv", () => {
   it("numbers people in the order given and formats each column", () => {
-    const csv = waitlistCsv([row(), row({ id: "w2", name: "Mei Chen", phone: "7785550000", admin_email_status: null })]);
+    const csv = waitlistCsv([
+      row(),
+      row({ id: "w2", name: "Mei Chen", phone: "7785550000", admin_email_status: null, category_id: null, category_name: null }),
+    ]);
     const [head, a, b] = csv.split("\n");
-    expect(head).toBe("Place,Name,Mobile,Email,Joined date,Joined time,Alert email");
-    expect(a.startsWith("1,Harpreet Sandhu,604 555 1234,harpreet@example.com,")).toBe(true);
+    expect(head).toBe("Place,Name,Event,Mobile,Email,Joined date,Joined time,Alert email");
+    expect(a.startsWith("1,Harpreet Sandhu,Mixed Doubles 18–34,604 555 1234,harpreet@example.com,")).toBe(true);
     expect(a.endsWith(",sent")).toBe(true);
-    expect(b.startsWith("2,Mei Chen,778 555 0000,")).toBe(true);
+    expect(b.startsWith("2,Mei Chen,,778 555 0000,")).toBe(true);
     expect(b.endsWith(",")).toBe(true);
   });
 
@@ -77,6 +82,6 @@ describe("waitlistCsv", () => {
   });
 
   it("is just the header for an empty list", () => {
-    expect(waitlistCsv([])).toBe("Place,Name,Mobile,Email,Joined date,Joined time,Alert email");
+    expect(waitlistCsv([])).toBe("Place,Name,Event,Mobile,Email,Joined date,Joined time,Alert email");
   });
 });

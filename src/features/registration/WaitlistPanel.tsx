@@ -121,6 +121,9 @@ export function WaitlistPanel({ tournament, isAdmin }: Props) {
                         <span aria-label={`Place ${i + 1}`} style={placeStyle}>#{i + 1}</span>
                         <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 15, color: colors.text.primaryLight, overflowWrap: "anywhere" }}>{r.name}</div>
+                          <div data-testid="waitlist-event" style={{ fontSize: 13, fontWeight: 600, color: r.category_name ? colors.text.primaryLight : colors.text.subtleLight, marginTop: 2 }}>
+                            {r.category_name ?? "No event chosen"}
+                          </div>
                           <div style={{ fontSize: 13, color: colors.text.mutedLight, marginTop: 2, ...typography.tabular, overflowWrap: "anywhere" }}>
                             {prettyPhone(r.phone)} · {r.email}
                           </div>

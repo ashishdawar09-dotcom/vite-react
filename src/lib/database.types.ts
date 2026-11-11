@@ -856,6 +856,7 @@ export type Database = {
       registration_waitlist: {
         Row: {
           admin_email_status: string | null
+          category_id: string | null
           created_at: string
           email: string
           id: string
@@ -866,6 +867,7 @@ export type Database = {
         }
         Insert: {
           admin_email_status?: string | null
+          category_id?: string | null
           created_at?: string
           email: string
           id?: string
@@ -876,6 +878,7 @@ export type Database = {
         }
         Update: {
           admin_email_status?: string | null
+          category_id?: string | null
           created_at?: string
           email?: string
           id?: string
@@ -885,6 +888,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "registration_waitlist_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "registration_waitlist_tournament_id_fkey"
             columns: ["tournament_id"]

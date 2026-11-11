@@ -7,10 +7,15 @@ export function prettyPhone(digits: string): string {
   return digits.length === 10 ? `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}` : digits;
 }
 
-export function waitlistAlert(d: { tournament: string; name: string; email: string; phone: string; position: number }) {
-  const subject = `Waitlist #${d.position}: ${d.name} wants a spot at ${d.tournament}`;
+export function waitlistAlert(d: {
+  tournament: string; name: string; email: string; phone: string; event?: string | null; position: number;
+}) {
+  const subject = d.event
+    ? `Waitlist #${d.position}: ${d.name} wants a spot in ${d.event} at ${d.tournament}`
+    : `Waitlist #${d.position}: ${d.name} wants a spot at ${d.tournament}`;
   const lines = [
     `${d.name} joined the waitlist for ${d.tournament}. Entries are full, so the form offered the waitlist instead.`,
+    ...(d.event ? [`Event: ${d.event}`] : []),
     `Mobile: ${prettyPhone(d.phone)}`,
     `Email: ${d.email}`,
     `${d.position} ${d.position === 1 ? "person is" : "people are"} on the waitlist now. Reply to this email to write to ${d.name}.`,

@@ -1,5 +1,6 @@
 // Shown instead of the form once every entry is taken: a thank you, the
-// waitlist (name, mobile number, email) and how to reach the organizers.
+// waitlist (name, mobile number, email, the event they'd like) and how to
+// reach the organizers.
 // One primary action, the waitlist; everything else supports it.
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -8,14 +9,14 @@ import { joinRegistrationWaitlist } from "../../lib/db";
 import { PRIVACY_URL, isTestEmail, trackEvent } from "../../lib/analytics";
 import { captureError } from "../../lib/sentry";
 import { formatClubNumber, waLink } from "../../lib/whatsapp";
-import type { Tournament } from "../../types";
+import type { Category, Tournament } from "../../types";
 import { type Capacity } from "./capacity";
 import { eventWhen, parseContacts, phoneHref, taglineText, waitlistErrors, type WaitlistErrors, type WaitlistForm } from "./atCapacity";
 import { Net } from "./SpotsMeter";
 import { Button, Field, Note, TextInput } from "./ss/parts";
 import { IconArrowRight, IconChat, IconCheck, IconEnvelope, IconFacebook, IconInstagram, IconMapPin, IconPhone } from "./ss/icons";
 import { ease, radius, space, type } from "./ss/scale";
-import { ss } from "./ss/theme";
+import { inputStyle, ss } from "./ss/theme";
 
 export type Socials = { instagram?: string; facebook?: string };
 
@@ -115,7 +116,7 @@ function WaitlistDone({ name, email, already, onEdit }: { name: string; email: s
       <p className="ss-pretty" style={{ ...type.body3, margin: `${space[75]}px 0 0`, color: ss.body }}>
         {already
           ? "We've updated your details. If a spot opens up, the organizers will contact you."
-          : "The organizers have your name, number and email. If a spot opens up, they'll contact you."}
+          : "The organizers have your name, number, email and event. If a spot opens up, they'll contact you."}
         {" "}We'll use <span style={{ color: ss.bone }}>{email}</span>.
       </p>
       <button type="button" onClick={onEdit} className="ss-quiet-link" style={{
@@ -127,10 +128,11 @@ function WaitlistDone({ name, email, already, onEdit }: { name: string; email: s
   );
 }
 
-export function FullHouse({ tournament, capacity, eventCount, prefill, socials }: {
+export function FullHouse({ tournament, capacity, categories, prefill, socials }: {
   tournament: Tournament;
   capacity: Capacity;
-  eventCount: number;
+  // Every event, for the waitlist's "which event" dropdown.
+  categories: Category[];
   // Details already typed into the form on this device, if any.
   prefill?: Partial<WaitlistForm>;
   socials?: Socials;
@@ -139,7 +141,9 @@ export function FullHouse({ tournament, capacity, eventCount, prefill, socials }
   const nameId = useId();
   const [form, setForm] = useState<WaitlistForm>({
     name: prefill?.name ?? "", phone: digitsOnly(prefill?.phone ?? ""), email: prefill?.email ?? "",
+    category_id: prefill?.category_id && categories.some((c) => c.id === prefill.category_id) ? prefill.category_id : "",
   });
+  const events = useMemo(() => [...categories].sort((a, b) => a.sort_order - b.sort_order), [categories]);
   const [errors, setErrors] = useState<WaitlistErrors>({});
   const [shown, setShown] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "done" | "already">("idle");
@@ -174,13 +178,15 @@ export function FullHouse({ tournament, capacity, eventCount, prefill, socials }
     setShown(true);
     setErrors(errs);
     if (Object.keys(errs).length) {
-      document.querySelector<HTMLElement>("#waitlist [aria-invalid='true']")?.focus();
+      // After React has marked the fields invalid, so the first one is found.
+      window.setTimeout(() => document.querySelector<HTMLElement>("#waitlist [aria-invalid='true']")?.focus(), 0);
       return;
     }
     setState("sending");
     setServerError(null);
     const res = await joinRegistrationWaitlist({
-      tournament_id: tournament.id, name: form.name.trim(), email: form.email.trim().toLowerCase(), phone: form.phone, website,
+      tournament_id: tournament.id, name: form.name.trim(), email: form.email.trim().toLowerCase(), phone: form.phone,
+      category_id: form.category_id, website,
     });
     if (res.success) {
       setState(res.already ? "already" : "done");
@@ -282,7 +288,16 @@ export function FullHouse({ tournament, capacity, eventCount, prefill, socials }
               {(p) => <TextInput {...p} type="tel" inputMode="numeric" autoComplete="tel" enterKeyHint="next" value={form.phone} onChange={(e) => set("phone", digitsOnly(e.target.value))} />}
             </Field>
             <Field label="Email" required error={errors.email}>
-              {(p) => <TextInput {...p} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} enterKeyHint="send" value={form.email} onChange={(e) => set("email", e.target.value)} />}
+              {(p) => <TextInput {...p} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} enterKeyHint="next" value={form.email} onChange={(e) => set("email", e.target.value)} />}
+            </Field>
+            <Field label="Which event would you like to play?" required error={errors.category_id}
+              hint="Pick the one you'd most like. Tell the organizers about any others when they contact you.">
+              {(p) => (
+                <select {...p} name="category" className="ss-input" value={form.category_id} onChange={(e) => set("category_id", e.target.value)} style={{ ...inputStyle }}>
+                  <option value="">Choose an event</option>
+                  {events.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
             </Field>
             {serverError && <div style={{ marginBottom: space[200] }}><Note tone="danger">{serverError}</Note></div>}
             <Button type="submit" disabled={state === "sending"} style={{ width: "100%" }}>
@@ -297,8 +312,8 @@ export function FullHouse({ tournament, capacity, eventCount, prefill, socials }
 
         <ol style={{ listStyle: "none", padding: 0, margin: `${space[400]}px 0 0`, display: "grid", gap: space[300] }}>
           {[
-            ["You join the waitlist", "Your name, number and email go straight to the tournament directors."],
-            ["A spot opens up", "When a player withdraws, their spot comes free."],
+            ["You join the waitlist", "Your name, number, email and event go straight to the tournament directors."],
+            ["A spot opens up", "When a player withdraws, their spot in that event comes free."],
             ["We contact you", "By phone, text or email, using the details you leave here."],
           ].map(([title, body], i) => (
             <li key={title} style={{ display: "flex", gap: space[200], alignItems: "flex-start" }}>
@@ -315,7 +330,7 @@ export function FullHouse({ tournament, capacity, eventCount, prefill, socials }
         </ol>
       </Reveal>
 
-      <TaglineReveal text={taglineText(tournament, capacity.cap, eventCount)} />
+      <TaglineReveal text={taglineText(tournament, capacity.cap, categories.length)} />
 
       {/* ---------- The organizers ---------- */}
       {(people.length > 0 || chat) && (
@@ -361,7 +376,7 @@ export function FullHouse({ tournament, capacity, eventCount, prefill, socials }
             ["Does joining the waitlist cost anything?",
               "No. You only pay if a spot opens up and you take it."],
             ["Can I choose my events?",
-              "Yes. Tell the organizers which events you want when they contact you."],
+              "Yes. Pick the event you'd most like on the waitlist form, and tell the organizers about any others when they contact you."],
             ["How will I hear if a spot opens up?",
               "The organizers will call, text or email you, using the details you leave on the waitlist."],
           ].map(([q, a]) => (
