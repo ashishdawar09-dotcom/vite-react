@@ -388,9 +388,11 @@ async function handle(req: Request): Promise<Response> {
     // The partner's entry names this player and paid for both of them, and
     // this entry names that partner back: it would pay the same share twice.
     // Only an exact match is refused, and the message names nobody, so typing
-    // someone's email doesn't reveal who entered with them. The waiver they
-    // just accepted is kept as the partner's acceptance on that entry, and an
-    // e-Transfer (sent before submitting) is flagged to the directors.
+    // someone's email doesn't reveal who entered with them. Nothing is written
+    // to that entry: the email typed here isn't verified, so the partner
+    // accepts the waiver only through their own emailed link (the entry's
+    // partner_consent_token). An e-Transfer (sent before submitting) is
+    // flagged to the directors.
     for (const p of prepared) {
       if (!p.partnerEmail) continue;
       const { data: covered } = await supabase
@@ -403,17 +405,6 @@ async function handle(req: Request): Promise<Response> {
         .eq("payment_paid_full_for_partner", true)
         .limit(1);
       if (!covered?.length) continue;
-      if (consent) {
-        const err = await recordConsent(supabase, req, t, {
-          registration_id: covered[0].id,
-          role: "partner",
-          participant_name: body.player_name!.trim(),
-          participant_email: playerEmail,
-          consent,
-        });
-        // Already accepted on that entry: nothing to add.
-        if (err && !/duplicate key/i.test(err)) console.error("register-player: refused entry's waiver not saved:", err);
-      }
       const directors = ((t.admin_notify_emails ?? []) as string[]).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
       if (!payByCard && directors.length) {
         const err = await sendEmail({

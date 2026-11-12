@@ -1079,7 +1079,7 @@ export function adminRefusedRepeat(d: {
   const lines = [
     `${d.playerName.trim()} (${d.playerEmail}) tried to register for ${d.category.name}, naming ${d.paidBy.trim()}, ` +
     "whose entry already paid for both of them.",
-    "The form refused it and told them they don't need to register. Their waiver acceptance was added to the existing entry.",
+    "The form refused it and told them they don't need to register. Nothing was recorded on the existing entry; the partner accepts the waiver through their own emailed link.",
     d.reference
       ? `They gave e-Transfer reference ${d.reference.trim()}. If that e-Transfer arrives, refund it.`
       : "If an e-Transfer from them arrives, refund it.",
