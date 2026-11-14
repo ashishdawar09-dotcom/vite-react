@@ -4,13 +4,16 @@
 // one-time link after their teammate registers, reads the regulations and
 // accepts the waiver here. The token (pending_registrations.partner_consent_token)
 // is the only credential, so responses reveal no more than the partner needs.
+// A token on an entry with no partner (a singles player a director entered by
+// hand) is that player's own link; it records the player's consent
+// (waiverSigner in _shared/waiver.ts).
 //
 //   POST { action: "get", token }     → tournament, category, names, waiver text
 //   POST { action: "accept", token, name, consent } → records the consent
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { allowClient, isUuid, json, serveWithCors } from "../_shared/http.ts";
-import { type ConsentInput, recordConsent, validateConsent } from "../_shared/waiver.ts";
+import { type ConsentInput, recordConsent, validateConsent, waiverSigner } from "../_shared/waiver.ts";
 
 serveWithCors(async (req: Request) => {
   if (req.method !== "POST") return json({ success: false, error: "POST only" }, 405);
@@ -31,10 +34,11 @@ serveWithCors(async (req: Request) => {
 
   const { data: reg } = await supabase
     .from("pending_registrations")
-    .select("id, status, player_name, partner_name, partner_email, tournament_id, category_id, approved_partner_id")
+    .select("id, status, player_name, player_email, partner_name, partner_email, tournament_id, category_id, approved_player_id, approved_partner_id")
     .eq("partner_consent_token", body.token)
     .maybeSingle();
   if (!reg || reg.status === "rejected") return json({ success: false, error: "This link isn't valid." }, 404);
+  const signer = waiverSigner(reg);
 
   const [{ data: t }, { data: c }, { count }] = await Promise.all([
     supabase.from("tournaments")
@@ -42,7 +46,7 @@ serveWithCors(async (req: Request) => {
       .eq("id", reg.tournament_id).maybeSingle(),
     supabase.from("categories").select("name").eq("id", reg.category_id).maybeSingle(),
     supabase.from("waiver_consents").select("id", { count: "exact", head: true })
-      .eq("registration_id", reg.id).eq("role", "partner"),
+      .eq("registration_id", reg.id).eq("role", signer.role),
   ]);
   if (!t?.waiver_text) return json({ success: false, error: "This link isn't valid." }, 404);
   const alreadyAccepted = (count ?? 0) > 0;
@@ -59,6 +63,8 @@ serveWithCors(async (req: Request) => {
       category: c?.name ?? null,
       player_name: reg.player_name,
       partner_name: reg.partner_name,
+      // True when the link is the registrant's own (singles, no partner).
+      solo: signer.solo,
     }, 200);
   }
 
@@ -72,9 +78,9 @@ serveWithCors(async (req: Request) => {
     if (!v.ok) return json({ success: false, error: v.error }, v.status);
     const err = await recordConsent(supabase, req, t, {
       registration_id: reg.id,
-      role: "partner",
+      role: signer.role,
       participant_name: name,
-      participant_email: reg.partner_email,
+      participant_email: signer.email,
       consent: v.value,
     });
     if (err) {
@@ -83,10 +89,10 @@ serveWithCors(async (req: Request) => {
       console.error("waiver-consent insert failed:", err);
       return json({ success: false, error: "Couldn't save your consent. Please try again." }, 500);
     }
-    await supabase.from("pending_registrations").update({ partner_age: v.value.age }).eq("id", reg.id);
-    // Already-approved entries: keep the partner's profile age in step.
-    if (reg.approved_partner_id) {
-      await supabase.from("players").update({ age: v.value.age }).eq("id", reg.approved_partner_id);
+    await supabase.from("pending_registrations").update({ [signer.ageColumn]: v.value.age }).eq("id", reg.id);
+    // Already-approved entries: keep the signer's profile age in step.
+    if (signer.playerId) {
+      await supabase.from("players").update({ age: v.value.age }).eq("id", signer.playerId);
     }
     return json({ success: true }, 200);
   }

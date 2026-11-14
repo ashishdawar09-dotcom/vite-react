@@ -113,3 +113,30 @@ export async function recordConsent(
   });
   return error ? error.message : null;
 }
+
+// Who a /waiver/<token> link is for. Normally the doubles partner the
+// registrant named. A token on an entry with no partner is the registrant's
+// own link: a singles player a director entered by hand never saw the form,
+// so they accept here and it counts as the player's consent.
+export type WaiverLinkReg = {
+  player_name: string;
+  player_email: string | null;
+  partner_name: string | null;
+  partner_email: string | null;
+  approved_player_id: string | null;
+  approved_partner_id: string | null;
+};
+
+export function waiverSigner(reg: WaiverLinkReg): {
+  solo: boolean;
+  role: "player" | "partner";
+  name: string;
+  email: string | null;
+  ageColumn: "player_age" | "partner_age";
+  playerId: string | null;
+} {
+  const solo = !reg.partner_name?.trim();
+  return solo
+    ? { solo, role: "player", name: reg.player_name, email: reg.player_email, ageColumn: "player_age", playerId: reg.approved_player_id }
+    : { solo, role: "partner", name: reg.partner_name!, email: reg.partner_email, ageColumn: "partner_age", playerId: reg.approved_partner_id };
+}
