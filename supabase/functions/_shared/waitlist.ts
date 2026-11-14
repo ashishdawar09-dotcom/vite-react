@@ -1,5 +1,8 @@
 // The directors' email for a new waitlist name (join-waitlist).
 
+// What join-waitlist answers once a director has closed the waitlist.
+export const WAITLIST_CLOSED = "We're really sorry, we're fully booked and the waitlist is now closed.";
+
 import { esc } from "./emails.ts";
 
 // 7789646999 → 778 964 6999; anything else stays as typed digits.

@@ -2,6 +2,10 @@
 // waitlist (name, mobile number, email, the event they'd like) and how to
 // reach the organizers.
 // One primary action, the waitlist; everything else supports it.
+//
+// Once a director closes the waitlist (capacity.waitlistOpen is false) the
+// page says sorry, fully booked: no waitlist form, buttons or steps, and
+// nothing that promises a spot.
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -151,9 +155,12 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
   // Honeypot: hidden from people; bots that fill it are dropped server-side.
   const [website, setWebsite] = useState("");
 
+  const waitlistOpen = capacity.waitlistOpen;
   const { heading: contactHeading, people } = parseContacts(tournament.contact_info);
   const chat = tournament.whatsapp_number
-    ? waLink(tournament.whatsapp_number, `Hi Shuttle Storm! Entries for ${tournament.name} are full. I'd like a spot if one opens up.`)
+    ? waLink(tournament.whatsapp_number, waitlistOpen
+      ? `Hi Shuttle Storm! Entries for ${tournament.name} are full. I'd like a spot if one opens up.`
+      : `Hi Shuttle Storm! I have a question about ${tournament.name}.`)
     : null;
   const when = eventWhen(tournament);
   const venue = tournament.venue_name?.replace(/\s*–\s*/, " ").trim() ?? null;
@@ -164,6 +171,11 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
     setForm(next);
     if (shown) setErrors(waitlistErrors(next));
     setServerError(null);
+  };
+
+  const goToCheer = (e: React.MouseEvent) => {
+    e.preventDefault();
+    document.getElementById("cheer")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
   };
 
   const focusWaitlist = (e: React.MouseEvent) => {
@@ -239,16 +251,28 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
         </motion.figure>
 
         <h1 id="ss-full-title" className="ss-h-hero ss-h-hero-long ss-hero-text ss-balance" style={{ margin: `${space[400]}px 0 0`, maxWidth: 680, fontFamily: ss.display }}>
-          Thank you.<br />We're at full capacity.
+          {waitlistOpen ? <>Thank you.<br />We're at full capacity.</> : <>We're really sorry.<br />We're fully booked.</>}
         </h1>
-        <p className="ss-pretty" style={{ ...type.body3, margin: `${space[200]}px 0 0`, maxWidth: 680, color: ss.body }}>
-          All {capacity.cap} entries for {tournament.name} are taken, so the entry form is now closed.
-          Join the waitlist and we'll contact you if a spot opens up.
-        </p>
+        {waitlistOpen ? (
+          <p className="ss-pretty" style={{ ...type.body3, margin: `${space[200]}px 0 0`, maxWidth: 680, color: ss.body }}>
+            All {capacity.cap} entries for {tournament.name} are taken, so the entry form is now closed.
+            Join the waitlist and we'll contact you if a spot opens up.
+          </p>
+        ) : (
+          <p data-testid="waitlist-closed" className="ss-pretty" style={{ ...type.body3, margin: `${space[200]}px 0 0`, maxWidth: 680, color: ss.body }}>
+            Every entry for {tournament.name} is taken, and the waitlist is now closed.
+            We can't take any more players for this tournament. Thank you for wanting to play.
+          </p>
+        )}
 
-        {!joined && (
+        {waitlistOpen && !joined && (
           <a href="#waitlist" onClick={focusWaitlist} className="ss-action ss-action-primary" style={{ ...type.buttonMd, marginTop: space[300], width: "100%" }}>
             Join the waitlist <IconArrowRight size={20} />
+          </a>
+        )}
+        {!waitlistOpen && (
+          <a href="#cheer" onClick={goToCheer} className="ss-action" style={{ ...type.buttonMd, marginTop: space[300], width: "100%" }}>
+            Come and cheer on the day <IconArrowRight size={20} />
           </a>
         )}
 
@@ -261,7 +285,7 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
       </section>
 
       {/* ---------- The waitlist ---------- */}
-      <Reveal id="waitlist" labelledBy="ss-waitlist-title">
+      {waitlistOpen && <Reveal id="waitlist" labelledBy="ss-waitlist-title">
         <h2 id="ss-waitlist-title" className="ss-h-section ss-balance" style={{ margin: 0, color: ss.bone }}>Join the waitlist</h2>
         <p className="ss-pretty" style={{ ...type.body3, margin: `${space[75]}px 0 ${space[300]}px`, color: ss.body, maxWidth: 680 }}>
           Players sometimes withdraw before tournament day. Leave your details and the organizers will contact you if a spot opens up.
@@ -328,7 +352,7 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
             </li>
           ))}
         </ol>
-      </Reveal>
+      </Reveal>}
 
       <TaglineReveal text={taglineText(tournament, capacity.cap, categories.length)} />
 
@@ -337,7 +361,9 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
         <Reveal id="organizers" labelledBy="ss-organizers-title">
           <h2 id="ss-organizers-title" className="ss-h-section ss-balance" style={{ margin: 0, color: ss.bone }}>Talk to the organizers</h2>
           <p className="ss-pretty" style={{ ...type.body3, margin: `${space[75]}px 0 ${space[300]}px`, color: ss.body, maxWidth: 680 }}>
-            Questions about the waitlist or your entry, or a partner who has already entered? Call, text or email us.
+            {waitlistOpen
+              ? "Questions about the waitlist or your entry, or a partner who has already entered? Call, text or email us."
+              : "A question about your entry, or a partner who has already entered and is waiting for you? Call, text or email us."}
           </p>
           <div style={{ display: "grid", gap: space[200] }}>
             {people.map((p) => (
@@ -348,7 +374,7 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
                 <div style={{ display: "flex", flexWrap: "wrap", gap: space[75], marginTop: space[200] }}>
                   {p.phone && <a className="ss-action" href={phoneHref("tel", p.phone)}><IconPhone size={18} /> Call</a>}
                   {p.phone && <a className="ss-action" href={phoneHref("sms", p.phone)}><IconChat size={18} /> Text</a>}
-                  {p.email && <a className="ss-action" href={`mailto:${p.email}?subject=${encodeURIComponent(`${tournament.name} waitlist`)}`}><IconEnvelope size={18} /> Email</a>}
+                  {p.email && <a className="ss-action" href={`mailto:${p.email}?subject=${encodeURIComponent(waitlistOpen ? `${tournament.name} waitlist` : tournament.name)}`}><IconEnvelope size={18} /> Email</a>}
                 </div>
               </div>
             ))}
@@ -370,7 +396,7 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
       <Reveal labelledBy="ss-faq-title">
         <h2 id="ss-faq-title" className="ss-h-section ss-balance" style={{ margin: 0, color: ss.bone }}>Questions</h2>
         <dl style={{ margin: `${space[300]}px 0 0`, display: "grid", gap: space[300] }}>
-          {[
+          {(waitlistOpen ? [
             ["My partner already entered and is waiting for me. Can I still play?",
               "Yes. Your spot was counted when your partner entered. Call or message the organizers and they'll add you."],
             ["Does joining the waitlist cost anything?",
@@ -379,7 +405,12 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
               "Yes. Pick the event you'd most like on the waitlist form, and tell the organizers about any others when they contact you."],
             ["How will I hear if a spot opens up?",
               "The organizers will call, text or email you, using the details you leave on the waitlist."],
-          ].map(([q, a]) => (
+          ] : [
+            ["Can I still get a spot?",
+              "We're sorry, no. Every entry is taken and the waitlist is closed, so we can't add more players to this tournament."],
+            ["My partner already entered and is waiting for me. Can I still play?",
+              "Yes. Your spot was counted when your partner entered. Call or message the organizers and they'll add you."],
+          ]).map(([q, a]) => (
             <div key={q}>
               <dt className="ss-balance" style={{ ...type.title3, color: ss.bone }}>{q}</dt>
               <dd className="ss-pretty" style={{ ...type.body6, margin: `${space[50]}px 0 0`, color: ss.mute }}>{a}</dd>
@@ -389,7 +420,7 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
       </Reveal>
 
       {/* ---------- Come and cheer ---------- */}
-      <Reveal labelledBy="ss-cheer-title">
+      <Reveal id="cheer" labelledBy="ss-cheer-title">
         <div style={{ borderRadius: radius["3xl"], overflow: "hidden", border: `1px solid ${ss.line}`, background: ss.panel }}>
           <Picture name="podium" width={536} height={268} alt="A trophy on a lit podium, with shuttles falling like confetti." />
           <div style={{ padding: space[300] }}>
@@ -407,7 +438,7 @@ export function FullHouse({ tournament, capacity, categories, prefill, socials }
             </div>
           </div>
         </div>
-        {!joined && (
+        {waitlistOpen && !joined && (
           <a href="#waitlist" onClick={focusWaitlist} className="ss-action ss-action-primary" style={{ ...type.buttonMd, marginTop: space[300], width: "100%" }}>
             Join the waitlist <IconArrowRight size={20} />
           </a>

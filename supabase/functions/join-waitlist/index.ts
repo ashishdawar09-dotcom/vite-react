@@ -13,11 +13,16 @@
 //
 // `website` is the form's hidden honeypot: bots that fill it get a normal
 // answer and nothing is stored.
+//
+// Once a director closes the waitlist (tournaments.waitlist_closed) nothing
+// is stored or emailed: the answer is 400 { closed: true } with the sorry
+// message. 400, because pages loaded before the close show a 400's message
+// as it is, and anything else as a connection problem.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { allow, allowClient, isUuid, json, serveWithCors } from "../_shared/http.ts";
 import { sendEmail } from "../_shared/mailer.ts";
-import { waitlistAlert } from "../_shared/waitlist.ts";
+import { WAITLIST_CLOSED, waitlistAlert } from "../_shared/waitlist.ts";
 
 const EMAIL_RE = /^[^\s@%*]+@[^\s@%*]+\.[^\s@%*]+$/;
 
@@ -62,8 +67,9 @@ serveWithCors(async (req: Request) => {
   }
 
   const { data: t } = await supabase.from("tournaments")
-    .select("id, name, admin_notify_emails").eq("id", body.tournament_id).maybeSingle();
+    .select("id, name, admin_notify_emails, waitlist_closed").eq("id", body.tournament_id).maybeSingle();
   if (!t) return json({ success: false, error: "Tournament not found" }, 404);
+  if (t.waitlist_closed) return json({ success: false, closed: true, error: WAITLIST_CLOSED }, 400);
   // Overall cap per tournament, which per-client limits can't get around.
   if (!(await allow(supabase, "join-waitlist-tournament", t.id, 300, 3600))) {
     return json({ success: false, error: "Too many requests" }, 429);

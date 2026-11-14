@@ -14,6 +14,9 @@ export type Capacity = {
   taken: number;
   remaining: number;
   full: boolean;
+  // False once a director has closed the waitlist (tournaments.waitlist_closed):
+  // the full page then says sorry, fully booked, and offers no waitlist.
+  waitlistOpen: boolean;
 };
 
 // The RPC's answer, or null when the tournament has no cap (or the answer is
@@ -25,7 +28,9 @@ export function parseCapacity(v: unknown): Capacity | null {
   const taken = typeof o.taken === "number" && Number.isFinite(o.taken) && o.taken >= 0 ? Math.floor(o.taken) : null;
   if (cap === null || taken === null) return null;
   const remaining = Math.max(0, cap - taken);
-  return { cap, taken, remaining, full: remaining === 0 };
+  // Only an explicit false closes it: an answer from before the switch
+  // existed has no such key and means open.
+  return { cap, taken, remaining, full: remaining === 0, waitlistOpen: o.waitlist_open !== false };
 }
 
 // Spots a selection uses, counted the way the server counts: a doubles event

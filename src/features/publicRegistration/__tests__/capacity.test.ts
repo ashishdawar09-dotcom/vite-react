@@ -15,7 +15,15 @@ const xd = cat("Mixed Doubles 18–34");
 
 describe("parseCapacity", () => {
   it("reads the RPC's answer and works out what's left", () => {
-    expect(parseCapacity({ cap: 150, taken: 131, remaining: 19, full: false })).toEqual({ cap: 150, taken: 131, remaining: 19, full: false });
+    expect(parseCapacity({ cap: 150, taken: 131, remaining: 19, full: false })).toEqual({ cap: 150, taken: 131, remaining: 19, full: false, waitlistOpen: true });
+  });
+  it("keeps the waitlist open unless the answer says it's closed", () => {
+    expect(parseCapacity({ cap: 150, taken: 174, waitlist_open: true })).toMatchObject({ full: true, waitlistOpen: true });
+    expect(parseCapacity({ cap: 150, taken: 174, waitlist_open: false })).toMatchObject({ full: true, waitlistOpen: false });
+    // An answer from before the switch existed, or a junk value: open.
+    expect(parseCapacity({ cap: 150, taken: 174 })).toMatchObject({ waitlistOpen: true });
+    expect(parseCapacity({ cap: 150, taken: 174, waitlist_open: null })).toMatchObject({ waitlistOpen: true });
+    expect(parseCapacity({ cap: 150, taken: 174, waitlist_open: "false" })).toMatchObject({ waitlistOpen: true });
   });
   it("is full at or over the cap, never below zero left", () => {
     expect(parseCapacity({ cap: 150, taken: 150 })).toMatchObject({ remaining: 0, full: true });

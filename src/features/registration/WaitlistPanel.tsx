@@ -81,6 +81,14 @@ export function WaitlistPanel({ tournament, isAdmin }: Props) {
                 : `${capacity.remaining} ${capacity.remaining === 1 ? "spot" : "spots"} left · ${capacity.taken} of ${capacity.cap}`}
             </span>
           )}
+          {capacity && !capacity.waitlistOpen && (
+            <span data-testid="waitlist-closed-badge" style={{
+              padding: "2px 10px", borderRadius: radii.pill, background: colors.bg.muted,
+              color: colors.text.mutedLight, fontSize: 12, fontWeight: 800,
+            }}>
+              Closed to new names
+            </span>
+          )}
         </span>
         <span aria-hidden style={{
           fontSize: 18, color: colors.text.mutedLight, transition: "transform 200ms",
@@ -108,7 +116,15 @@ export function WaitlistPanel({ tournament, isAdmin }: Props) {
 
               {loaded && rows.length === 0 && !error && (
                 <p data-testid="waitlist-empty" style={{ margin: 0, fontSize: 14, lineHeight: "20px", color: colors.text.mutedLight }}>
-                  Nobody on the waitlist yet. When entries are full, the registration form offers the waitlist, and each new name also emails the directors.
+                  {capacity && !capacity.waitlistOpen
+                    ? "Nobody on the waitlist. It's closed: the registration page says entries are fully booked and takes no new names."
+                    : "Nobody on the waitlist yet. When entries are full, the registration form offers the waitlist, and each new name also emails the directors."}
+                </p>
+              )}
+
+              {capacity && !capacity.waitlistOpen && rows.length > 0 && (
+                <p data-testid="waitlist-closed-note" style={{ margin: 0, fontSize: 13, lineHeight: "18px", color: colors.text.mutedLight }}>
+                  The waitlist is closed. The registration page says entries are fully booked and takes no new names. These people joined before it closed.
                 </p>
               )}
 
