@@ -17,9 +17,10 @@ import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG } from "./components/ui";
 import { LottieLoader } from "./components/ui/lottie-loader"; /* NEW: cat Lottie loader for boot + suspense + refetch */
 import { toast } from "./components/Toast";
-import { byeAdvances, defaultFormat, recommendFormats, seedBracket, type FormatPlan } from "./lib/formatPlanner";
+import { byeAdvances, defaultFormat, recommendFormats, type FormatPlan } from "./lib/formatPlanner";
 import { planSinglesDraw } from "./lib/pairing";
 import { finalOnlyRows, hasStageRows, isStageAlreadyStarted, planStart } from "./lib/stageStart";
+import { seedGroups, seedKnockout, type SeedInfo } from "./lib/seeding";
 import { finalScorePatch } from "./lib/scoring";
 import { editedGamesPatch, endGamePatch, gamesOf, isBestOf3, stopEarlyPatch, undoGamePatch } from "./lib/bestOf3";
 import { scoreTaps } from "./hooks/useScoreTaps";
@@ -51,6 +52,7 @@ const RegisterTab = lazyWithReload(() => import("./features/registration/Registe
 const TeamsTab = lazyWithReload(() => import("./features/teamformation/TeamsTab").then(m => ({ default: m.TeamsTab })));
 const AdminManager = lazyWithReload(() => import("./components/AdminManager").then(m => ({ default: m.AdminManager })));
 const TvTab = lazyWithReload(() => import("./features/venueTv/TvTab").then(m => ({ default: m.TvTab })));
+const SeedingTab = lazyWithReload(() => import("./features/seeding/SeedingTab").then(m => ({ default: m.SeedingTab })));
 const PlayerEmailsTab = lazyWithReload(() => import("./features/raceEmails/PlayerEmailsTab").then(m => ({ default: m.PlayerEmailsTab })));
 
 // GroupsTab/KnockoutTab take a card component. It used to be declared inside
@@ -376,6 +378,18 @@ export default function App() {
     setPartnerPicker(null);
   };
 
+  // Seeds/tiers for one event, read fresh from entry_seeds (admin-only) just
+  // before a draw. Doubles seeds are on the team; singles seeds are on the
+  // player, whose one-player team is made at draw time.
+  const seedLookupFor = async (catId: string, isSingles: boolean): Promise<(t: { id: string; p1_id: string; p2_id: string | null }) => SeedInfo | null> => {
+    const rows = (await db.listEntrySeeds(current!.id)).filter(r => r.category_id === catId);
+    const byTeam = new Map(rows.filter(r => r.team_id).map(r => [r.team_id!, r]));
+    const byPlayer = new Map(rows.filter(r => r.player_id).map(r => [r.player_id!, r]));
+    return t => byTeam.get(t.id) ?? (isSingles && !t.p2_id ? byPlayer.get(t.p1_id) : undefined) ?? null;
+  };
+  const seedLoadFailed = (e: unknown) => toast(
+    `Couldn't load the seeds for this draw: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Nothing was drawn; tap again.`, "error");
+
   const startGroupStage = async (override?: { groupsCount: number; topNAdvance: number; roundsPerPair: number }) => {
     if (!guard() || !current || !currentCategoryId) return;
     const cat = categories.find(c => c.id === currentCategoryId);
@@ -407,6 +421,10 @@ export default function App() {
       setTab(stage === "knockout" ? "knockout" : "groups");
       return;
     }
+    if (startingGroupStage.current) return;
+    // Seeds decide the draw; if they can't be read, don't draw at random.
+    let seedOf: Awaited<ReturnType<typeof seedLookupFor>>;
+    try { seedOf = await seedLookupFor(catId, isSingles); } catch (e) { seedLoadFailed(e); return; }
     if (startingGroupStage.current) return;
     startingGroupStage.current = true;
     let created: { id: string }[] = [];
@@ -441,7 +459,7 @@ export default function App() {
       }
 
       // Saved so the knockout stage reads the same values.
-      await insertGroupStage(catId, entrants, plan.groupsCount, plan.groupSizes, roundsPerPair, plan.topNAdvance);
+      await insertGroupStage(catId, entrants, plan.groupsCount, plan.groupSizes, roundsPerPair, plan.topNAdvance, seedOf);
     } catch (e: unknown) {
       // Solo teams made for a draw that didn't happen would show up twice
       // next time. delete_team() refuses any team that is in a match.
@@ -456,16 +474,11 @@ export default function App() {
   };
 
   // Writes the round-robin matches for the given entrants and opens the Groups tab.
-  const insertGroupStage = async (catId: string, entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number, topNAdvance: number) => {
-    // Distribute shuffled teams across groups by explicit sizes.
-    const sh = shuffle(entrants);
-    const gs: TeamView[][] = [];
-    let idx = 0;
-    for (let g = 0; g < groupsCount; g++) {
-      const arr: TeamView[] = [];
-      for (let k = 0; k < groupSizes[g] && idx < sh.length; k++) arr.push(sh[idx++]);
-      gs.push(arr);
-    }
+  const insertGroupStage = async (catId: string, entrants: TeamView[], groupsCount: number, groupSizes: number[], roundsPerPair: number, topNAdvance: number, seedOf: (t: TeamView) => SeedInfo | null) => {
+    // Seeded snake draw (lib/seeding.ts): seeds 1, 2, 3… go to groups A, B,
+    // C…, then tier A, tier B and unrated, random within each tier. An event
+    // with no seeds is a plain random draw, as before.
+    const gs: TeamView[][] = seedGroups(entrants, groupSizes.slice(0, groupsCount), seedOf);
 
     const rows: Partial<Match>[] = [];
     let slot = 0;
@@ -562,7 +575,11 @@ export default function App() {
     // seedBracket returns the slot-ordered placements (length is the next
     // power of 2). Nulls indicate byes — admins can also fix mis-seeded
     // brackets later via the Promote-Team UI on each match card.
-    const seeded = seedBracket(qualifiers);
+    // Ordered by seed/tier, not group letter (lib/seeding.ts), so seeds 1
+    // and 2 can only meet in the final.
+    let seedOf: Awaited<ReturnType<typeof seedLookupFor>>;
+    try { seedOf = await seedLookupFor(cat.id, cat.team_size === 1); } catch (e) { seedLoadFailed(e); return; }
+    const seeded = seedKnockout(qualifiers, seedOf);
     const slots = seeded.length;
     const rds = Math.ceil(Math.log2(slots));
     const rows: Partial<Match>[] = [];
@@ -1090,6 +1107,7 @@ export default function App() {
             {isAdmin && tabBtn("categories", "Categories", "🏷️")}
             {isAdmin && tabBtn("tv", "TV", "📺")}
             {isAdmin && tabBtn("emails", "Emails", "✉️")}
+            {isAdmin && tabBtn("seeding", "Seeding", "🎯")}
           </>
         )}
       </nav>
@@ -1159,6 +1177,12 @@ export default function App() {
         {current && tab === "emails" && isAdmin && (
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
             <PlayerEmailsTab tournament={current} players={players} />
+          </Suspense>
+        )}
+
+        {current && tab === "seeding" && isAdmin && (
+          <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
+            <SeedingTab tournament={current} categories={categories} players={players} playerCategories={playerCategories} allTeamsView={allTeamsView} />
           </Suspense>
         )}
 

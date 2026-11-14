@@ -12,7 +12,7 @@ import {
 } from "./snapshotSource";
 import type { Database } from "./database.types";
 import type { RegistrationLead } from "../features/publicRegistration/registrationLead";
-import type { BestOf3From, Category, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
+import type { BestOf3From, Category, EntrySeed, EntrySeedInput, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
 
 // Bridge alias: the generated Insert type the typed Supabase client expects
 // for `matches`. Different from `Partial<Match>` because the DB requires the
@@ -409,6 +409,22 @@ export async function deleteTeam(id: string) {
 export async function deleteTeamWithReason(id: string, reason: string) {
   const { error } = await supabase.rpc("delete_team", { p_team_id: id, p_reason: reason });
   if (error) throw error;
+}
+
+// SEEDING (admin-only) ------------------------------------------------------
+
+/** Every seed/tier in the tournament. Admin-only table: RLS returns nothing to anyone else. */
+export async function listEntrySeeds(tournament_id: string): Promise<EntrySeed[]> {
+  const { data, error } = await supabase.from("entry_seeds").select("*").eq("tournament_id", tournament_id);
+  if (error) throw error;
+  return (data ?? []) as EntrySeed[];
+}
+
+/** Replaces one event's seeds in a single transaction (save_entry_seeds). */
+export async function saveEntrySeeds(category_id: string, rows: EntrySeedInput[]): Promise<EntrySeed[]> {
+  const { data, error } = await supabase.rpc("save_entry_seeds", { p_category_id: category_id, p_rows: rows });
+  if (error) throw error;
+  return (data ?? []) as EntrySeed[];
 }
 
 export async function deleteTeamsContainingPlayer(player_id: string, category_id?: string) {

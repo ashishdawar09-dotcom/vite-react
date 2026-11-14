@@ -288,3 +288,19 @@ export type PublicRegistrationPayload = {
   heard_from?: string;                  // "How did you hear about us?" (optional)
   attribution?: Attribution;            // campaign tags / ad network, see lib/attribution
 };
+
+// Admin-only seeding (entry_seeds). A doubles entry is a team; a singles
+// entry is a player (their one-player team only exists once the draw starts).
+export type EntrySeed = {
+  id: string;
+  tournament_id: string;
+  category_id: string;
+  team_id: string | null;
+  player_id: string | null;
+  seed: number | null;
+  tier: "A" | "B" | null;
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+};
+export type EntrySeedInput = Pick<EntrySeed, "team_id" | "player_id" | "seed" | "tier" | "note">;
