@@ -77,4 +77,5 @@ npx -y wrangler@4 dev --port 8788
 
 Built outside git in `~/Developer/shuttlestorm-site` and copied here on
 2026-10-17, matching Cloudflare version `3552e5b7`. Last synced with
-Cloudflare version `b2bd5338` (Cloudflare Web Analytics, 2026-11-04).
+Cloudflare version `bf7af3a0` (privacy page: email open and click tracking;
+sponsor links marked `rel="sponsored"`, 2026-11-10).
