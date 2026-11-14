@@ -972,6 +972,8 @@ export type PartnerWaiverInfo = {
   category: string | null;
   player_name: string;
   partner_name: string | null;
+  // The registrant's own link (a singles player entered by a director).
+  solo?: boolean;
 };
 
 export async function callWaiverConsent<T = Record<string, unknown>>(

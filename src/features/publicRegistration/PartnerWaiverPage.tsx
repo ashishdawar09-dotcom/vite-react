@@ -1,7 +1,9 @@
 // /waiver/:token — a doubles partner reads the regulations and accepts the
 // waiver after their teammate registers them. The token comes from the email
 // sent by register-player (or the stripe-webhook, for card entries); admins
-// can also copy the link from the registration card.
+// can also copy the link from the registration card. A singles player a
+// director entered by hand gets a link of their own ("solo"): same form,
+// worded for them rather than for a partner.
 
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -35,7 +37,7 @@ export function PartnerWaiverPage() {
       if (cancelled) return;
       if (!r.ok) { setLoadError(r.error); return; }
       setInfo(r.data);
-      setName(r.data.partner_name ?? "");
+      setName((r.data.solo ? r.data.player_name : r.data.partner_name) ?? "");
       if (r.data.alreadyAccepted) setDone(true);
     });
     return () => { cancelled = true; };
@@ -115,7 +117,9 @@ export function PartnerWaiverPage() {
             <div style={{ fontSize: 48 }}>✓</div>
             {heading("Waiver accepted")}
             <p style={{ color: colors.text.mutedLight, fontSize: 15, lineHeight: 1.5 }}>
-              Thanks. You're all set to play {info.category ? `${info.category} ` : ""}with {info.player_name} at {t.name}.
+              {info.solo
+                ? `Thanks. You're all set to play ${info.category ? `${info.category} ` : ""}at ${t.name}.`
+                : `Thanks. You're all set to play ${info.category ? `${info.category} ` : ""}with ${info.player_name} at ${t.name}.`}
             </p>
             {safeHttpUrl(t.rules_url) && (
               <a href={safeHttpUrl(t.rules_url)} style={{ color: CYAN_DARK, fontWeight: 700 }}>Competition regulations ↗</a>
@@ -134,8 +138,10 @@ export function PartnerWaiverPage() {
         </div>
         {heading("Accept the waiver")}
         <p style={{ color: colors.text.mutedLight, fontSize: 15, lineHeight: 1.5, marginTop: spacing.sm }}>
-          {info.player_name} has entered you as their partner{info.category ? ` in ${info.category}` : ""}.
-          Every player must read the competition regulations and agree to the waiver before taking part.
+          {info.solo
+            ? `You're entered${info.category ? ` in ${info.category}` : ` at ${t.name}`}.`
+            : `${info.player_name} has entered you as their partner${info.category ? ` in ${info.category}` : ""}.`}
+          {" "}Every player must read the competition regulations and agree to the waiver before taking part.
         </p>
       </div>
 
