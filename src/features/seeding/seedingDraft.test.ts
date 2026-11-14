@@ -36,5 +36,13 @@ describe("seeding draft", () => {
     expect(eventChip("Super Doubles 50+")).toBe("SD 50+");
     expect(eventChip("Men's Singles")).toBe("MS");
     expect(eventChip("Youth Girls' Singles")).toBe("YGS");
+    expect(eventChip("Mixed Doubles 18–34")).toBe("XD 18–34");
+    expect(eventChip("Mixed Doubles 35+")).toBe("XD 35+");
+    expect(eventChip("Women's Doubles 35+")).toBe("WD 35+");
+  });
+  it("gives every Shuttle Storm event its own chip", () => {
+    const events = ["Youth Boys' Singles", "Youth Girls' Singles", "Super Doubles 50+", "Women's Doubles 18–34", "Women's Doubles 35+",
+      "Men's Singles", "Mixed Doubles 18–34", "Men's Doubles 35+", "Men's Doubles 18–34", "Mixed Doubles 35+"];
+    expect(new Set(events.map(eventChip)).size).toBe(events.length);
   });
 });
