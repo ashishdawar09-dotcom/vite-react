@@ -376,7 +376,8 @@ export function PublicRegistrationPage() {
     setStatus("idle");
     setSubmitError(result.error ?? "Submission failed. Please try again.");
     // Refused because the entries don't fit: read the count again. If it's
-    // full, the page turns into the waitlist with these details filled in.
+    // full, the page turns into the waitlist with these details filled in
+    // (or, once the waitlist is closed, the "fully booked" page).
     if (result.full !== undefined || result.remaining !== undefined) void refreshCapacity();
     // status is undefined when the request never got a response (offline,
     // timeout, blocked). Some server messages quote ages, so digits are masked.
