@@ -140,11 +140,8 @@ function sameGroupMeetings<T>(slots: (T | null)[], groupOf: Map<T, number>): num
  * unseeded teams last and group order as the tiebreak. So the best seeded
  * group winner is bracket seed 1, the next is bracket seed 2, and so on.
  *
- * If ordering the runners-up (and lower ranks) by their own seeds would make
- * two teams from the same group meet in round 1 where the old order did not,
- * the lower ranks follow the winners' group order instead. That order is
- * the existing seedBracket with the groups relabelled, so it keeps today's
- * no-rematch placement.
+ * seedKnockout turns this into bracket slots (and keeps same-group teams
+ * apart in round 1).
  */
 export function knockoutSeedOrder<T>(qualifiers: T[][], seedOf: (e: T) => SeedInfo | null | undefined): T[] {
   const G = qualifiers.length;
@@ -160,17 +157,26 @@ export function knockoutSeedOrder<T>(qualifiers: T[][], seedOf: (e: T) => SeedIn
   const pos = new Map(groupOrder.map((g, i) => [g, i]));
   const maxRank = qualifiers.reduce((m, q) => Math.max(m, q.length), 0);
 
-  const byGroupOrder: T[] = [];
   const bySeed: T[] = [];
   for (let r = 0; r < maxRank; r++) {
     const rank = groupOrder.filter(g => r < qualifiers[g].length).map(g => qualifiers[g][r]);
-    byGroupOrder.push(...rank);
-    bySeed.push(...[...rank].sort((a, b) =>
+    bySeed.push(...rank.sort((a, b) =>
       compareSeed(seedOf(a), seedOf(b)) || (pos.get(groupOf.get(a)!)! - pos.get(groupOf.get(b)!)!)));
   }
-  const clashSeed = sameGroupMeetings(seedBracket([bySeed]), groupOf);
-  const clashGroup = sameGroupMeetings(seedBracket([byGroupOrder]), groupOf);
-  return clashSeed <= clashGroup ? bySeed : byGroupOrder;
+  return bySeed;
+}
+
+/** The same ranks, but lower ranks follow the winners' group order (the old seedBracket, groups relabelled). */
+function groupOrderFallback<T>(qualifiers: T[][], winnersFirst: T[]): T[] {
+  const G = qualifiers.length;
+  const groupOf = new Map<T, number>();
+  qualifiers.forEach((q, g) => q.forEach(t => groupOf.set(t, g)));
+  const order = winnersFirst.filter(t => qualifiers[groupOf.get(t)!][0] === t).map(t => groupOf.get(t)!);
+  for (let g = 0; g < G; g++) if (!order.includes(g)) order.push(g);
+  const maxRank = qualifiers.reduce((m, q) => Math.max(m, q.length), 0);
+  const out: T[] = [];
+  for (let r = 0; r < maxRank; r++) for (const g of order) if (r < qualifiers[g].length) out.push(qualifiers[g][r]);
+  return out;
 }
 
 /**
@@ -182,10 +188,18 @@ export function knockoutSeedOrder<T>(qualifiers: T[][], seedOf: (e: T) => SeedIn
  * seedBracket does, apart from that repair.
  */
 export function seedKnockout<T>(qualifiers: T[][], seedOf: (e: T) => SeedInfo | null | undefined): (T | null)[] {
-  const order = knockoutSeedOrder(qualifiers, seedOf);
   const groupOf = new Map<T, number>();
   qualifiers.forEach((q, g) => q.forEach(t => groupOf.set(t, g)));
-  return avoidSameGroupOpeners(seedBracket([order]), groupOf, new Map(order.map((t, i) => [t, i])));
+  const place = (order: T[]) => avoidSameGroupOpeners(seedBracket([order]), groupOf, new Map(order.map((t, i) => [t, i])));
+  // Seed order first (a seed who finished second stays a high runner-up, so
+  // seed 2 can't be drawn against seed 1 in round 1). Only if swaps can't
+  // clear a same-group opener there, use the group-order fallback.
+  const bySeed = knockoutSeedOrder(qualifiers, seedOf);
+  const seeded = place(bySeed);
+  const clashSeed = sameGroupMeetings(seeded, groupOf);
+  if (clashSeed === 0) return seeded;
+  const fallback = place(groupOrderFallback(qualifiers, bySeed));
+  return sameGroupMeetings(fallback, groupOf) < clashSeed ? fallback : seeded;
 }
 
 /**

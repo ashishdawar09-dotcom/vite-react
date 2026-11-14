@@ -274,3 +274,148 @@ describe("seedingSummary", () => {
     expect(seedingSummary(0, 2, 0).overflow).toBe(0);
   });
 });
+
+describe("seedGroups edge cases (named)", () => {
+  const sizesOf = (gs: E[][]) => gs.map(g => g.length);
+  const groupOf = (gs: E[][], id: string) => gs.findIndex(g => g.some(e => e.id === id));
+
+  it("no seeds: same sizes as the old deal, every entry once", () => {
+    for (let k = 0; k < 100; k++) {
+      const gs = seedGroups(entries(19, 0), [5, 5, 5, 4], seedOf, seededRng(k));
+      expect(sizesOf(gs)).toEqual([5, 5, 5, 4]);
+      expect(new Set(gs.flat().map(e => e.id)).size).toBe(19);
+    }
+  });
+
+  it("fewer seeds than groups: seeds take A, B, …; the rest of the groups fill at random", () => {
+    for (let k = 0; k < 100; k++) {
+      const gs = seedGroups(entries(28, 2), [4, 4, 4, 4, 4, 4, 4], seedOf, seededRng(k));
+      expect(groupOf(gs, "s1")).toBe(0);
+      expect(groupOf(gs, "s2")).toBe(1);
+      expect(sizesOf(gs)).toEqual([4, 4, 4, 4, 4, 4, 4]);
+    }
+  });
+
+  it("more seeds than groups: seeds G+1… snake back from the last group", () => {
+    const gs = seedGroups(entries(12, 6), [4, 4, 4], seedOf, seededRng(3));
+    expect([1, 2, 3, 4, 5, 6].map(s => groupOf(gs, `s${s}`))).toEqual([0, 1, 2, 2, 1, 0]);
+  });
+
+  it("uneven sizes 4+3+3: sizes kept, one seed per group, the extra place goes to Group A", () => {
+    for (let k = 0; k < 100; k++) {
+      const gs = seedGroups(entries(10, 3, 3), [4, 3, 3], seedOf, seededRng(k));
+      expect(sizesOf(gs)).toEqual([4, 3, 3]);
+      expect([1, 2, 3].map(s => groupOf(gs, `s${s}`))).toEqual([0, 1, 2]);
+      // 3 seeds + 3 tier A = 6 strong for 3 groups: exactly 2 each, never 3.
+      expect(gs.map(g => g.filter(e => isStrong(e.info)).length)).toEqual([2, 2, 2]);
+      expect(strongClashes(seedGroups(entries(10, 3), [4, 3, 3], seedOf, seededRng(k)), seedOf)).toEqual([]);
+    }
+  });
+
+  it("singles shape: one-player entries keyed by player behave the same", () => {
+    type Solo = { id: string; p1_id: string; p2_id: null };
+    const solo: Solo[] = Array.from({ length: 15 }, (_, i) => ({ id: `team${i}`, p1_id: `player${i}`, p2_id: null }));
+    const byPlayer = new Map<string, SeedInfo>([["player7", { seed: 1, tier: null }], ["player3", { seed: 2, tier: null }], ["player11", { seed: null, tier: "A" }]]);
+    const gs = seedGroups(solo, [4, 4, 4, 3], t => byPlayer.get(t.p1_id) ?? null, seededRng(9));
+    expect(gs[0].some(t => t.p1_id === "player7")).toBe(true);
+    expect(gs[1].some(t => t.p1_id === "player3")).toBe(true);
+    expect(gs[2].some(t => t.p1_id === "player11")).toBe(true);
+  });
+
+  it("ties: two entries given the same seed number both go in, in random order", () => {
+    const es: E[] = [{ id: "x", info: { seed: 1, tier: null } }, { id: "y", info: { seed: 1, tier: null } }, ...entries(6, 0)];
+    const firstGroup = new Set<string>();
+    for (let k = 0; k < 60; k++) {
+      const gs = seedGroups(es, [4, 4], seedOf, seededRng(k));
+      expect(groupOf(gs, "x")).not.toBe(groupOf(gs, "y"));
+      firstGroup.add(gs[0].find(e => e.id === "x" || e.id === "y")!.id);
+    }
+    expect(firstGroup).toEqual(new Set(["x", "y"]));
+  });
+
+  it("final only (2 entries): the planner makes no groups, so seeding isn't used", () => {
+    expect(defaultFormat(2).groupsCount).toBe(0);
+    expect(seedGroups(entries(2, 2), [], seedOf, seededRng(1))).toEqual([]);
+  });
+
+  it("empty event and a single group", () => {
+    expect(seedGroups([], [0, 0], seedOf)).toEqual([[], []]);
+    const one = seedGroups(entries(5, 2, 1), [5], seedOf, seededRng(2));
+    expect(one[0]).toHaveLength(5);
+  });
+});
+
+describe("knockout ordering with upsets (named)", () => {
+  const winners = (ids: (string | null)[]): E[][] =>
+    ids.map((id, g) => [
+      { id: id ?? `u${g}`, info: id?.startsWith("s") ? { seed: Number(id.slice(1)), tier: null } : id?.startsWith("A") ? { seed: null, tier: "A" } : null },
+      { id: `r${g}`, info: null },
+    ]);
+  const half = (slots: (E | null)[], id: string) => (slots.findIndex(t => t?.id === id) < slots.length / 2 ? 0 : 1);
+
+  it("seed 1 knocked out in the groups: seed 2 is top of the bracket, seeds 2 and 3 in opposite halves", () => {
+    const q = winners([null, "s2", "s3", "s4"]); // Group A won by an unseeded team
+    const order = knockoutSeedOrder(q, seedOf).map(t => t.id);
+    expect(order.slice(0, 4)).toEqual(["s2", "s3", "s4", "u0"]);
+    const slots = seedKnockout(q, seedOf);
+    expect(half(slots, "s2")).not.toBe(half(slots, "s3"));
+  });
+
+  it("seed 2 finishes second in its group: it is ordered with the runners-up, not the winners", () => {
+    const q: E[][] = [
+      [{ id: "s1", info: { seed: 1, tier: null } }, { id: "r0", info: null }],
+      [{ id: "u1", info: null }, { id: "s2", info: { seed: 2, tier: null } }],
+      [{ id: "s3", info: { seed: 3, tier: null } }, { id: "r2", info: null }],
+      [{ id: "A3", info: { seed: null, tier: "A" } }, { id: "r3", info: null }],
+    ];
+    const order = knockoutSeedOrder(q, seedOf).map(t => t.id);
+    expect(order.slice(0, 4)).toEqual(["s1", "s3", "A3", "u1"]);
+    expect(order[4]).toBe("s2"); // best runner-up
+    const slots = seedKnockout(q, seedOf);
+    // s2 can't face its own group winner u1 in round 1
+    for (let i = 0; i < slots.length; i += 2) {
+      const pair = [slots[i]?.id, slots[i + 1]?.id].sort();
+      expect(pair).not.toEqual(["s2", "u1"]);
+      expect(pair).not.toEqual(["s1", "s2"]); // seed 2 is the top runner-up, never drawn against seed 1
+    }
+  });
+
+  it("every group won by an unseeded team: falls back to group order, same as before", () => {
+    const q = winners([null, null, null, null]);
+    expect(seedKnockout(q, seedOf)).toEqual(seedBracket(q));
+  });
+});
+
+describe("knockout with random upsets (400 brackets)", () => {
+  it("seeds 1 and 2 never meet in round 1 while either won its group (4+ groups); no same-group opener", () => {
+    for (let k = 0; k < 400; k++) {
+      const rng = seededRng(5000 + k);
+      const G = 2 + (k % 7), top = 2;
+      const groups = seedGroups(entries(G * 4, Math.min(G + (k % 3), G * 4), k % 3, k % 2), splitIntoGroups(G * 4, G), seedOf, rng);
+      // Finishing order fully random: any seed can finish anywhere.
+      const qualifiers = groups.map(g => drawOrder(g, () => null, rng).slice(0, top));
+      const slots = seedKnockout(qualifiers, seedOf);
+      const gOf = new Map(groups.flatMap((g, gi) => g.map(e => [e.id, gi] as [string, number])));
+      for (let i = 0; i < slots.length; i += 2) {
+        const a = slots[i], b = slots[i + 1];
+        if (!a || !b) continue;
+        // 1 v 2 in round 1 happens only when they're no longer the top two:
+        // both lost their groups (the two best runners-up are bracket places
+        // 8 and 9 and meet), or one lost with fewer than 4 groups, where
+        // the A1 v B2 crossover leaves no other cross-group pairing.
+        if ([a.id, b.id].sort().join() === "s1,s2") {
+          const wins = ["s1", "s2"].filter(id => qualifiers.some(q => q[0].id === id)).length;
+          expect(wins).toBeLessThan(2);
+          if (wins === 1) expect(G).toBeLessThan(4);
+        }
+        expect(gOf.get(a.id)).not.toBe(gOf.get(b.id));
+      }
+      // Both seeds won their groups → opposite halves.
+      const won = (id: string) => qualifiers.some(q => q[0].id === id);
+      if (won("s1") && won("s2")) {
+        const h = (id: string) => (slots.findIndex(t => t?.id === id) < slots.length / 2 ? 0 : 1);
+        expect(h("s1")).not.toBe(h("s2"));
+      }
+    }
+  });
+});
