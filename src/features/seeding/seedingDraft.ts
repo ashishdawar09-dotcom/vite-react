@@ -46,10 +46,14 @@ export function rankEntries<E extends { label: string }>(entries: E[], keyOf: (e
   return [...entries].sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label));
 }
 
-/** "Men's Doubles 18–34" → "MD 18–34", "Super Doubles 50+" → "SD 50+". */
+/**
+ * "Men's Doubles 18–34" → "MD 18–34", "Mixed Doubles 18–34" → "XD 18–34"
+ * (badminton's usual short form, so it can't clash with Men's), "Super
+ * Doubles 50+" → "SD 50+".
+ */
 export function eventChip(name: string): string {
   const words = name.replace(/[’']s\b/g, "").split(/\s+/).filter(Boolean);
-  const letters = words.filter(w => !/\d/.test(w)).map(w => w[0].toUpperCase()).join("");
+  const letters = words.filter(w => !/\d/.test(w)).map(w => (/^mixed$/i.test(w) ? "X" : w[0].toUpperCase())).join("");
   const rest = words.filter(w => /\d/.test(w)).join(" ");
   return [letters, rest].filter(Boolean).join(" ") || name;
 }
