@@ -382,7 +382,16 @@ export default function App() {
   // before a draw. Doubles seeds are on the team; singles seeds are on the
   // player, whose one-player team is made at draw time.
   const seedLookupFor = async (catId: string, isSingles: boolean): Promise<(t: { id: string; p1_id: string; p2_id: string | null }) => SeedInfo | null> => {
-    const rows = (await db.listEntrySeeds(current!.id)).filter(r => r.category_id === catId);
+    let all: Awaited<ReturnType<typeof db.listEntrySeeds>>;
+    try {
+      all = await db.listEntrySeeds(current!.id);
+    } catch (e) {
+      // Table not there yet (app deployed before the migration): no seeds, a random draw as before.
+      const code = (e as { code?: string })?.code;
+      if (code === "42P01" || code === "PGRST205") return () => null;
+      throw e;
+    }
+    const rows = all.filter(r => r.category_id === catId);
     const byTeam = new Map(rows.filter(r => r.team_id).map(r => [r.team_id!, r]));
     const byPlayer = new Map(rows.filter(r => r.player_id).map(r => [r.player_id!, r]));
     return t => byTeam.get(t.id) ?? (isSingles && !t.p2_id ? byPlayer.get(t.p1_id) : undefined) ?? null;
