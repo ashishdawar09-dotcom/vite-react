@@ -14,7 +14,8 @@ export type TabId =
   | "scoreboard"
   | "categories"
   | "tv"
-  | "emails";
+  | "emails"
+  | "seeding";
 
 // Mobile "More" drawer — slides up from the bottom on small screens,
 // shows the 7 secondary tabs that didn't fit in the primary nav bar.
@@ -48,6 +49,7 @@ export function MoreDrawer({
     { id: "categories", label: "Categories", icon: "🏷️", visible: isAdmin },
     { id: "tv", label: "TV", icon: "📺", visible: isAdmin },
     { id: "emails", label: "Emails", icon: "✉️", visible: isAdmin },
+    { id: "seeding", label: "Seeding", icon: "🎯", visible: isAdmin },
   ];
 
   return (

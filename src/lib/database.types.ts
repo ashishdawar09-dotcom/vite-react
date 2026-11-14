@@ -904,6 +904,45 @@ export type Database = {
           },
         ]
       }
+      entry_seeds: {
+        Row: {
+          category_id: string
+          id: string
+          note: string | null
+          player_id: string | null
+          seed: number | null
+          team_id: string | null
+          tier: string | null
+          tournament_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          category_id: string
+          id?: string
+          note?: string | null
+          player_id?: string | null
+          seed?: number | null
+          team_id?: string | null
+          tier?: string | null
+          tournament_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          category_id?: string
+          id?: string
+          note?: string | null
+          player_id?: string | null
+          seed?: number | null
+          team_id?: string | null
+          tier?: string | null
+          tournament_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       team_deletions: {
         Row: {
           category_id: string | null
@@ -1251,6 +1290,10 @@ export type Database = {
         Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
+      save_entry_seeds: {
+        Args: { p_category_id: string; p_rows: Json }
+        Returns: Database["public"]["Tables"]["entry_seeds"]["Row"][]
+      }
       post_tv_message: {
         Args: { p_minutes: number | null; p_style: string; p_text: string; p_tournament_id: string }
         Returns: Json
