@@ -1,0 +1,30 @@
+{
+  "critic": "independent",
+  "referenceId": "openmontage-claude-pipeline",
+  "verdict": "pass",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 8,
+    "concept_specificity": 8,
+    "product_authenticity": 9,
+    "mobile_readability": 8,
+    "composition": 8,
+    "motion_causality": 9,
+    "material_restraint": 9
+  },
+  "hardFailures": [],
+  "notes": [
+    "Render checked: the sha256 is 7bc335e9..., which matches candidateRenderSha in render-brief.json. The file is 1080x1920 at 30 fps, 300 frames, 10.0 s. I extracted all 300 frames and reviewed every third frame at 270/540 px and at phone width (360 px). I also measured frame-diff holds, the bar-head position and the lit-step rows numerically.",
+    "Claims: every on-screen claim traces to the source. '16 feathers / Set into a cork base. A tournament shuttle weighs about five grams, and it still outruns a race car.' is index.html:612. The five steps match register.html:69-75 word for word, as the captured site-register-day.png. '11 CATEGORIES / AGES 8 TO 50+' is index.html:555/597. 'Entries close Nov 18' is register.html:55. 'shuttlestorm.adawar.org/register' is the source URL. 'NOV 21 2026 · UFV NORTH GYM · ABBOTSFORD BC' and the SHUTTLE (bone) / STORM (volt) wide-900 wordmark come from the site film (index.html:710-722, CSS :332-335). 'FEATHER SHUTTLES.' and 'GREAT PRIZES.' are the organisers' claims and are not expanded: no amounts, types, prices or ranks appear. Nothing is invented.",
+    "Identity: shuttle-storm-mark.svg is byte-identical to the site's favicon.svg (cmp). In frames 237-299 it renders square and undistorted in its own #06080D tile, and it is not recoloured. The shuttle art is the site's own 'Every point' canvas capture. Its green halo is present in site-home-everypoint.png, so the video did not add it.",
+    "Material: the volt is flat throughout (bar x=92-99, the '16 feathers' underline, the AGES/NOV 18 accents). Cards use only hairline borders. There is no glow, gradient, glass, coloured shadow or particles. The previous orphan 'PRIZES.' is gone, because the promises clear the top by frame 87, before step 1 holds.",
+    "Causality is now correct. Each step lights in the frame where the bar head crosses its title. Step 2: the bar head is at y=737 in frame 118 (step 1 still lit) and at y=777 in frame 119, where step 2 at y≈750 lights and step 1 dims. Step 3: the bar head is at y=995 in frame 144 (unlit) and at y=1025 in frame 145, where it lights at y≈1014. Steps 4 and 5 follow the same pattern at frames 170-171 and 196-197. From step 5 the same bar continues on as the end card's margin rule, ending at the URL (y=1235).",
+    "Holds (frame-diff = 0): 'GREAT PRIZES.' 50-66 (0.53 s); step 1 90-116 (0.87 s); step 2 124-142; step 3 150-168; step 4 176-194; step 5 202-220 (about 0.6 s each); end 250-299 (1.67 s). There is no frozen or empty travel. The other frames are all purposeful motion.",
+    "Minor composition issue 1, end-state clipping (frames 240-299, including the held final frame): the top edge slices through the last line of step 2 ('available.' at y≈0-15), so a half line of text sits at the top for the whole 1.67 s end hold. Fix: move the end framing up or down about 40-60 px so the crop falls in the gap between steps 2 and 3, or mask the card top with a flat charcoal fade-free hard edge at the step-3 boundary.",
+    "Minor composition issue 2, opening (frames 0-10): the art covers y=139-1780, so about 140 px of charcoal remain at the top and at the bottom. That is about 85% fill, not the brief's 'filling the frame'. During the pull-back (frames 12-20) the lower 35-40% of the frame is empty, apart from the masked 'FEATHER' top sliver at frame 15, which floats about 90 px below the art's bottom edge. Fix: start the art at a scale where it covers the full 1920 px height, and start the headline rise from the art's bottom edge so the mask line is anchored.",
+    "Minor alignment issue (frames 24-75): the art card spans x=96-981 but the '16 feathers' card spans x=75-1004, so their left and right edges differ by 21-23 px within one column. Fix: give both the same x (67-1012, the register card's gutters) so the opening reads as one column that matches the steps card.",
+    "Mobile (360 px): the headlines, step titles, '11 CATEGORIES / AGES 8 TO 50+', 'ENTRIES CLOSE NOV 18', the URL and the lockup all read clearly. Step body copy (about 11 px on phone) cannot be read within the 0.6 s holds, but the bold titles carry the meaning. During step holds (frames 90-220) the top 20% above the card holds only the bar, which acts as the connector and is acceptable. The site h2 'Your day, start to finish' is thin and small (about 15 px on phone), but it is authentic.",
+    "Reference fidelity: one continuous volt path connects three real surfaces (promise stack, register day, end lockup), and the camera follows it down with holds at each stage, as in the reference. The middle 4.4 s is a single surface with dim and lit states rather than a distinct surface per stage, so it is thinner than the reference, but the inheritance is justified.",
+    "Pass criteria: there are no hard failures, every score is at least 8, and the average is 8.5 (68/8), so the verdict is pass. It is at the threshold. Fixing the end-frame top-edge slice and the opening letterbox and edge mismatch would raise composition to 9."
+  ]
+}
