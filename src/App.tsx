@@ -12,6 +12,7 @@ import { supabase } from "./lib/supabase";
 import { closeChannel, openChannel } from "./lib/realtimeChannels";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Login } from "./components/Login";
+import { authErrorFromUrl, stripAuthErrorParams } from "./lib/authErrors";
 import { LiveTab } from "./components/LiveTab";
 import { CourtPicker } from "./components/CourtPicker";
 import { ShuttleSVG } from "./components/ui";
@@ -81,6 +82,16 @@ export default function App() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  // A Google sign-in that Supabase refused (no new accounts since Nov 14, 2026) lands here with
+  // ?error_description=… : open Sign In with a plain sentence and tidy the address.
+  const [loginError, setLoginError] = useState<string | null>(null);
+  useEffect(() => {
+    const msg = authErrorFromUrl(window.location.search, window.location.hash);
+    if (!msg) return;
+    setLoginError(msg);
+    setShowLogin(true);
+    window.history.replaceState(window.history.state, "", stripAuthErrorParams(window.location.href));
+  }, []);
   const [showAdminManager, setShowAdminManager] = useState(false);
   const [tab, setTab] = useState<TabId>("live");
   /* NEW: mobile IA — 10 tabs is too many on phones; collapse the secondary 7 into a "More" drawer. */
@@ -1362,7 +1373,7 @@ export default function App() {
         )}
       </main>
 
-      {showLogin && <Login onClose={() => setShowLogin(false)} />}
+      {showLogin && <Login initialError={loginError} onClose={() => { setShowLogin(false); setLoginError(null); }} />}
       {showAdminManager && isAdmin && (
         <Suspense fallback={<LottieLoader fullScreen label="Loading…" />}>
           <AdminManager
