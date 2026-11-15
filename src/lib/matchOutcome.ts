@@ -7,7 +7,7 @@
 
 import type { Match } from "../types";
 
-type Outcome = Pick<Match, "team_a_id" | "team_b_id" | "winner_id" | "confirmed" | "is_bye" | "is_walkover">;
+type Outcome = Pick<Match, "team_a_id" | "team_b_id" | "winner_id" | "confirmed" | "is_bye" | "is_walkover" | "is_retired">;
 
 export function isCancelledMatch(m: Pick<Outcome, "winner_id" | "confirmed" | "is_bye">): boolean {
   return !!m.confirmed && !m.winner_id && !m.is_bye;
@@ -21,9 +21,10 @@ export function matchLoserId(m: Pick<Outcome, "team_a_id" | "team_b_id" | "winne
   return null;
 }
 
-/** Badge for a finished match: "Cancelled", "W/O", or null for a played result. */
-export function resultLabel(m: Outcome): "Cancelled" | "W/O" | null {
+/** Badge for a finished match: "Cancelled", "W/O", "Ret." (a side retired), or null for a played result. */
+export function resultLabel(m: Outcome): "Cancelled" | "W/O" | "Ret." | null {
   if (isCancelledMatch(m)) return "Cancelled";
   if (m.confirmed && m.is_walkover) return "W/O";
+  if (m.confirmed && m.is_retired) return "Ret.";
   return null;
 }

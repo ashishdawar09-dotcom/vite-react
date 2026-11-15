@@ -60,7 +60,7 @@ export function annList(model: TvModel, ev: number, siteUrl: string): AnnItem[] 
   const r = model.results[0];
   if (r && r.winner) {
     const wa = r.winner === r.a, sc = wa ? r.cur : [r.cur[1], r.cur[0]];
-    const how = r.walkover ? " by walkover" : ` ${sc[0]}–${sc[1]}`;
+    const how = r.walkover ? " by walkover" : r.retired ? ` ${sc[0]}–${sc[1]} (retired)` : ` ${sc[0]}–${sc[1]}`;
     base.push({ type: "result", key: "r" + r.id, tag: "Final", main: `${teamName(model, wa ? r.a : r.b, "fit", 22)} beat ${teamName(model, wa ? r.b : r.a, "fit", 22)}${how}`, sub: shortStage(model, r) });
   }
   const eg = evergreen(siteUrl);

@@ -126,9 +126,9 @@ function recentAverage(xs: number[]): number {
   return xs.reduce((s, x, i) => s + x * w[i], 0) / sumW;
 }
 
-/** Played, not a walkover, bye or cancellation: its times say something about real play. */
+/** Played to the end, not a walkover, retirement, bye or cancellation: its times say something about real play. */
 function wasPlayed(m: Match): boolean {
-  return m.confirmed && !m.is_walkover && !m.is_bye && !isCancelledMatch(m);
+  return m.confirmed && !m.is_walkover && !m.is_retired && !m.is_bye && !isCancelledMatch(m);
 }
 
 /**
@@ -375,7 +375,7 @@ export function projectVenue(matches: Match[], categories: Category[], numCourts
         slots.set(m.id, {
           projected_start_at: m.scheduled_at,
           delta_min: d,
-          delta_label: isCancelledMatch(m) ? "CANCELLED" : m.is_walkover ? "WALKOVER" : (d > 1 ? `${Math.round(d)}M LATE` : d < -1 ? `${Math.round(-d)}M EARLY` : "ON TIME"),
+          delta_label: isCancelledMatch(m) ? "CANCELLED" : m.is_walkover ? "WALKOVER" : m.is_retired ? "RETIRED" : (d > 1 ? `${Math.round(d)}M LATE` : d < -1 ? `${Math.round(-d)}M EARLY` : "ON TIME"),
         });
         tournamentDeltaSum += d;
         tournamentDeltaCount++;

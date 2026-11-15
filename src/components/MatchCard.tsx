@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { ScoreInput } from "./ScoreInput";
 import { useShownScores } from "../hooks/useScoreTaps";
-import { timeOverPickerOpen } from "../lib/scoring";
+import { ResultOptions } from "./ResultOptions";
+import type { ResultOption } from "../lib/resultOptions";
 import { Av } from "./ui";
 import type { GameScore, Match, Player, Team } from "../types";
 import { currentGame, decidingScore, endGameAction, gamesOf, gamesWon, isBestOf3, playMinutes } from "../lib/bestOf3";
@@ -37,6 +38,12 @@ export type MatchCardActions = {
   /** After picking a walkover/winner; should also propagate the winner forward. */
   selectWinner: (match: Match, winnerId: string) => Promise<void>;
   markWalkover: (match: Match, winnerId: string) => Promise<void>;
+  /** A side retired (injury): the other side wins; the score so far is shown but adds no points. */
+  retireMatch: (match: Match, winnerId: string) => Promise<void>;
+  /** ↶ Undo result: back to "not played"; the next-round slot it filled is emptied. */
+  undoResult: (match: Match) => Promise<void>;
+  /** Whether Undo can work here (not a group result once the knockout exists, nor a feeder of a replacement). */
+  canUndo: (match: Match) => boolean;
   /**
    * Best of 3: end the game on screen; when it decides the match this
    * confirms it. "not-over" = the score can't end a game to 15: the card asks,
@@ -156,14 +163,8 @@ export function MatchCard({
   });
 
   const [cardNow, setCardNow] = useState(() => Date.now());
-  const [timeOverPick, setTimeOverPick] = useState<"walkover" | "winner" | null>(null);
-  // Close the picker when the match moves on (confirmed, rescheduled,
-  // cancelled, here or by another admin). Cards used to remount on every App
-  // render, which hid this; now they persist.
-  const matchState = `${m.status}|${m.confirmed}`;
-  const [pickFor, setPickFor] = useState(matchState);
-  if (pickFor !== matchState) { setPickFor(matchState); setTimeOverPick(null); }
-  const pickerOpen = timeOverPickerOpen(m, timeOverPick);
+
+
   // "15–14 can't end a game to 15": shown for the score it was about, until
   // the score changes or the scorer saves it anyway.
   const [notOverAt, setNotOverAt] = useState<string | null>(null);
@@ -289,25 +290,17 @@ export function MatchCard({
     );
   };
 
-  const handleCardWalkover = async (side: "a" | "b") => {
-    if (!pickerOpen) return;
-    const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
-    if (!winnerId) return;
-    if (!confirm("Mark this match as a walkover? The other team forfeits.")) return;
-    await actions.markWalkover(m, winnerId);
-    setTimeOverPick(null);
-  };
-
-  const handleCardSelectWinner = async (side: "a" | "b") => {
-    if (!pickerOpen) return;
-    const winnerId = side === "a" ? m.team_a_id : m.team_b_id;
-    if (!winnerId) return;
-    await actions.selectWinner(m, winnerId);
-    setTimeOverPick(null);
+  // ⋯ No-show / Injury (components/ResultOptions.tsx): `teamId` = the winner,
+  // or for Retired the side that stops.
+  const pickResult = async (kind: ResultOption, teamId: string) => {
+    if (kind === "walkover") return actions.markWalkover(m, teamId);
+    if (kind === "winner") return actions.selectWinner(m, teamId);
+    const winnerId = teamId === m.team_a_id ? m.team_b_id : m.team_a_id;
+    if (winnerId) return actions.retireMatch(m, winnerId);
   };
 
   return (
-    <div style={{
+    <div data-testid="match-card" style={{
       background: "#fff",
       borderRadius: 14,
       border: cardTimeOver ? "2px solid #f59e0b"
@@ -472,18 +465,6 @@ export function MatchCard({
                   {bo3 ? endGameLabel() : "✓ Confirm"}
                 </button>
                 <button
-                  onClick={() => setTimeOverPick("walkover")}
-                  style={{ ...btn("#f59e0b"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}
-                >
-                  Walkover
-                </button>
-                <button
-                  onClick={() => setTimeOverPick("winner")}
-                  style={{ ...btn("#22c55e"), flex: "1 1 100px", padding: "10px", fontSize: 12, borderRadius: 10 }}
-                >
-                  Select Winner
-                </button>
-                <button
                   onClick={async () => {
                     if (confirm("Reschedule? Match goes back to pending.")) await db.rescheduleMatch(m.id);
                   }}
@@ -518,34 +499,16 @@ export function MatchCard({
                 ↶ Undo Game {games.length}
               </button>
             )}
-            {/* Team picker for walkover/winner in time-over */}
-            {pickerOpen && (
-              <div style={{
-                display: "flex", gap: 8, width: "100%", flexWrap: "wrap",
-                padding: "8px 0 0", borderTop: "1px solid #e2e8f0",
-              }}>
-                <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, width: "100%" }}>
-                  {timeOverPick === "walkover" ? "Pick walkover winner:" : "Pick winner:"}
-                </span>
-                <button
-                  onClick={() => timeOverPick === "walkover" ? handleCardWalkover("a") : handleCardSelectWinner("a")}
-                  style={{ ...btn("#16a34a"), flex: 1, padding: "10px", fontSize: 13, borderRadius: 10 }}
-                >
-                  {tLabel(ta)}
-                </button>
-                <button
-                  onClick={() => timeOverPick === "walkover" ? handleCardWalkover("b") : handleCardSelectWinner("b")}
-                  style={{ ...btn("#16a34a"), flex: 1, padding: "10px", fontSize: 13, borderRadius: 10 }}
-                >
-                  {tLabel(tb)}
-                </button>
-                <button
-                  onClick={() => setTimeOverPick(null)}
-                  style={{ ...btn("#e2e8f0", "#475569"), padding: "10px 16px", fontSize: 12, borderRadius: 10, boxShadow: "none" }}
-                >
-                  Cancel
-                </button>
-              </div>
+            {/* No-show / Injury: Walkover before play; Walkover, Retired or Select Winner during play (open at time over). */}
+            {!m.confirmed && !m.is_bye && !sitOutWinner && !(teamSittingOut(ta) && teamSittingOut(tb)) && (
+              <ResultOptions
+                match={m}
+                tone="light"
+                nameOf={id => tLabel(teamFromId(id))}
+                shown={shownScores}
+                startOpen={!!cardTimeOver}
+                onPick={pickResult}
+              />
             )}
             {m.confirmed && !isEditing && (
               <button
@@ -553,6 +516,15 @@ export function MatchCard({
                 style={{ ...btn("#f59e0b"), flex: "1 1 140px", padding: "12px", fontSize: 14, borderRadius: 10 }}
               >
                 ✏️ Edit Score
+              </button>
+            )}
+            {m.confirmed && !m.is_bye && !isEditing && actions.canUndo(m) && (
+              <button
+                onClick={() => void actions.undoResult(m)}
+                style={{ ...btn("#e2e8f0", "#475569"), flex: "1 1 120px", padding: "12px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}
+                title="Back to not played: no score, no court. The next-round slot it filled is emptied."
+              >
+                ↶ Undo result
               </button>
             )}
             {isEditing && (

@@ -23,6 +23,9 @@ const FIELD_LABELS: Record<string, string> = {
   winner_id: "Winner",
   confirmed: "Confirmed",
   is_walkover: "Walkover",
+  is_retired: "Retired (injury)",
+  team_a_id: "Team A (replaced)",
+  team_b_id: "Team B (replaced)",
   started_at: "Started at",
   confirmed_at: "Confirmed at",
   extended_minutes: "Extended (min)",
@@ -33,12 +36,13 @@ function fieldLabel(field: string): string {
   return FIELD_LABELS[field] ?? field;
 }
 
-function formatValue(field: string, value: unknown, match: Match, teamAName: string, teamBName: string): string {
+function formatValue(field: string, value: unknown, match: Match, teamAName: string, teamBName: string, teamName?: (id: string) => string | null): string {
   if (value === null || value === undefined) return "—";
-  if (field === "winner_id") {
-    if (value === match.team_a_id) return teamAName;
-    if (value === match.team_b_id) return teamBName;
-    return String(value).slice(0, 8) + "…";
+  if (field === "winner_id" || field === "team_a_id" || field === "team_b_id") {
+    if (field === "winner_id" && value === match.team_a_id) return teamAName;
+    if (field === "winner_id" && value === match.team_b_id) return teamBName;
+    // A team replaced since (Replace team) is no longer in this match: look it up by id.
+    return teamName?.(String(value)) ?? String(value).slice(0, 8) + "…";
   }
   if (field === "started_at" || field === "confirmed_at") {
     try {
@@ -70,11 +74,14 @@ export function MatchHistoryModal({
   match,
   teamAName,
   teamBName,
+  teamName,
   onClose,
 }: {
   match: Match;
   teamAName: string;
   teamBName: string;
+  /** Any team's name by id (a replaced team is no longer on the match). */
+  teamName?: (id: string) => string | null;
   onClose: () => void;
 }) {
   const [entries, setEntries] = useState<db.MatchAuditEntry[]>([]);
@@ -150,9 +157,9 @@ export function MatchHistoryModal({
                         return (
                           <div key={f} style={{ fontSize: 11, color: "#94a3b8", display: "flex", gap: 6, flexWrap: "wrap" }}>
                             <span style={{ fontWeight: 600, color: "#cbd5e1", minWidth: 90 }}>{fieldLabel(f)}:</span>
-                            <span style={{ color: "#64748b" }}>{formatValue(f, before, match, teamAName, teamBName)}</span>
+                            <span style={{ color: "#64748b" }}>{formatValue(f, before, match, teamAName, teamBName, teamName)}</span>
                             <span style={{ color: "#475569" }}>→</span>
-                            <span style={{ color: "#fff", fontWeight: 600 }}>{formatValue(f, after, match, teamAName, teamBName)}</span>
+                            <span style={{ color: "#fff", fontWeight: 600 }}>{formatValue(f, after, match, teamAName, teamBName, teamName)}</span>
                           </div>
                         );
                       })}

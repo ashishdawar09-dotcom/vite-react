@@ -245,7 +245,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     return `<article class="res"><p class="res-cat"${fitAttrs(cat, shortStage(M!, m))}>${esc(cat)}</p>
       <div class="res-row${wa ? " win" : ""}">${pair("a")}<b>${m.walkover ? "" : m.cur[0]}</b></div>
       <div class="res-row${wa ? "" : " win"}">${pair("b")}<b>${m.walkover ? "" : m.cur[1]}</b></div>
-      <p class="res-when">${m.walkover ? "Walkover · " : ""}${m.bestOf3 && m.games.length && !m.walkover ? `${esc(gamesText(m))} · ` : ""}${ago(m.doneAt)}</p></article>`;
+      <p class="res-when">${m.walkover ? "Walkover · " : m.retired ? "Retired · " : ""}${m.bestOf3 && m.games.length && !m.walkover ? `${esc(gamesText(m))} · ` : ""}${ago(m.doneAt)}</p></article>`;
   }
   function tableHTML(cat: TvCategory, gIdx: number, max: number, compact: boolean) {
     const g = cat.groups.find(x => x.idx === gIdx);

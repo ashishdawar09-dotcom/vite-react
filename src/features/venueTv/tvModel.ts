@@ -52,6 +52,8 @@ export type TvMatch = {
   doneAt: number | null;
   winner: string | null;
   walkover: boolean;
+  /** A side retired (injury): the score so far is shown, but it adds no points (lib/groups.ts countsForPoints). */
+  retired: boolean;
   cancelled: boolean;
   /** Expected court call, venue wide, for queued matches: the same time the phones show (lib/projection.ts). */
   eta: number | null;
@@ -243,6 +245,7 @@ export function buildTvModel(snap: TvSnapshot, now: number): TvModel | null {
       doneAt: parseT(m.confirmed_at),
       winner: m.winner_id && teams[m.winner_id] ? m.winner_id : null,
       walkover: !!m.is_walkover && !cancelled,
+      retired: !!m.is_retired && !m.is_walkover && !cancelled,
       cancelled,
       eta: null,
     };

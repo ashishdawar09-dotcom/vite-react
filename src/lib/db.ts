@@ -10,6 +10,7 @@ import {
   snapshotPollDelay,
   type SnapshotSourceState,
 } from "./snapshotSource";
+import { pickedFields, retiredFields, walkoverFields } from "./resultOptions";
 import type { Database } from "./database.types";
 import type { RegistrationLead } from "../features/publicRegistration/registrationLead";
 import type { BestOf3From, Category, EntrySeed, EntrySeedInput, Match, PendingRegistration, Player, PlayerCategory, PublicRegistrationPayload, Team, Tournament, WaiverConsent } from "../types";
@@ -654,13 +655,50 @@ export async function extendMatch(id: string, extraMinutes: number) {
   }
 }
 
+// Walkover / Retired / Select Winner write only while the match has no result:
+// another organizer's screen a second behind must not overwrite a confirmed
+// score. Nothing updated = it already had a result.
+function stillOpen(rows: { id: string }[] | null) {
+  if (!rows || rows.length === 0) throw new Error("this match already has a result (another organizer?). Refresh to see it");
+}
+
 // `extra`: a best-of-3 match stopped early also writes games won into the
 // score (src/lib/bestOf3.ts stopEarlyPatch), in the same update as the winner.
 export async function selectMatchWinner(id: string, winner_id: string, extra: Partial<Match> = {}) {
-  const { error } = await supabase.from("matches").update({
-    ...extra, winner_id, confirmed: true, status: "completed", confirmed_at: new Date().toISOString(),
-  }).eq("id", id);
+  const { data, error } = await supabase.from("matches").update({ ...extra, ...pickedFields(new Date().toISOString()), winner_id })
+    .eq("id", id).eq("confirmed", false).select("id");
   if (error) throw error;
+  stillOpen(data);
+}
+
+// A side retired (injury) during play: the other side wins. The score so far
+// stays on the card but adds no points (lib/groups.ts countsForPoints).
+// `extra`: best of 3, games won (stopEarlyPatch), as Select Winner.
+export async function retireMatch(id: string, winner_id: string, extra: Partial<Match> = {}) {
+  const { data, error } = await supabase.from("matches").update({ ...extra, ...retiredFields(new Date().toISOString()), winner_id })
+    .eq("id", id).eq("confirmed", false).select("id");
+  if (error) throw error;
+  stillOpen(data);
+}
+
+/**
+ * Replace team (server function replace_team, one transaction): `outgoing`
+ * leaves every listed match and `incoming` takes its place, or a new pair
+ * made from `newPair` does. The server re-checks every rule (nothing in play
+ * or played, same event, incoming not still in the draw) and logs the reason.
+ * Returns the incoming team's id.
+ */
+export async function replaceTeam(args: {
+  categoryId: string; outgoing: string; incoming: string | null; matchIds: string[]; reason: string;
+  newPair?: { p1: string; p2: string | null };
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("replace_team", {
+    p_category_id: args.categoryId, p_outgoing: args.outgoing, p_incoming: args.incoming,
+    p_match_ids: args.matchIds, p_reason: args.reason,
+    p_new_p1: args.newPair?.p1 ?? null, p_new_p2: args.newPair?.p2 ?? null,
+  });
+  if (error) throw error;
+  return data as string;
 }
 
 // Back to the queue with no court. court_allocated_at goes too: left set, the
@@ -669,7 +707,7 @@ export async function selectMatchWinner(id: string, winner_id: string, extra: Pa
 export async function rescheduleMatch(id: string) {
   const { error } = await supabase.from("matches").update({
     status: "pending", started_at: null, court_number: null, court_allocated_at: null, score_a: null, score_b: null, games: null,
-    extended_minutes: 0, confirmed: false, winner_id: null, is_walkover: false, confirmed_at: null,
+    extended_minutes: 0, confirmed: false, winner_id: null, is_walkover: false, is_retired: false, confirmed_at: null,
   }).eq("id", id);
   if (error) throw error;
 }
@@ -678,24 +716,29 @@ export async function rescheduleMatch(id: string) {
 export async function cancelMatch(id: string) {
   const { error } = await supabase.from("matches").update({
     status: "completed", confirmed: true, score_a: 0, score_b: 0, winner_id: null,
-    is_walkover: false, confirmed_at: new Date().toISOString(),
+    is_walkover: false, is_retired: false, confirmed_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) throw error;
 }
 
 // freeCourt: the match was warming up on a court (Sit Out); clear it, or the
 // admin screens keep showing that court as busy.
+// A walkover keeps no score (Ashish, Nov 15): the match didn't really happen,
+// so nobody gains or loses points. Best of 3 keeps its finished games.
 export async function markWalkover(id: string, winner_id: string, opts: { freeCourt?: boolean; extra?: Partial<Match> } = {}) {
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("matches")
     .update({
       ...opts.extra,
-      winner_id, confirmed: true, status: "completed", is_walkover: true, confirmed_at: now,
+      ...walkoverFields(now), winner_id,
       ...(opts.freeCourt ? { court_number: null, court_allocated_at: null } : {}),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("confirmed", false)
+    .select("id");
   if (error) throw error;
+  stillOpen(data);
 }
 
 // LEGACY / KEPT FOR COMPATIBILITY ----------------------------------------

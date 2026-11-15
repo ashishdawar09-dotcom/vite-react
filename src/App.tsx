@@ -26,6 +26,7 @@ import { finalScorePatch } from "./lib/scoring";
 import { editedGamesPatch, endGamePatch, gamesOf, isBestOf3, stopEarlyPatch, undoGamePatch } from "./lib/bestOf3";
 import { scoreTaps } from "./hooks/useScoreTaps";
 import { PromoteTeamPicker } from "./components/PromoteTeamPicker";
+import { ReplaceTeamModal } from "./components/ReplaceTeamModal";
 import { AppFooter } from "./components/AppFooter";
 import { MoreDrawer, type TabId } from "./components/MoreDrawer";
 import { PartnerPickerModal } from "./components/PartnerPickerModal";
@@ -34,6 +35,7 @@ import { AppHeader } from "./components/AppHeader";
 import type { GameScore, Match, Player, Team, Tournament } from "./types";
 import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
 import { semifinalsTo21 } from "./lib/gameRules";
+import { planUndoResult, undoRefusedText } from "./lib/resultOptions";
 import { courtTakenMessage, isCourtTaken } from "./lib/courts";
 import { groupKeyOf, groupLetter, groupStandings, groupTies, groupsAllConfirmed, isRoundRobinOnly, roundRobinPodium } from "./lib/groups";
 import { pickQualifiers, planSitOut, sitOutWalkoverWinner, teamSittingOut } from "./lib/sitOut";
@@ -125,6 +127,8 @@ export default function App() {
   // Active "Promote Team" picker target — opens the modal on the given knockout
   // match slot when set. null = closed.
   const [promotePickerFor, setPromotePickerFor] = useState<{ matchId: string; side: "a" | "b" } | null>(null);
+  // 🔁 Replace team (components/ReplaceTeamModal.tsx), for the event on screen.
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // Blocks a second Start Group Stage tap while the first is still writing.
   const startingGroupStage = useRef(false);
@@ -914,17 +918,45 @@ export default function App() {
     if (plan) await applyBracket(plan);
     return "saved";
   };
-  // A best-of-3 match stopped at time over: any score still saving lands
-  // first, then the result saves games won (stopEarlyPatch). One-game
-  // matches write as before.
+  // A match stopped before its end (walkover, retired, picked winner): taps
+  // are held and any score still saving lands first, so the stored score is
+  // the one on screen (one-game matches used to skip this). Best of 3 then
+  // saves games won (stopEarlyPatch).
   const stopEarly = async (m: Match, write: (extra: Partial<Match>) => Promise<void>) => {
-    if (!isBestOf3(m)) return write({});
     const release = scoreTaps.lock(m);
     try {
-      await scoreTaps.flush(m.id);
-      await write(stopEarlyPatch(m));
+      if (!(await scoreTaps.flush(m.id))) throw new Error("a score on screen didn't save");
+      await write(isBestOf3(m) ? stopEarlyPatch(m) : {});
     } finally {
       release();
+    }
+  };
+  /** Run a result write; a failure is said in a toast (nothing half-saved: the bracket moves only after the match saves). */
+  const saveResult = async (m: Match, winnerId: string, write: (extra: Partial<Match>) => Promise<void>) => {
+    if (!guard()) return;
+    const plan = planBracket(m, winnerId); if (!plan) return;
+    try {
+      await stopEarly(m, write);
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    }
+    await applyBracket(plan);
+  };
+  // ↶ Undo result (lib/resultOptions.ts planUndoResult): back to "not played".
+  const undoResult = async (m: Match) => {
+    if (!guard()) return;
+    const r = planUndoResult(matches, m);
+    if (!r.ok) { toast(undoRefusedText(r.reason), "warn"); return; }
+    const later = r.plan.cleared.length
+      ? `\n\nThese later matches will be reset and must be played again:\n${describeCleared(r.plan.cleared, x => knockoutLabel(x, matches))}`
+      : "";
+    if (!confirm(`Undo the result of ${matchLabel(m)}?\n\nIt goes back to "not played": no score, no winner, no court.${m.stage === "knockout" ? " The winner comes out of the next round." : ""}${later}`)) return;
+    try {
+      await applyPlan(r.plan, db.updateMatch);
+      toast("Result undone. The match is back in the queue.", "info");
+    } catch (e: unknown) {
+      toast(`Undo didn't fully save: ${e instanceof Error ? e.message : "error"}. Refresh and check the match and the next round.`, "error");
     }
   };
   const undoGame = async (m: Match) => {
@@ -1014,16 +1046,14 @@ export default function App() {
     cancelAllocation: cancelMatchAllocation,
     confirmFinalScore: confirmInline,
     saveEditedMatch,
-    selectWinner: async (m, winnerId) => {
-      const plan = planBracket(m, winnerId); if (!plan) return;
-      await stopEarly(m, (extra) => db.selectMatchWinner(m.id, winnerId, extra));
-      await applyBracket(plan);
-    },
-    markWalkover: async (m, winnerId) => {
-      const plan = planBracket(m, winnerId); if (!plan) return;
-      await stopEarly(m, (extra) => db.markWalkover(m.id, winnerId, { extra }));
-      await applyBracket(plan);
-    },
+    selectWinner: (m, winnerId) => saveResult(m, winnerId, (extra) => db.selectMatchWinner(m.id, winnerId, extra)),
+    // Before play (or warming up on a court) a walkover also frees the court.
+    markWalkover: (m, winnerId) => saveResult(m, winnerId, (extra) => db.markWalkover(m.id, winnerId, {
+      extra, freeCourt: m.status !== "live" && (!!m.court_allocated_at || m.court_number != null),
+    })),
+    retireMatch: (m, winnerId) => saveResult(m, winnerId, (extra) => db.retireMatch(m.id, winnerId, extra)),
+    undoResult,
+    canUndo: (m) => planUndoResult(matches, m).ok,
     recordSitOutWalkover,
     endGame,
     undoGame,
@@ -1319,6 +1349,13 @@ export default function App() {
         {current && tab === "groups" && (
           <MatchCardEnvContext.Provider value={matchCardEnv}>
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
+          {isAdmin && currentCategory && currentCategory.phase !== "none" && (
+            <div style={{ display: "flex", justifyContent: "flex-end", margin: "0 0 10px" }}>
+              <button type="button" onClick={() => setReplaceOpen(true)} style={{ ...btn("#a855f7"), padding: "8px 14px", fontSize: 13 }}>
+                🔁 Replace team
+              </button>
+            </div>
+          )}
           <GroupsTab
             categories={categories}
             currentCategoryId={currentCategoryId}
@@ -1346,6 +1383,13 @@ export default function App() {
         {current && tab === "knockout" && (
           <MatchCardEnvContext.Provider value={matchCardEnv}>
           <Suspense fallback={<LottieLoader size={140} label="Loading…" />}>
+          {isAdmin && currentCategory && currentCategory.phase !== "none" && (
+            <div style={{ display: "flex", justifyContent: "flex-end", margin: "0 0 10px" }}>
+              <button type="button" onClick={() => setReplaceOpen(true)} style={{ ...btn("#a855f7"), padding: "8px 14px", fontSize: 13 }}>
+                🔁 Replace team
+              </button>
+            </div>
+          )}
           <KnockoutTab
             categories={categories}
             currentCategoryId={currentCategoryId}
@@ -1393,6 +1437,16 @@ export default function App() {
         </Suspense>
       )}
 
+      {replaceOpen && isAdmin && currentCategory && (
+        <ReplaceTeamModal
+          category={currentCategory}
+          matches={matches}
+          teams={teamsView}
+          players={players}
+          label={m => m.stage === "knockout" ? knockoutLabel(m, matches) : `Group ${groupLetter(m.group_idx ?? 0)}`}
+          onClose={() => setReplaceOpen(false)}
+        />
+      )}
       {promotePickerFor && (() => {
         // Build the eligibility-status sets fresh on each open (cheap given small N).
         const bracketTeamIds = new Set<string>();
