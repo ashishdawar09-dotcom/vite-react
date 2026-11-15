@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { colors, radii, spacing, typography } from "../lib/theme";
 import { Button } from "./ui/Button";
 import { Modal } from "./ui/Modal";
+import { friendlyAuthError } from "../lib/authErrors";
 
 type Stage = "email" | "code";
 
@@ -17,13 +18,13 @@ function isInstalledPwa(): boolean {
   return window.matchMedia?.("(display-mode: standalone)").matches ?? false;
 }
 
-export function Login({ onClose }: { onClose: () => void }) {
+export function Login({ onClose, initialError = null }: { onClose: () => void; initialError?: string | null }) {
   const [stage, setStage] = useState<Stage>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyOAuth, setBusyOAuth] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(initialError);
   const [resentAt, setResentAt] = useState<number | null>(null);
   const inPwa = isInstalledPwa();
 
@@ -41,11 +42,13 @@ export function Login({ onClose }: { onClose: () => void }) {
       email: e,
       // emailRedirectTo: the magic link in the email lands here. We keep it
       // for desktop users who prefer clicking; PWA users use the 6-digit code.
-      options: { emailRedirectTo: window.location.origin },
+      // shouldCreateUser false: only existing organizer accounts get a code. Without it, any email typed
+      // here became a new account and got Supabase's bare "Confirm Your Signup" email (Nov 14, 2026).
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
     });
     setBusy(false);
     if (error) {
-      setErr(error.message);
+      setErr(friendlyAuthError(error));
       return;
     }
     setStage("code");
@@ -94,7 +97,7 @@ export function Login({ onClose }: { onClose: () => void }) {
     });
     if (error) {
       setBusyOAuth(false);
-      setErr(error.message);
+      setErr(friendlyAuthError(error));
     }
     // On success the browser is redirected; no need to clear busy.
   };
@@ -211,7 +214,7 @@ export function Login({ onClose }: { onClose: () => void }) {
               fontFamily: typography.body,
             }}
           >
-            Anyone can sign in. Admin powers are granted by an existing tournament admin.
+            Only tournament organizers can sign in. Players never need an account.
           </p>
         </>
       ) : (
