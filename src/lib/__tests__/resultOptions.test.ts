@@ -1,7 +1,7 @@
 // Result options from the start of a match, Undo result and Replace team (Ashish, Nov 15 2026).
 import { describe, expect, it } from "vitest";
 import type { Match } from "../../types";
-import { applyPlan, planKnockoutAdvance, type KnockoutPlan } from "../knockout";
+import { applyPlan, confirmKnockoutPlan, planKnockoutAdvance, type KnockoutPlan } from "../knockout";
 import { finalScorePatch } from "../scoring";
 import { stopEarlyPatch } from "../bestOf3";
 import { planSitOut } from "../sitOut";
@@ -205,5 +205,29 @@ describe("points rule: a walkover or a retirement gives the win but no points", 
     expect(retiredFields(T)).toMatchObject({ is_walkover: false, is_retired: true });
     expect(pickedFields(T)).toMatchObject({ is_walkover: false, is_retired: false });
     expect(finalScorePatch(M({ team_a_id: "A", team_b_id: "B" }), 15, 3, T)).toMatchObject({ ok: true, patch: { is_walkover: false, is_retired: false } });
+  });
+});
+
+describe("review fixes (Nov 15)", () => {
+  it("a corrected QF with a different winner asks before taking a replacement's SF slot", () => {
+    const { qf0, qf1, sf } = bracket();
+    const rows = [{ ...qf0, winner_id: "X", confirmed: true, status: "completed" as const, score_a: 15, score_b: 9 }, qf1, { ...sf, team_a_id: "Y" }];
+    const plan = planKnockoutAdvance(rows, rows[0], "Z");
+    expect(plan.replaced?.map(m => m.id)).toEqual([sf.id]);
+    const asked: string[] = [];
+    expect(confirmKnockoutPlan(rows, rows[0], "Z", msg => { asked.push(msg); return false; })).toBeNull();
+    expect(asked[0]).toContain("Replace team");
+    expect(confirmKnockoutPlan(rows, rows[0], "Z", () => true)?.updates).toEqual([{ id: sf.id, patch: { team_a_id: "Z" } }]);
+  });
+  it("no question when the next slot simply holds the old winner", () => {
+    const { qf0, qf1, sf } = bracket();
+    const rows = [{ ...qf0, winner_id: "X", confirmed: true, status: "completed" as const }, qf1, { ...sf, team_a_id: "X" }];
+    expect(planKnockoutAdvance(rows, rows[0], "Z").replaced).toBeUndefined();
+  });
+  it("undo of a cancelled knockout match leaves a hand-placed team in the next round", async () => {
+    const { qf0, qf1, sf } = bracket();
+    const rows = [{ ...qf0, confirmed: true, status: "completed" as const, score_a: 0, score_b: 0 }, qf1, { ...sf, team_a_id: "H" }];
+    const u = planUndoResult(rows, rows[0]);
+    expect(u.ok && u.plan.updates.map(x => x.id)).toEqual([qf0.id]);
   });
 });

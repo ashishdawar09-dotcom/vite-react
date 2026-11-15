@@ -655,19 +655,30 @@ export async function extendMatch(id: string, extraMinutes: number) {
   }
 }
 
+// Walkover / Retired / Select Winner write only while the match has no result:
+// another organizer's screen a second behind must not overwrite a confirmed
+// score. Nothing updated = it already had a result.
+function stillOpen(rows: { id: string }[] | null) {
+  if (!rows || rows.length === 0) throw new Error("this match already has a result (another organizer?). Refresh to see it");
+}
+
 // `extra`: a best-of-3 match stopped early also writes games won into the
 // score (src/lib/bestOf3.ts stopEarlyPatch), in the same update as the winner.
 export async function selectMatchWinner(id: string, winner_id: string, extra: Partial<Match> = {}) {
-  const { error } = await supabase.from("matches").update({ ...extra, ...pickedFields(new Date().toISOString()), winner_id }).eq("id", id);
+  const { data, error } = await supabase.from("matches").update({ ...extra, ...pickedFields(new Date().toISOString()), winner_id })
+    .eq("id", id).eq("confirmed", false).select("id");
   if (error) throw error;
+  stillOpen(data);
 }
 
 // A side retired (injury) during play: the other side wins. The score so far
 // stays on the card but adds no points (lib/groups.ts countsForPoints).
 // `extra`: best of 3, games won (stopEarlyPatch), as Select Winner.
 export async function retireMatch(id: string, winner_id: string, extra: Partial<Match> = {}) {
-  const { error } = await supabase.from("matches").update({ ...extra, ...retiredFields(new Date().toISOString()), winner_id }).eq("id", id);
+  const { data, error } = await supabase.from("matches").update({ ...extra, ...retiredFields(new Date().toISOString()), winner_id })
+    .eq("id", id).eq("confirmed", false).select("id");
   if (error) throw error;
+  stillOpen(data);
 }
 
 /**
@@ -716,15 +727,18 @@ export async function cancelMatch(id: string) {
 // so nobody gains or loses points. Best of 3 keeps its finished games.
 export async function markWalkover(id: string, winner_id: string, opts: { freeCourt?: boolean; extra?: Partial<Match> } = {}) {
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("matches")
     .update({
       ...opts.extra,
       ...walkoverFields(now), winner_id,
       ...(opts.freeCourt ? { court_number: null, court_allocated_at: null } : {}),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("confirmed", false)
+    .select("id");
   if (error) throw error;
+  stillOpen(data);
 }
 
 // LEGACY / KEPT FOR COMPATIBILITY ----------------------------------------

@@ -51,6 +51,7 @@ const SERVER: Record<string, string> = {
   not_admin: "Only organizers can replace teams.",
   same_team: "That's the same team.",
   new_player_still_in_draw: "A chosen player is on another team still in this event's draw.",
+  incoming_already_in_event: "The team coming in already has matches in this event.",
 };
 
 export function ReplaceTeamModal({

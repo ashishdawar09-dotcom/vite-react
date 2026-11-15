@@ -18,6 +18,8 @@ export type KnockoutPlan = {
   updates: MatchUpdate[];
   /** Matches whose result, score, court or clock these updates wipe. Ask before applying when non-empty. */
   cleared: Match[];
+  /** Next-round matches whose team was put there with Replace team and would now be swapped out. Ask first. */
+  replaced?: Match[];
 };
 
 /** Fields that return a match to "not started". Mirrors db.rescheduleMatch, plus the warm-up timestamp. */
@@ -129,6 +131,16 @@ function planAdvance(all: Match[], match: Match, winnerId: string | null, undo: 
   if (undo && next && from.winner_id && next[nextSide] != null && next[nextSide] !== from.winner_id) {
     plan.updates = []; return plan;
   }
+  // Undo of a match with no winner (cancelled): it filled nothing, so a team in
+  // the next slot was placed by hand. Leave it.
+  if (undo && !from.winner_id) return plan;
+  // A corrected score that changes the winner, where the next slot holds a
+  // team put there with Replace team (neither the old nor the new winner):
+  // the new winner takes the slot, but only after the director agrees.
+  if (!undo && from.confirmed && from.winner_id && from.winner_id !== winnerId && next &&
+      next[nextSide] != null && next[nextSide] !== from.winner_id && next[nextSide] !== winnerId) {
+    plan.replaced = [{ ...next }];
+  }
   advance(from, winnerId);
   plan.updates = order.map(id => ({ id, patch: patches.get(id)! }));
   return plan;
@@ -185,6 +197,10 @@ export function confirmKnockoutPlan(
   ask: (message: string) => boolean = msg => window.confirm(msg),
 ): KnockoutPlan | null {
   const plan = planKnockoutAdvance(all, match, winnerId);
+  if (plan.replaced?.length) {
+    const list = plan.replaced.map(m => `• ${knockoutLabel(m, all)}`).join("\n");
+    if (!ask(`The next round has a team put there with Replace team:\n\n${list}\n\nThis result's winner would take that place instead. Continue? (Cancel saves nothing.)`)) return null;
+  }
   if (plan.cleared.length === 0) return plan;
   const list = describeCleared(plan.cleared, m => knockoutLabel(m, all));
   return ask(`This changes who goes through, so these matches will be reset and must be played again:\n\n${list}\n\nContinue?`) ? plan : null;

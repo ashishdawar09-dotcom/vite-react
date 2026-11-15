@@ -71,6 +71,8 @@ begin
   if not is_admin() then raise exception 'not_admin' using errcode = '42501'; end if;
   if p_reason is null or btrim(p_reason) = '' then raise exception 'reason_required'; end if;
   if coalesce(array_length(p_match_ids, 1), 0) = 0 then raise exception 'no_matches'; end if;
+  -- One replacement at a time per event (two organizers pressing Replace together).
+  perform pg_advisory_xact_lock(hashtext('replace_team:' || p_category_id::text));
   select id, tournament_id, team_size into v_cat from categories where id = p_category_id;
   if v_cat.id is null then raise exception 'no_event'; end if;
   if not exists (select 1 from teams where id = p_outgoing and category_id = p_category_id) then raise exception 'outgoing_not_in_event'; end if;
@@ -97,6 +99,17 @@ begin
     raise exception 'incoming_not_in_event';
   end if;
   if v_in = p_outgoing then raise exception 'same_team'; end if;
+  -- Hold the listed matches and every match of the incoming team in this event until the end,
+  -- so nobody starts one of them between these checks and the swap.
+  perform 1 from matches where category_id = p_category_id
+    and (id = any (p_match_ids) or team_a_id = v_in or team_b_id = v_in) for update;
+  select coalesce(bool_or(stage = 'group'), false) into v_has_group from matches where id = any (p_match_ids);
+  if v_has_group then
+    if exists (select 1 from matches where category_id = p_category_id and stage = 'knockout') then raise exception 'knockout_started'; end if;
+    -- Into a group only a team with no match at all in this event.
+    if exists (select 1 from matches where category_id = p_category_id
+               and (team_a_id = v_in or team_b_id = v_in or winner_id = v_in)) then raise exception 'incoming_already_in_event'; end if;
+  end if;
   if exists (select 1 from teams t join players p on p.id in (t.p1_id, t.p2_id) where t.id = v_in and not p.active) then
     raise exception 'incoming_sitting_out'; end if;
   if exists (select 1 from matches where category_id = p_category_id and not confirmed and status <> 'completed' and not is_bye
@@ -105,7 +118,6 @@ begin
   for m in select * from matches where id = any (p_match_ids) order by id for update loop
     if m.category_id <> p_category_id then raise exception 'match_not_in_event'; end if;
     if m.team_a_id is distinct from p_outgoing and m.team_b_id is distinct from p_outgoing then raise exception 'outgoing_not_in_match'; end if;
-    if m.stage = 'group' then v_has_group := true; end if;
     if m.is_bye then
       if m.winner_id is distinct from p_outgoing then raise exception 'bye_not_held'; end if;
     elsif m.confirmed or m.status <> 'pending' or m.started_at is not null or m.court_number is not null
@@ -121,7 +133,6 @@ begin
   end loop;
   if v_n <> array_length(p_match_ids, 1) then raise exception 'match_missing'; end if;
   if v_has_group then
-    if exists (select 1 from matches where category_id = p_category_id and stage = 'knockout') then raise exception 'knockout_started'; end if;
     -- A group swap must take every one of the team's group matches, or the team would sit in the group twice.
     if exists (select 1 from matches where category_id = p_category_id and stage = 'group'
                and (team_a_id = p_outgoing or team_b_id = p_outgoing)) then raise exception 'group_swap_incomplete'; end if;
