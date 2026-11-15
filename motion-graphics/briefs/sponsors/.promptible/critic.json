@@ -1,0 +1,27 @@
+{
+  "critic": "independent",
+  "referenceId": "openmontage-hook",
+  "verdict": "pass",
+  "scores": {
+    "research_fidelity": 9,
+    "reference_fidelity": 8,
+    "concept_specificity": 9,
+    "product_authenticity": 9,
+    "mobile_readability": 8,
+    "composition": 8,
+    "motion_causality": 8,
+    "material_restraint": 9
+  },
+  "hardFailures": [],
+  "notes": [
+    "Inspected the render, 1080x1920, 240 frames at 30 fps (sha 644d4b57…, matches render-brief.json). I read every frame at phone width (360 px), plus full-resolution strips at frames 0/44/48/52, 46–58 and 106–118, and per-frame motion energy.",
+    "Evidence check passes. 'Our sponsors.', the thank-you lede, the eyebrow 'Shuttle Storm ’26 · Saturday, November 21, 2026', the ADW 'Presenting sponsor' block and the 'Sponsorship / Back the storm.' block (body copy, 'Contact the directors', 'Register to play') are verbatim from sponsors.html. (778) 964-6999 matches the tel:+17789646999 link. shuttlestorm.adawar.org/sponsors is the canonical URL. The end-lockup mark's sha256 matches favicon.svg exactly. The six supporter tiles (frame 200 crop) match site-sponsor-*.png in colour and proportion, with a 16:10 white tile as on the site. There is no recolouring, redrawing or invented number, tier or claim.",
+    "Material check: the teal radial tint inside the ADW card and the cyan 'D' are the site's own CSS (.presenting radial-gradient rgba(112,249,255,.10); .adw-mark span:nth-child(2) #70F9FF), shown as captured. The video adds no glow, glass, coloured shadow or particles. The volt underlines under 'local businesses back local badminton' (frames ~4–24) and 'BACK THE' are flat.",
+    "Fixed since the last critique: the join card no longer covers the second tile row. Frames 100–132 keep a clear gap between the thank-you card, the wall and the ask. Dock speed now peaks around 85–95 px/frame with an ease-out (no whip). The convergence (frames 37–74) shows no tile crossing another, and the top third is filled from frame 0.",
+    "Remaining weakness 1, transitional void (frames ~108–120): the wall finishes rising before the ask appears. At frame 112 the bottom ~58% of the frame is empty charcoal, and at frame 116 there is a ~700 px gap between the wall and the incoming card. This lasts about 0.4 s. Fix: start the join card's rise 4–6 frames earlier, from just below the frame edge, so its top trails the wall's bottom edge by a fixed 30–60 px throughout the move.",
+    "Remaining weakness 2, a quiet, sparse opening (frames 0–36): only Novelty and Abbotsford Dental are fully on screen, and the other five are slivers at the frame edges. The ADW card shows only as a blank dark rectangle on the left (x≈0–280 px at full res). Apart from the underline drawing, motion energy is near zero from frame 25 to 36. Compared with the reference's crowded, moving scatter, this reads as a wait. Fix: begin the inward drift by frame ~12–15, or bring two or three more tiles partly into frame, so the fragments are visibly in motion before they converge. Also offset the ADW card so its 'ADW' letters, not an empty panel, show at the edge.",
+    "Hold timing: the locked wall is completely still only from frame 74 to 97 (~0.77 s, against the ~1.1 s in the plan) before it lifts away. It is long enough to read seven logos, but only just. The end state is stable from frame 160 to 239 (~2.7 s) and is a well-composed centred column (ADW, 3×2 supporters, ask, phone, URL, lockup).",
+    "Phone readability (360 px, frame 200): the headline, phone number, URL, buttons and body copy are readable, and every logo name is recognisable. Logo sub-lines (CORPORATION, PHYSIOTHERAPY & WELLNESS) and the 'SPONSORSHIP' eyebrow fall below legibility, which is acceptable. The column uses ~67% of the frame width. Widening it to ~78–80% would help the small body copy.",
+    "Reference fit: fragments physically converging into one system, followed by a consequence docking beneath it, matches openmontage-hook's mechanism. The camera grammar is thinner than the reference: there is no pullback reveal, and the consequence block slides in rather than visibly running or changing state. This keeps reference_fidelity and motion_causality at 8, not higher."
+  ]
+}
