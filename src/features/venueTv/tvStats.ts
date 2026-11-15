@@ -44,9 +44,13 @@ export type TvStats = {
   results: number;
 };
 
-/** Each side's points in a finished match, or null when there are none to count (a walkover, or no scores entered). */
+/**
+ * Each side's points in a finished match, or null when there are none to
+ * count: a walkover or a retirement (the win counts, the points don't, as in
+ * the group tables), or no scores entered.
+ */
 export function matchPoints(m: TvMatch): [number, number] | null {
-  if (m.walkover) return null;
+  if (m.walkover || m.retired) return null;
   if (m.bestOf3) {
     if (!m.games.length) return null;
     return m.games.reduce<[number, number]>((s, [x, y]) => [s[0] + x, s[1] + y], [0, 0]);

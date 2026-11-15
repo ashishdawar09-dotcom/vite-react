@@ -7,7 +7,7 @@ describe("finalScorePatch (report blocker 4)", () => {
     expect(r).toEqual({
       ok: true,
       winnerId: "B",
-      patch: { score_a: 15, score_b: 21, winner_id: "B", confirmed: true, status: "completed", confirmed_at: "2026-11-21T18:00:00.000Z" },
+      patch: { score_a: 15, score_b: 21, winner_id: "B", confirmed: true, status: "completed", confirmed_at: "2026-11-21T18:00:00.000Z", is_walkover: false, is_retired: false },
     });
   });
 

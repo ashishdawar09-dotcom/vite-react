@@ -1,5 +1,6 @@
 import { CategoryFilter } from "../../components/CategoryFilter";
 import { isCancelledMatch, matchLoserId } from "../../lib/matchOutcome";
+import { countsForPoints } from "../../lib/groups";
 import type { Category, Match, TeamWithPlayers, Tournament } from "../../types";
 
 /**
@@ -36,7 +37,8 @@ export function ScoreboardTab({
 
   // A cancelled match (no winner) counts for nobody.
   groupMatches.filter(m => m.confirmed && !isCancelledMatch(m)).forEach(m => {
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
+    // Walkovers and retirements: the win counts, the points don't (lib/groups.ts countsForPoints).
+    const sa = countsForPoints(m) ? m.score_a ?? 0 : 0, sb = countsForPoints(m) ? m.score_b ?? 0 : 0;
     if (m.team_a_id && all[m.team_a_id]) { all[m.team_a_id].pf += sa; all[m.team_a_id].pa += sb; }
     if (m.team_b_id && all[m.team_b_id]) { all[m.team_b_id].pf += sb; all[m.team_b_id].pa += sa; }
     if (m.winner_id && all[m.winner_id]) all[m.winner_id].gw++;

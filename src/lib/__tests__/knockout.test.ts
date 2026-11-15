@@ -29,7 +29,7 @@ function bracket8(cat: string, bronze = true) {
 
 const RESET_FIELDS = {
   winner_id: null, confirmed: false, confirmed_at: null, score_a: null, score_b: null, games: null,
-  status: "pending", is_walkover: false, started_at: null, court_number: null,
+  status: "pending", is_walkover: false, is_retired: false, started_at: null, court_number: null,
   court_allocated_at: null, extended_minutes: 0,
 };
 

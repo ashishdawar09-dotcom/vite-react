@@ -126,6 +126,9 @@ export type Match = {
   confirmed: boolean;
   is_bye: boolean;
   is_walkover: boolean;
+  // PROTOTYPE: a side retired (injury) during play; the score so far stands.
+  // Optional: rows cached before the column existed don't have it.
+  is_retired?: boolean;
   status: "pending" | "live" | "completed";
   started_at: string | null;
   scheduled_at: string | null;
