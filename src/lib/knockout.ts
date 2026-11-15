@@ -18,6 +18,8 @@ export type KnockoutPlan = {
   updates: MatchUpdate[];
   /** Matches whose result, score, court or clock these updates wipe. Ask before applying when non-empty. */
   cleared: Match[];
+  /** Next-round matches whose team was put there with Replace team and would now be swapped out. Ask first. */
+  replaced?: Match[];
 };
 
 /** Fields that return a match to "not started". Mirrors db.rescheduleMatch, plus the warm-up timestamp. */
@@ -30,6 +32,7 @@ export const RESET_MATCH: Partial<Match> = {
   games: null,
   status: "pending",
   is_walkover: false,
+  is_retired: false,
   started_at: null,
   court_number: null,
   court_allocated_at: null,
@@ -39,7 +42,7 @@ export const RESET_MATCH: Partial<Match> = {
 type Side = "team_a_id" | "team_b_id";
 
 /** True once anything has happened on the match beyond having its teams filled in. */
-function hasProgress(m: Match): boolean {
+export function hasProgress(m: Match): boolean {
   return !!(
     m.winner_id || m.confirmed || m.status !== "pending" || m.started_at ||
     m.court_allocated_at || m.court_number != null || m.score_a != null || m.score_b != null ||
@@ -53,8 +56,21 @@ function hasProgress(m: Match): boolean {
  * match's own category's knockout rows are read. Pure: nothing is written.
  */
 export function planKnockoutAdvance(all: Match[], match: Match, winnerId: string | null): KnockoutPlan {
+  return planAdvance(all, match, winnerId, false);
+}
+
+/**
+ * Undo a knockout result: the slots this match filled in later rounds are
+ * emptied (and reset if they had started), exactly as if it had no winner.
+ * The match itself is reset by the caller. Pure.
+ */
+export function planKnockoutUndo(all: Match[], match: Match): KnockoutPlan {
+  return planAdvance(all, match, null, true);
+}
+
+function planAdvance(all: Match[], match: Match, winnerId: string | null, undo: boolean): KnockoutPlan {
   const plan: KnockoutPlan = { updates: [], cleared: [] };
-  if (match.stage !== "knockout" || match.round_idx == null || match.is_bronze || !winnerId) return plan;
+  if (match.stage !== "knockout" || match.round_idx == null || match.is_bronze || (!winnerId && !undo)) return plan;
 
   // Working copies, so a cascade sees the effect of earlier steps.
   const rows = new Map<string, Match>();
@@ -100,7 +116,32 @@ export function planKnockoutAdvance(all: Match[], match: Match, winnerId: string
     }
   }
 
-  advance(rows.get(match.id) ?? { ...match }, winnerId);
+  // A corrected score with the same winner changes nothing downstream. The
+  // next slot may hold a team put there with Replace team (not this match's
+  // winner); re-advancing would quietly put the replaced team back. An empty
+  // slot is still filled, so re-confirming repairs a lost advance.
+  const from = rows.get(match.id) ?? { ...match };
+  const next = tree().find(m => m.round_idx === from.round_idx! + 1 && m.slot_idx === Math.floor(from.slot_idx / 2));
+  const nextSide: Side = from.slot_idx % 2 === 0 ? "team_a_id" : "team_b_id";
+  if (!undo && from.confirmed && from.winner_id === winnerId && next && next[nextSide] != null && next[nextSide] !== winnerId) {
+    return plan;
+  }
+  // Undo: a slot that holds someone other than this match's winner (a
+  // replacement) is not this match's to empty.
+  if (undo && next && from.winner_id && next[nextSide] != null && next[nextSide] !== from.winner_id) {
+    plan.updates = []; return plan;
+  }
+  // Undo of a match with no winner (cancelled): it filled nothing, so a team in
+  // the next slot was placed by hand. Leave it.
+  if (undo && !from.winner_id) return plan;
+  // A corrected score that changes the winner, where the next slot holds a
+  // team put there with Replace team (neither the old nor the new winner):
+  // the new winner takes the slot, but only after the director agrees.
+  if (!undo && from.confirmed && from.winner_id && from.winner_id !== winnerId && next &&
+      next[nextSide] != null && next[nextSide] !== from.winner_id && next[nextSide] !== winnerId) {
+    plan.replaced = [{ ...next }];
+  }
+  advance(from, winnerId);
   plan.updates = order.map(id => ({ id, patch: patches.get(id)! }));
   return plan;
 }
@@ -156,6 +197,10 @@ export function confirmKnockoutPlan(
   ask: (message: string) => boolean = msg => window.confirm(msg),
 ): KnockoutPlan | null {
   const plan = planKnockoutAdvance(all, match, winnerId);
+  if (plan.replaced?.length) {
+    const list = plan.replaced.map(m => `• ${knockoutLabel(m, all)}`).join("\n");
+    if (!ask(`The next round has a team put there with Replace team:\n\n${list}\n\nThis result's winner would take that place instead. Continue? (Cancel saves nothing.)`)) return null;
+  }
   if (plan.cleared.length === 0) return plan;
   const list = describeCleared(plan.cleared, m => knockoutLabel(m, all));
   return ask(`This changes who goes through, so these matches will be reset and must be played again:\n\n${list}\n\nContinue?`) ? plan : null;

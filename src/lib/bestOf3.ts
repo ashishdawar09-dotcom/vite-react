@@ -88,7 +88,7 @@ export function endGamePatch(
   const winnerId = wa > wb ? m.team_a_id : m.team_b_id;
   return {
     ok: true, decided: true, winnerId,
-    patch: { games, score_a: wa, score_b: wb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt },
+    patch: { games, score_a: wa, score_b: wb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt, is_walkover: false, is_retired: false },
   };
 }
 
@@ -153,7 +153,7 @@ export function editedGamesPatch(
   const winnerId = wa > wb ? m.team_a_id : m.team_b_id;
   return {
     ok: true, winnerId,
-    patch: { games, score_a: wa, score_b: wb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt },
+    patch: { games, score_a: wa, score_b: wb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt, is_walkover: false, is_retired: false },
   };
 }
 

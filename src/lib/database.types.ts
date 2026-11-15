@@ -329,6 +329,7 @@ export type Database = {
           is_bronze: boolean
           is_bye: boolean
           is_walkover: boolean
+          is_retired: boolean
           queue_position: number | null
           round_idx: number | null
           scheduled_at: string | null
@@ -358,6 +359,7 @@ export type Database = {
           is_bronze?: boolean
           is_bye?: boolean
           is_walkover?: boolean
+          is_retired?: boolean
           queue_position?: number | null
           round_idx?: number | null
           scheduled_at?: string | null
@@ -387,6 +389,7 @@ export type Database = {
           is_bronze?: boolean
           is_bye?: boolean
           is_walkover?: boolean
+          is_retired?: boolean
           queue_position?: number | null
           round_idx?: number | null
           scheduled_at?: string | null
@@ -988,6 +991,42 @@ export type Database = {
         }
         Relationships: []
       }
+      team_replacements: {
+        Row: {
+          category_id: string
+          id: number
+          incoming_team_id: string
+          match_ids: string[]
+          outgoing_team_id: string
+          reason: string
+          replaced_at: string
+          replaced_by: string
+          tournament_id: string
+        }
+        Insert: {
+          category_id: string
+          id?: never
+          incoming_team_id: string
+          match_ids: string[]
+          outgoing_team_id: string
+          reason: string
+          replaced_at?: string
+          replaced_by?: string
+          tournament_id: string
+        }
+        Update: {
+          category_id?: string
+          id?: never
+          incoming_team_id?: string
+          match_ids?: string[]
+          outgoing_team_id?: string
+          reason?: string
+          replaced_at?: string
+          replaced_by?: string
+          tournament_id?: string
+        }
+        Relationships: []
+      }
       teams: {
         Row: {
           category_id: string
@@ -1290,6 +1329,18 @@ export type Database = {
         Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
+      replace_team: {
+        Args: {
+          p_category_id: string
+          p_incoming: string | null
+          p_match_ids: string[]
+          p_new_p1?: string | null
+          p_new_p2?: string | null
+          p_outgoing: string
+          p_reason: string
+        }
+        Returns: string
+      }
       save_entry_seeds: {
         Args: { p_category_id: string; p_rows: Json }
         Returns: Database["public"]["Tables"]["entry_seeds"]["Row"][]

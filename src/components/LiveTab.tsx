@@ -8,7 +8,7 @@ import { LiveMarquee } from "./ui/live-marquee"; /* NEW: broadcast-style LIVE ti
 import { fmtClock } from "../hooks/useScheduling";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { knockoutShapeFor, defaultFormat, type KnockoutShape } from "../lib/formatPlanner";
-import { groupKeyOf, groupLetter } from "../lib/groups";
+import { countsForPoints, groupKeyOf, groupLetter } from "../lib/groups";
 import { isCancelledMatch } from "../lib/matchOutcome";
 import { currentGame, gamesLine, isBestOf3, liveGameTag } from "../lib/bestOf3";
 import { eventsReadyForKnockout } from "../lib/deskPrompts";
@@ -179,7 +179,8 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
     const s: Record<string, { team: TeamView; w: number; pts: number; pf: number; pa: number }> = {};
     teamsView.forEach(t => { s[t.id] = { team: t, w: 0, pts: 0, pf: 0, pa: 0 }; });
     groupMatches.filter(m => m.confirmed).forEach(m => {
-      const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
+      // Walkovers and retirements: the win counts, the points don't (lib/groups.ts countsForPoints).
+      const sa = countsForPoints(m) ? m.score_a ?? 0 : 0, sb = countsForPoints(m) ? m.score_b ?? 0 : 0;
       if (m.team_a_id && s[m.team_a_id]) { s[m.team_a_id].pf += sa; s[m.team_a_id].pa += sb; }
       if (m.team_b_id && s[m.team_b_id]) { s[m.team_b_id].pf += sb; s[m.team_b_id].pa += sa; }
       if (m.winner_id && s[m.winner_id]) { s[m.winner_id].w++; s[m.winner_id].pts += 3; }

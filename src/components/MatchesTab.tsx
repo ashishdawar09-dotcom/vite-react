@@ -20,7 +20,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as db from "../lib/db";
-import { applyPlan, confirmKnockoutPlan, stageTag, type KnockoutPlan } from "../lib/knockout";
+import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, stageTag, type KnockoutPlan } from "../lib/knockout";
+import { planUndoResult, undoRefusedText, type ResultOption } from "../lib/resultOptions";
+import { ResultOptions } from "./ResultOptions";
 import { CourtPicker } from "./CourtPicker";
 import { CourtStatus } from "./CourtStatus";
 import { CourtCallEmailStatus } from "../features/raceEmails/CourtCallEmailStatus";
@@ -61,7 +63,6 @@ export function MatchesTab({
   const [pickingCourtFor, setPickingCourtFor] = useState<ProjectedMatch | null>(null);
   const [reassigningCourtFor, setReassigningCourtFor] = useState<ProjectedMatch | null>(null);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
-  const [timeOverPicking, setTimeOverPicking] = useState<{ matchId: string; action: "walkover" | "winner" } | null>(null);
   const [historyFor, setHistoryFor] = useState<ProjectedMatch | null>(null);
   const [now, setNow] = useState(Date.now());
   const isMobile = useIsMobile();
@@ -424,36 +425,52 @@ export function MatchesTab({
     await applyBracket(plan);
   };
 
-  // A best-of-3 match stopped at time over: any score still saving lands
-  // first, then the result saves games won (src/lib/bestOf3.ts stopEarlyPatch).
-  // A one-game match writes as before.
+  // A match stopped before its end (walkover, retired, picked winner): taps
+  // are held and any score still saving lands first, so the stored score is
+  // the one on screen (one-game matches used to skip this). Best of 3 then
+  // saves games won (src/lib/bestOf3.ts stopEarlyPatch).
   const stopEarly = async (m: ProjectedMatch, write: (extra: Partial<Match>) => Promise<void>) => {
-    if (!isBestOf3(m)) return write({});
     const release = taps.lock(m);
     try {
-      await taps.flush(m.id);
-      await write(stopEarlyPatch(m));
+      if (!(await taps.flush(m.id))) throw new Error("a score on screen didn't save");
+      await write(isBestOf3(m) ? stopEarlyPatch(m) : {});
     } finally {
       release();
     }
   };
 
-  const markWalkover = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
-    const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
+  // ⋯ No-show / Injury (components/ResultOptions.tsx; it asks first). `teamId`
+  // = the winner, or for Retired the side that stops.
+  const pickResult = async (m: ProjectedMatch, kind: ResultOption, teamId: string) => {
+    const winnerId = kind === "retired" ? (teamId === m.team_a_id ? m.team_b_id : m.team_a_id) : teamId;
     if (!winnerId) return;
     const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
-    await stopEarly(m, (extra) => db.markWalkover(m.id, winnerId, { extra }));
+    try {
+      await stopEarly(m, (extra) =>
+        kind === "walkover" ? db.markWalkover(m.id, winnerId, { extra, freeCourt: m.status !== "live" && (!!m.court_allocated_at || m.court_number != null) })
+        : kind === "retired" ? db.retireMatch(m.id, winnerId, extra)
+        : db.selectMatchWinner(m.id, winnerId, extra));
+    } catch (e: unknown) {
+      toast(`Not saved: ${e instanceof Error ? e.message : (e as { message?: string })?.message ?? "error"}. Check the connection and try again.`, "error");
+      return;
+    }
     await applyBracket(plan);
-    setTimeOverPicking(null);
   };
 
-  const handleSelectWinner = async (m: ProjectedMatch, winnerSide: "a" | "b") => {
-    const winnerId = winnerSide === "a" ? m.team_a_id : m.team_b_id;
-    if (!winnerId) return;
-    const plan = confirmKnockoutPlan(matches, m, winnerId); if (!plan) return;
-    await stopEarly(m, (extra) => db.selectMatchWinner(m.id, winnerId, extra));
-    await applyBracket(plan);
-    setTimeOverPicking(null);
+  // ↶ Undo result (lib/resultOptions.ts planUndoResult): back to "not played".
+  const undoResult = async (m: ProjectedMatch) => {
+    const r = planUndoResult(matches, m);
+    if (!r.ok) { toast(undoRefusedText(r.reason), "warn"); return; }
+    const later = r.plan.cleared.length
+      ? `\n\nThese later matches will be reset and must be played again:\n${describeCleared(r.plan.cleared, x => knockoutLabel(x, matches))}`
+      : "";
+    if (!confirm(`Undo this result?\n\nThe match goes back to "not played": no score, no winner, no court.${m.stage === "knockout" ? " The winner comes out of the next round." : ""}${later}`)) return;
+    try {
+      await applyPlan(r.plan, db.updateMatch);
+      toast("Result undone. The match is back in the queue.", "info");
+    } catch (e: unknown) {
+      toast(`Undo didn't fully save: ${e instanceof Error ? e.message : "error"}. Refresh and check the match and the next round.`, "error");
+    }
   };
 
   const handleExtend = async (m: ProjectedMatch) => {
@@ -522,7 +539,6 @@ export function MatchesTab({
     const winB = isCompleted && m.winner_id === m.team_b_id;
     const deltaColor = isCompleted ? (m.delta_min != null && m.delta_min > 1 ? "#fbbf24" : m.delta_min != null && m.delta_min < -1 ? "#22c55e" : "#94a3b8") : isLive ? (m.delta_min != null && m.delta_min > 1 ? "#ef4444" : "#00d4ff") : "#94a3b8";
     const timeOver = isTimeOver(m);
-    const pickingTeamForThis = timeOverPicking && timeOverPicking.matchId === m.id;
     const sitOutWinnerId = sitOutWalkoverWinner(m, teamById);
 
     const bg = isLive
@@ -542,7 +558,7 @@ export function MatchesTab({
     return (
       /* MAKEOVER: hover lift + tap-press on every match card. Admin clicks these
          constantly during a tournament — they should feel responsive. */
-      <motion.div
+      <motion.div data-testid="match-row"
         style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexWrap: "wrap", position: "relative" }}
         whileHover={reduceMotion ? undefined : { y: -2, boxShadow: "0 6px 16px rgba(0,0,0,0.28)" }}
         whileTap={reduceMotion ? undefined : { scale: 0.99 }}
@@ -593,6 +609,7 @@ export function MatchesTab({
               )
             )}
             {resultLabel(m) === "W/O" && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", padding: "3px 8px", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, letterSpacing: 1 }}>W/O</span>}
+            {resultLabel(m) === "Ret." && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fda4af", padding: "3px 8px", background: "rgba(244,63,94,0.12)", borderRadius: 3, letterSpacing: 1 }} title="A side retired (injury): the win counts, the points don't">RET.</span>}
             {resultLabel(m) === "Cancelled" && <span className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", padding: "3px 8px", background: "rgba(148,163,184,0.1)", border: "1px solid rgba(148,163,184,0.3)", borderRadius: 4, letterSpacing: 1 }}>CANCELLED</span>}
           </div>
           <div className="font-display" style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: 0.5 }}>{fmtClock(m.projected_start_at)}</div>
@@ -642,21 +659,23 @@ export function MatchesTab({
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0", borderTop: "1px solid #f59e0b33" }}>
                 <button onClick={() => handleExtend(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #3b82f6", background: "rgba(59,130,246,0.15)", color: "#60a5fa", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>+5 MIN</button>
                 <button onClick={() => confirmMatch(m)} className="font-display" style={{ padding: "6px 12px", borderRadius: 5, border: "none", background: "#16a34a", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>{confirmLabel(m)}</button>
-                <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "walkover" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.15)", color: "#fbbf24", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>WALKOVER</button>
-                <button onClick={() => setTimeOverPicking({ matchId: m.id, action: "winner" })} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>SELECT WINNER</button>
                 <button onClick={() => handleReschedule(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #64748b", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>RESCHEDULE</button>
                 <button onClick={() => handleCancel(m)} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #ef4444", background: "rgba(239,68,68,0.1)", color: "#f87171", fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>CANCEL</button>
               </div>
             )}
-            {pickingTeamForThis && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%", padding: "8px 0 0" }}>
-                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, alignSelf: "center" }}>
-                  {timeOverPicking!.action === "walkover" ? "Walkover — pick winner:" : "Select winner:"}
-                </span>
-                <button onClick={() => timeOverPicking!.action === "walkover" ? markWalkover(m, "a") : handleSelectWinner(m, "a")} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{tName(ta)}</button>
-                <button onClick={() => timeOverPicking!.action === "walkover" ? markWalkover(m, "b") : handleSelectWinner(m, "b")} style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{tName(tb)}</button>
-                <button onClick={() => setTimeOverPicking(null)} style={{ padding: "6px 8px", borderRadius: 5, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              </div>
+            {/* No-show / Injury: Walkover before play; Walkover, Retired or Select Winner during play (open at time over). */}
+            {!isCompleted && !sitOutWinnerId && !(teamSittingOut(ta) && teamSittingOut(tb)) && (
+              <ResultOptions
+                match={m}
+                tone="dark"
+                nameOf={id => tName(id ? teamById[id] : null)}
+                shown={() => ({ a: taps.shown(m, "a"), b: taps.shown(m, "b") })}
+                startOpen={isLive && timeOver}
+                onPick={(kind, teamId) => pickResult(m, kind, teamId)}
+              />
+            )}
+            {isCompleted && !m.is_bye && planUndoResult(matches, m).ok && (
+              <button onClick={() => void undoResult(m)} className="font-display" style={{ padding: "8px 10px", borderRadius: 5, border: "1px solid #475569", background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }} title="Back to not played: no score, no court. The next-round slot it filled is emptied.">↶ UNDO</button>
             )}
           </div>
         )}
@@ -789,6 +808,7 @@ export function MatchesTab({
           match={historyFor}
           teamAName={tName(historyFor.team_a_id ? teamById[historyFor.team_a_id] : null)}
           teamBName={tName(historyFor.team_b_id ? teamById[historyFor.team_b_id] : null)}
+          teamName={id => (teamById[id] ? tName(teamById[id]) : null)}
           onClose={() => setHistoryFor(null)}
         />
       )}

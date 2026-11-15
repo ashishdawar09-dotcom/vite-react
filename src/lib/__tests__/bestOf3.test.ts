@@ -34,7 +34,7 @@ describe("ending games", () => {
     const r = endGamePatch(bo3([[15, 12]]), 15, 10, AT);
     expect(r).toEqual({
       ok: true, decided: true, winnerId: "A",
-      patch: { games: [[15, 12], [15, 10]], score_a: 2, score_b: 0, winner_id: "A", confirmed: true, status: "completed", confirmed_at: AT },
+      patch: { games: [[15, 12], [15, 10]], score_a: 2, score_b: 0, winner_id: "A", confirmed: true, status: "completed", confirmed_at: AT, is_walkover: false, is_retired: false },
     });
   });
 
@@ -86,7 +86,7 @@ describe("editing a finished best-of-3 result", () => {
     const r = editedGamesPatch({ team_a_id: "A", team_b_id: "B" }, [[15, 3], [10, 15], [15, 13]], AT);
     expect(r).toEqual({
       ok: true, winnerId: "A",
-      patch: { games: [[15, 3], [10, 15], [15, 13]], score_a: 2, score_b: 1, winner_id: "A", confirmed: true, status: "completed", confirmed_at: AT },
+      patch: { games: [[15, 3], [10, 15], [15, 13]], score_a: 2, score_b: 1, winner_id: "A", confirmed: true, status: "completed", confirmed_at: AT, is_walkover: false, is_retired: false },
     });
   });
 });

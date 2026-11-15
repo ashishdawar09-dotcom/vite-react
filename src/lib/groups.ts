@@ -21,7 +21,19 @@ type GroupMatch = {
   winner_id: string | null;
   confirmed: boolean;
   is_bye: boolean;
+  /** Walkover or retirement: the win counts, the points don't (Ashish, Nov 15). Optional: older rows lack them. */
+  is_walkover?: boolean | null;
+  is_retired?: boolean | null;
 };
+
+/**
+ * Points for the point difference. A walkover or a retirement gives the win
+ * but no points either way (Ashish, Nov 15 2026): the match wasn't finished,
+ * so a partial score must not decide a group. The score stays on the card.
+ */
+export function countsForPoints(m: Pick<GroupMatch, "is_walkover" | "is_retired">): boolean {
+  return !m.is_walkover && !m.is_retired;
+}
 
 export type GroupStanding<T> = { team: T; w: number; l: number; pts: number; pf: number; pa: number };
 
@@ -114,8 +126,8 @@ function headToHead<S extends { team: GroupTeam }>(tied: S[], played: GroupMatch
 
 /**
  * Standings and ties for one group. The rule (QA review, Nov 4): 3 points
- * per win; then point difference; then head-to-head between the teams still
- * level; then a coin toss. `tossWinners` = team ids in the order they won
+ * per win; then point difference (walkovers and retirements add no points,
+ * Nov 15); then head-to-head between the teams still level; then a coin toss. `tossWinners` = team ids in the order they won
  * their coin tosses; it only reorders teams still level after head-to-head.
  * Cancelled matches count for nothing.
  */
@@ -126,9 +138,11 @@ function rankGroup<T extends GroupTeam>(group: T[], groupMatches: GroupMatch[], 
   group.forEach(t => { s[t.id] = { team: t, w: 0, l: 0, pts: 0, pf: 0, pa: 0 }; });
   for (const m of played) {
     const a = s[m.team_a_id!], b = s[m.team_b_id!];
-    const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
-    a.pf += sa; a.pa += sb;
-    b.pf += sb; b.pa += sa;
+    if (countsForPoints(m)) {
+      const sa = m.score_a ?? 0, sb = m.score_b ?? 0;
+      a.pf += sa; a.pa += sb;
+      b.pf += sb; b.pa += sa;
+    }
     if (m.winner_id === m.team_a_id) { a.w++; a.pts += 3; b.l++; }
     else if (m.winner_id === m.team_b_id) { b.w++; b.pts += 3; a.l++; }
   }

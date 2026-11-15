@@ -21,7 +21,8 @@ export function finalScorePatch(
   return {
     ok: true,
     winnerId,
-    patch: { score_a: sa, score_b: sb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt },
+    // A typed score is a played result: an edited walkover or retirement stops being one.
+    patch: { score_a: sa, score_b: sb, winner_id: winnerId, confirmed: true, status: "completed", confirmed_at: confirmedAt, is_walkover: false, is_retired: false },
   };
 }
 
