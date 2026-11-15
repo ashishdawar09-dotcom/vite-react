@@ -13,6 +13,7 @@ import { isCancelledMatch } from "../lib/matchOutcome";
 import { currentGame, gamesLine, isBestOf3, liveGameTag } from "../lib/bestOf3";
 import { eventsReadyForKnockout } from "../lib/deskPrompts";
 import { stageTag } from "../lib/knockout";
+import { semifinalsTo21 } from "../lib/gameRules";
 import type { Category, Match, Player, PlayerCategory, ProjectedMatch, Team } from "../types";
 
 type TeamView = Team & { p1: Player; p2: Player | null };
@@ -84,6 +85,8 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
   // session. Keys are stable until teamsView/categories change.
   const teamById = useMemo(() => Object.fromEntries(teamsView.map(t => [t.id, t])), [teamsView]);
   const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
+  // Semifinals are one game to 21, so their court tile allows 21/15 of a game's time (src/lib/gameRules.ts).
+  const semifinalIds = useMemo(() => semifinalsTo21(matches), [matches]);
 
   // Heartbeat for warm-up-elapsed display in Up Next rows. The projection's
   // wall-clock already updates via useScheduling's own 15s tick; this one is
@@ -361,7 +364,7 @@ export function LiveTab({ teamsView, allTeamById, matches, groupMatches, phase, 
       )}
 
       <SectionReveal>
-      <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} warmingByCourt={warmingByCourt} categories={categories} teamById={allTeamById} />
+      <CourtStatus numCourts={numCourts} liveByCourt={liveByCourt} warmingByCourt={warmingByCourt} categories={categories} teamById={allTeamById} semifinalIds={semifinalIds} />
       </SectionReveal>
 
       {onCall && upNextSection && <div style={{ marginBottom: 28 }}>{upNextSection}</div>}

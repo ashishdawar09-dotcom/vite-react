@@ -111,6 +111,9 @@ describe("helpers", () => {
     expect(playMinutes({ best_of: 3, extended_minutes: 5 }, 12)).toBe(29);
     expect(playMinutes({ best_of: 1, extended_minutes: 0 }, 12)).toBe(12);
     expect(playMinutes({ extended_minutes: 0 }, null)).toBe(12);
+    // A one-game semifinal is to 21: 21/15 of a game (src/lib/gameRules.ts).
+    expect(playMinutes({ best_of: 1, extended_minutes: 0 }, 15, true)).toBe(21);
+    expect(playMinutes({ best_of: 3, extended_minutes: 0 }, 15, true)).toBe(30);
   });
   it("matches the database's round rule", () => {
     // fromFinal: final/bronze 0, semifinals 1, quarterfinals 2, round of 16 3.

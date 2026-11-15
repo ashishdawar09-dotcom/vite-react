@@ -5,7 +5,8 @@ import { useShownScores } from "../hooks/useScoreTaps";
 import { timeOverPickerOpen } from "../lib/scoring";
 import { Av } from "./ui";
 import type { GameScore, Match, Player, Team } from "../types";
-import { currentGame, decidingScore, endGameAction, gameTarget, gamesOf, gamesWon, isBestOf3, playMinutes } from "../lib/bestOf3";
+import { currentGame, decidingScore, endGameAction, gamesOf, gamesWon, isBestOf3, playMinutes } from "../lib/bestOf3";
+import { SEMIFINAL_TO, gameTarget } from "../lib/gameRules";
 import { isCancelledMatch } from "../lib/matchOutcome";
 import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { CourtCallEmailStatus } from "../features/raceEmails/CourtCallEmailStatus";
@@ -77,6 +78,7 @@ export function MatchCard({
   matchMinutes,
   isAdmin,
   teamById,
+  semifinalIds,
   editingMatchId,
   onStartEdit,
   onCancelEdit,
@@ -86,6 +88,8 @@ export function MatchCard({
   match: Match;
   editable?: boolean;
   matchMinutes?: number;
+  /** The semifinals played as one game to 21 (src/lib/gameRules.ts semifinalsTo21). */
+  semifinalIds?: ReadonlySet<string>;
   isAdmin: boolean;
   teamById: Record<string, TeamView | undefined>;
   editingMatchId: string | null;
@@ -101,6 +105,8 @@ export function MatchCard({
   // Best of 3 (src/lib/bestOf3.ts): while live the boxes hold the current
   // game; finished games are in `games`. Editing a result edits the games.
   const bo3 = isBestOf3(m);
+  // A one-game semifinal is to 21, and gets 21/15 of a game's time.
+  const semi = !bo3 && !!semifinalIds?.has(m.id);
   const games = gamesOf(m);
   const [gwA, gwB] = gamesWon(games);
   const inlineMode = isAdmin && editable && (m.status === "live" || (isEditing && !bo3));
@@ -179,8 +185,8 @@ export function MatchCard({
     return () => clearInterval(id);
   }, [m.status, isWarming]);
 
-  // A best-of-3 match gets two matches' time before TIME OVER.
-  const totalMin = playMinutes(m, matchMinutes);
+  // Before TIME OVER a best-of-3 match gets two matches' time, a semifinal to 21 gets 21/15 of one.
+  const totalMin = playMinutes(m, matchMinutes, semi);
   const cardTimeOver = m.status === "live" && m.started_at
     ? (cardNow - new Date(m.started_at).getTime()) / 60_000 > totalMin
     : false;
@@ -329,6 +335,7 @@ export function MatchCard({
           {/* Non-breaking spaces: a narrow card wraps between the parts, never inside "Game 2". */}
           {bo3
             ? ` · Best\u00a0of\u00a03${m.status === "live" && !m.confirmed ? ` · Game\u00a0${currentGame(m)}` : ""}`
+            : semi ? ` · 1\u00a0game\u00a0to\u00a0${SEMIFINAL_TO}`
             : m.stage === "knockout" && !m.is_bye ? " · 1\u00a0game" : ""}
         </span>
         {cardTimeOver && (

@@ -33,6 +33,7 @@ import { sitOutWalkoverWinner, teamSittingOut } from "../lib/sitOut";
 import { resultLabel } from "../lib/matchOutcome";
 import { finalScorePatch } from "../lib/scoring";
 import { currentGame, decidingScore, endGameAction, endGamePatch, gamesOf, isBestOf3, playMinutes, stopEarlyPatch, undoGamePatch } from "../lib/bestOf3";
+import { GAME_TO, SEMIFINAL_TO, semifinalsTo21 } from "../lib/gameRules";
 import { useScoreTaps } from "../hooks/useScoreTaps";
 import type { Category, Match, Player, ProjectedMatch, Team, Tournament } from "../types";
 
@@ -108,6 +109,8 @@ export function MatchesTab({
   );
 
   const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
+  // Semifinals are one game to 21 (src/lib/gameRules.ts): tagged in the list, with 21/15 of a game's time.
+  const semifinalIds = useMemo(() => semifinalsTo21(matches), [matches]);
 
   // Matches currently in the warm-up state (court allocated, scoring not yet
   // begun). Keyed by court number, mirroring liveByCourt's shape. A court can
@@ -352,7 +355,7 @@ export function MatchesTab({
     let r = endGamePatch(m, a, b, new Date().toISOString());
     if (!r.ok && r.reason === "not-over") {
       const decides = decidingScore(m, a, b);
-      if (!confirm(`${a}–${b} can't end a game to 15. Save it anyway${decides ? ` and confirm the match ${decides}` : ""}?`)) return;
+      if (!confirm(`${a}–${b} can't end a game to ${GAME_TO}. Save it anyway${decides ? ` and confirm the match ${decides}` : ""}?`)) return;
       r = endGamePatch(m, a, b, new Date().toISOString(), true);
     }
     if (!r.ok) {
@@ -487,7 +490,7 @@ export function MatchesTab({
     const cat = catById[m.category_id];
     if (!cat) return false;
     const elapsed = (now - new Date(m.started_at).getTime()) / 60_000;
-    return elapsed > playMinutes(m, cat.match_minutes);
+    return elapsed > playMinutes(m, cat.match_minutes, semifinalIds.has(m.id));
   };
 
   const stageLabel = (m: ProjectedMatch) => stageTag(m, matches);
@@ -554,6 +557,7 @@ export function MatchesTab({
         <div style={{ minWidth: isMobile ? 0 : 80 }}>
           <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: 1 }}>{stageLabel(m)}</div>
           {isBestOf3(m) && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#60a5fa", marginTop: 4, letterSpacing: 1.2 }}>BEST OF 3{isLive ? ` · GAME ${currentGame(m)}` : ""}</div>}
+          {semifinalIds.has(m.id) && !m.confirmed && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#60a5fa", marginTop: 4, letterSpacing: 1.2 }}>1 GAME TO {SEMIFINAL_TO}</div>}
           {timeOver && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", marginTop: 4, letterSpacing: 1.2 }}>⏰ TIME OVER</div>}
           {isWarming && <div className="font-display" style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", marginTop: 4, letterSpacing: 1.2 }}>🟡 WARMING UP · {fmtWarmup(m)}</div>}
         </div>
@@ -674,7 +678,7 @@ export function MatchesTab({
 
   return (
     <div style={{ background: "#0a1628", borderRadius: 14, padding: 20, border: "1px solid #1a3050", color: "#fff" }}>
-      <CourtStatus numCourts={tournament.num_courts} liveByCourt={liveByCourt} warmingByCourt={warmingByCourt} categories={categories} teamById={teamById} />
+      <CourtStatus numCourts={tournament.num_courts} liveByCourt={liveByCourt} warmingByCourt={warmingByCourt} categories={categories} teamById={teamById} semifinalIds={semifinalIds} />
 
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, padding: 12, background: "#0f1e36", borderRadius: 8, border: "1px solid #1a3050" }}>

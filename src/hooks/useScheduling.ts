@@ -13,8 +13,8 @@ import { projectSchedule, type TeamPlayers } from "../lib/projection";
 // venue TV uses the same model, so phones and TV show the same times. It
 // shares the tournament's courts across every event: one set of court free-at
 // times, live and called matches first, then the queue interleaved event by
-// event, with the call-to-serve time, changeover and best-of-3 semifinals and
-// finals counted. This hook adds:
+// event, with the call-to-serve time, changeover, semifinals to 21 and
+// best-of-3 finals counted. This hook adds:
 // - **15-second heartbeat**: an internal tick state is wired into the memo deps,
 //   so the projection re-runs every 15s even when no other state changes, and
 //   backlogged matches' wall-clocks roll forward.

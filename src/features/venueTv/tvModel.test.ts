@@ -282,6 +282,21 @@ describe("venue TV match point, from the feed", () => {
     expect(matchPointAt(m.courts[0]!)).toBe(false);
   });
 
+  it("a semifinal that isn't best of 3 is one game to 21: match point at 20, not at 14", () => {
+    const snap = fixture();
+    const k2 = snap.matches.find(x => x.id === "k2")!;
+    Object.assign(k2, { status: "live", best_of: 1, score_a: 14, score_b: 10, court_number: 4, court_allocated_at: iso(NOW - 20 * MIN), started_at: iso(NOW - 18 * MIN) });
+    let m = buildTvModel(snap, NOW)!;
+    expect(m.courts[3]!.kind).toBe("sf");
+    expect(m.courts[3]!.gameTo).toBe(21);
+    expect(matchPointAt(m.courts[3]!)).toBe(false);
+    Object.assign(k2, { score_a: 20, score_b: 17 });
+    m = buildTvModel(snap, NOW)!;
+    expect(matchPointAt(m.courts[3]!)).toBe(true);
+    // Every other match is to 15: the group match, the best-of-3 semifinal and the final.
+    for (const id of ["g3", "k1", "k3"]) expect(m.byId[id].gameTo).toBe(15);
+  });
+
   it("reads a live best-of-3 match's games: game 2 for the side a game up, never game 1", () => {
     const snap = fixture();
     const k2 = snap.matches.find(x => x.id === "k2")!;

@@ -7,6 +7,7 @@ import { derivePublicTournamentState } from "./publicDerive";
 import type { Category, ProjectedMatch } from "../../types";
 import { isCancelledMatch } from "../../lib/matchOutcome";
 import { isBestOf3, liveGameTag, playMinutes } from "../../lib/bestOf3";
+import { semifinalsTo21 } from "../../lib/gameRules";
 
 /**
  * Venue-TV hero card — /t/:slug/tv
@@ -72,13 +73,14 @@ export function VenueTvPage() {
   // currently queued. The court projection in useScheduling already accounts
   // for queue depth, so the last-scheduled start is the practical event end.
   const projectedEndMs = (() => {
+    const semis = semifinalsTo21(ctx.matches);
     const candidates: number[] = [];
     for (const m of ctx.projected) {
       if (m.confirmed || m.is_bye) continue;
       const start = m.projected_start_at ? new Date(m.projected_start_at).getTime() : null;
       if (start === null) continue;
       const cat = catById[m.category_id];
-      const dur = playMinutes(m, cat?.match_minutes);
+      const dur = playMinutes(m, cat?.match_minutes, semis.has(m.id));
       candidates.push(start + dur * 60_000);
     }
     return candidates.length > 0 ? Math.max(...candidates) : null;

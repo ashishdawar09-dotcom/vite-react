@@ -10,7 +10,8 @@
 //
 // Play time is per event: the event's match length (category.match_minutes),
 // doubled for a best-of-3 match (matches.best_of = 3, stamped from the event's
-// "Best of 3 games from" setting; see src/lib/bestOf3.ts), and learned from the
+// "Best of 3 games from" setting; see src/lib/bestOf3.ts), 21/15 of it for a
+// one-game semifinal (played to 21; see src/lib/gameRules.ts), and learned from the
 // event's own finished matches once three are in (before that, from the
 // venue's pace so far, once any three are in). Call to serve and changeover are the
 // venue's: fixed numbers until three real samples exist, then learned from the
@@ -42,7 +43,7 @@
 // Pure, so it can be tested without React; useScheduling wraps it.
 
 import type { Category, Match, ProjectedMatch, Team } from "../types";
-import { isBestOf3 } from "./bestOf3";
+import { playFactor, semifinalsTo21 } from "./gameRules";
 import { isCancelledMatch } from "./matchOutcome";
 
 const MIN = 60_000;
@@ -131,20 +132,23 @@ function wasPlayed(m: Match): boolean {
 }
 
 /**
- * How many one-game matches `m` counts as on court: `factor` for a best-of-3
- * match, 1 otherwise. Each match carries its own format (matches.best_of), so
- * this follows the event's "Best of 3 games from" setting, bronze included.
+ * How many one-game matches to 15 `m` counts as on court: `factor` for a
+ * best-of-3 match, 21/15 for a one-game semifinal (to 21), 1 otherwise. Each
+ * match carries its own format (matches.best_of), so this follows the event's
+ * "Best of 3 games from" setting, bronze included. `semifinal`: the match is
+ * in semifinalsTo21 (src/lib/gameRules.ts), which needs the whole bracket.
  */
-export function gamesFactor(m: Pick<Match, "best_of">, factor = RACE_DAY_TIMING.bestOf3Factor): number {
-  return isBestOf3(m) ? factor : 1;
+export function gamesFactor(m: Pick<Match, "best_of">, factor = RACE_DAY_TIMING.bestOf3Factor, semifinal = false): number {
+  return playFactor(m, semifinal, factor);
 }
 
 /**
  * Weighted-avg of actual one-game play time for the given category. Falls back
  * to the nominal `fallback` (category.match_minutes) until at least 3 matches
  * have completed. Recent matches weight more heavily so a sudden shift in
- * pacing influences projections quickly. A best-of-3 match counts as
- * `factorOf(m)` games, so a semifinal doesn't stretch the group stage's numbers.
+ * pacing influences projections quickly. A match counts as `factorOf(m)`
+ * games (2 for best of 3, 21/15 for a semifinal to 21), so a long match
+ * doesn't stretch the group stage's numbers.
  *
  * Window: last 5 confirmed non-walkover, non-bye, non-cancelled matches. Weights: 5,4,3,2,1.
  */
@@ -312,7 +316,9 @@ export function projectVenue(matches: Match[], categories: Category[], numCourts
   }
   const partiesOf = (m: Match): string[] => [m.team_a_id, m.team_b_id].flatMap(t => (t ? playersOfTeam.get(t) ?? [`team:${t}`] : []));
 
-  const factorOf = (m: Match) => gamesFactor(m, timing.bestOf3Factor);
+  // One-game semifinals are to 21, so they get 21/15 of a game's time.
+  const semis = semifinalsTo21(matches);
+  const factorOf = (m: Match) => gamesFactor(m, timing.bestOf3Factor, semis.has(m.id));
 
   const byCat = new Map<string, Match[]>();
   for (const m of matches) {

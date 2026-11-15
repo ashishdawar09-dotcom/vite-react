@@ -396,10 +396,13 @@ function pricePreview(raw: string, teamSize: 1 | 2, basis: PriceBasis): string {
   return `Registrants see: ${amt(n)} per player (${amt(n * 2)} per team) — each player pays their own share, or one pays for both.`;
 }
 
-/** Which knockout rounds the setting makes best of 3, for the hint under it. */
+/**
+ * Which knockout rounds the setting makes best of 3, for the hint under it.
+ * A semifinal that stays one game is played to 21 (src/lib/gameRules.ts).
+ */
 function bestOf3Help(v: BestOf3From | null): string {
   if (v === "qf") return "Quarterfinals, semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 15.";
   if (v === "sf") return "Semifinals, final and bronze match: best of 3 games to 15. Earlier rounds: one game to 15.";
-  if (v === "final") return "Final and bronze match: best of 3 games to 15. Earlier rounds: one game to 15.";
-  return "Every match is one game to 15.";
+  if (v === "final") return "Final and bronze match: best of 3 games to 15. Semifinals: one game to 21. Earlier rounds: one game to 15.";
+  return "Every match is one game to 15, except semifinals: one game to 21.";
 }

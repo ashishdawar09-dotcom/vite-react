@@ -8,6 +8,7 @@ import type { Category, GameScore, Match, Player, Team, Tournament } from "../..
 import { buildGroups, groupLetter, groupStandings, isRoundRobinOnly, roundRobinPodium } from "../../lib/groups";
 import { isCancelledMatch } from "../../lib/matchOutcome";
 import { gamesOf, isBestOf3 } from "../../lib/bestOf3";
+import { gameTarget } from "../../lib/gameRules";
 import { projectVenue } from "../../lib/projection";
 
 /** A finished match stays on its court as "Final score" this long, unless the next match is called there first. */
@@ -35,6 +36,8 @@ export type TvMatch = {
   slot: number;
   /** The match's own format (matches.best_of), set from the event's "Best of 3 games from" setting. */
   bestOf3: boolean;
+  /** Points to win a game: 15, or 21 in a one-game semifinal (lib/gameRules.ts). */
+  gameTo: number;
   /** Best of 3: finished games in order. While live, `cur` is the current game; once done, games won. */
   games: GameScore[];
   a: string | null;
@@ -227,6 +230,7 @@ export function buildTvModel(snap: TvSnapshot, now: number): TvModel | null {
       roundIdx: m.round_idx,
       slot: m.slot_idx,
       bestOf3: isBestOf3(m),
+      gameTo: gameTarget(m, kind === "sf"),
       games: gamesOf(m),
       a: m.team_a_id && teams[m.team_a_id] ? m.team_a_id : null,
       b: m.team_b_id && teams[m.team_b_id] ? m.team_b_id : null,

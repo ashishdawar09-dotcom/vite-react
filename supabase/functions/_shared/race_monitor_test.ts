@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
-  composeEmail, decide, evaluate, planLag,
+  composeEmail, decide, evaluate, planLag, plannedMinutes,
   type MonCategory, type MonInput, type MonMatch, type MonPlayer, type MonTeam,
 } from "./race_monitor.ts";
 
@@ -99,6 +99,28 @@ Deno.test("a match running 10+ minutes over its planned length is flagged; best 
   assertEquals(keys(input("9:24", ms)), []);
   assertEquals(keys(input("9:25", ms)), [`long:${one.id}`]);
   assertEquals(keys(input("9:40", ms)).sort(), [`long:${bo3.id}`, `long:${one.id}`].sort());
+});
+
+Deno.test("a semifinal is one game to 21: planned at 21/15 of a game, so it is flagged later than a game to 15", () => {
+  const ko = (round: number) => ({ stage: "knockout", round_idx: round, is_bronze: false, best_of: 1, extended_minutes: 0 });
+  // Final at round 2: round 1 is the semifinals.
+  assertEquals(plannedMinutes(ko(1), 15, 2), 21);
+  assertEquals(plannedMinutes(ko(0), 15, 2), 15);
+  assertEquals(plannedMinutes(ko(2), 15, 2), 15);
+  assertEquals(plannedMinutes({ ...ko(1), extended_minutes: 5 }, 15, 2), 26);
+  // A best-of-3 semifinal stays at double, the bronze match and group matches at one game.
+  assertEquals(plannedMinutes({ ...ko(1), best_of: 3 }, 15, 2), 30);
+  assertEquals(plannedMinutes({ ...ko(2), is_bronze: true }, 15, 2), 15);
+  assertEquals(plannedMinutes({ ...ko(1), stage: "group" }, 15, 2), 15);
+  assertEquals(plannedMinutes(ko(0), 15, null), 15);
+
+  const sf = live("a", 1, "13:00", { stage: "knockout", group_idx: null, round_idx: 0 });
+  const final = match("a", { stage: "knockout", group_idx: null, round_idx: 1, team_a_id: null, team_b_id: null });
+  const ms = [sf, final, live("b", 2, "13:20"), live("b", 3, "13:20"), live("b", 4, "13:20")];
+  // 21 planned + 10 margin: quiet at 30 minutes, flagged at 31.
+  assertEquals(keys(input("13:30", ms)), []);
+  assertEquals(keys(input("13:31", ms)), [`long:${sf.id}`]);
+  assertStringIncludes(evaluate(input("13:31", ms)).alerts[0].detail, "planned about 21 min");
 });
 
 Deno.test("groups done with no knockout is flagged 3 minutes after the last group result; never for a round robin", () => {
