@@ -63,7 +63,7 @@ const MEGAPHONE = '<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" strok
 const COURT_SVG = '<svg class="mc-lines" viewBox="0 0 134 61" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="1" width="132" height="59"/><line x1="1" y1="5.6" x2="133" y2="5.6"/><line x1="1" y1="55.4" x2="133" y2="55.4"/><line x1="8.6" y1="1" x2="8.6" y2="60"/><line x1="125.4" y1="1" x2="125.4" y2="60"/><line x1="47.2" y1="1" x2="47.2" y2="60"/><line x1="86.8" y1="1" x2="86.8" y2="60"/><line x1="1" y1="30.5" x2="47.2" y2="30.5"/><line x1="86.8" y1="30.5" x2="133" y2="30.5"/></g><line class="net" x1="67" y1="0" x2="67" y2="61" stroke-width="4"/></svg>';
 const ART_SVG = COURT_SVG.replace('class="mc-lines"', 'class="art"');
 /** Shuttle Storm '26 sponsors, from the tournament website. */
-const SPONSORS = ["Abbotsford Dental Centre", "IBJ Cafe Burgers &amp; Boba", "Kirti Law Corporation", "Novelty Physiotherapy &amp; Wellness", "Pizza 24", "The Polly Fox Bakery &amp; Bistro"];
+const SPONSORS = ["Abbotsford Dental Centre", "AJ Grover · 88West Realty", "Connectplayers", "Desjardins Financial Security Independent Network", "Gurjant Cheema · World Financial Group", "IBJ Cafe Burgers &amp; Boba", "Kirti Law Corporation", "Novelty Physiotherapy &amp; Wellness", "Pizza 24", "The Polly Fox Bakery &amp; Bistro"];
 
 // pl, mu and ld turn the player spotlight, match-up and leaders boards.
 type Counters = { slide: number; q: number; feat: number; page: number; chan: number; dep: number; pl: number; mu: number; ld: number };

@@ -295,12 +295,13 @@ details .ans a{color:var(--bone)}
 .sp-pres .adw-mark{font-size:clamp(64px,8vw,120px)}
 .sp-pres b{display:block;font-family:var(--f-display);font-weight:300;font-stretch:110%;font-size:clamp(22px,2vw,28px);text-transform:uppercase;line-height:1.1;margin-top:10px}
 .sp-pres p{margin:10px 0 0;color:var(--mute);max-width:52ch}
-.sp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px}
-.sp-tile{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;padding:clamp(18px,2.4vw,34px);border-radius:4px;background:#fff;transition:transform .6s var(--ease)}
+.sp-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;margin-top:16px}
+.sp-tile{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;padding:clamp(14px,1.5vw,24px);border-radius:4px;background:#fff;transition:transform .6s var(--ease)}
 .sp-tile:hover{transform:translateY(-4px)}
 .sp-tile img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
 .sp-foot{margin-top:48px}
-@media (max-width:860px){.sp-pres{grid-template-columns:minmax(0,1fr)}.sp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1100px){.sp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-tile{padding:clamp(18px,2.4vw,34px)}}
+@media (max-width:860px){.sp-pres{grid-template-columns:minmax(0,1fr)}}
 
 /* Calendar */
 .cal{padding-block:clamp(110px,18vh,200px);border-top:1px solid var(--line)}
@@ -608,6 +609,25 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
     {
      "@type": "Organization",
      "name": "IBJ Cafe Burgers & Boba"
+    },
+    {
+     "@type": "Organization",
+     "name": "AJ Grover Personal Real Estate Corporation, 88West Realty",
+     "url": "https://88westrealty.com/agents/aj-grover/"
+    },
+    {
+     "@type": "Organization",
+     "name": "Desjardins Financial Security Independent Network",
+     "url": "https://www.dfsin.ca/en/get-in-touch/financial-centers/bc.html"
+    },
+    {
+     "@type": "Organization",
+     "name": "Connectplayers",
+     "url": "https://connectplayers.ca/"
+    },
+    {
+     "@type": "Organization",
+     "name": "Gurjant Cheema, World Financial Group"
     }
    ]
   }
@@ -702,7 +722,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
     <div class="xp-tag wrap mono" style="color:var(--mute)">Round robin · Elimination · Finals</div>
     <div class="xp-copy wrap">
       <h2 id="xp-title" class="display"><span class="h2-kick">Format and scoring</span>Every point.<br><em>Counts.</em></h2>
-      <p>Rally scoring under the <a href="https://corporate.bwfbadminton.com/statutes/" target="_blank" rel="noopener">BWF Laws of Badminton</a>, with a shortened format: single games to 15, with finals best of three games to 15. Everyone in an event with three or more entries plays at least two matches.</p>
+      <p>Rally scoring under the <a href="https://corporate.bwfbadminton.com/statutes/" target="_blank" rel="noopener">BWF Laws of Badminton</a>, with a shortened format: single games to 15, semifinals to 21, and finals best of three games to 15. Everyone in an event with three or more entries plays at least two matches.</p>
     </div>
   </section>
 
@@ -757,7 +777,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
         <li class="rv"><span class="n mono">01</span><div><h3>Register online</h3><p>Pick your category, accept the waiver and pay online: $40 for adults, $30 for youth and UFV students. Entries close at 11:59 pm on November 18.</p></div></li>
         <li class="rv"><span class="n mono">02</span><div><h3>Pair up for doubles</h3><p>One partner registers the team. We email the other partner a link to accept the waiver. No partner? No problem. Enter solo and we’ll find you a partner.</p></div></li>
         <li class="rv"><span class="n mono">03</span><div><h3>Check the draw</h3><p>Partner pairings are posted by November 19, and draws and start times by November 20. Arrive at least 30 minutes before your match.</p></div></li>
-        <li class="rv"><span class="n mono">04</span><div><h3>Play your draw</h3><p>Events with 3 or 4 entries play round robin. Events with 5 or more play an elimination draw. Matches are a single game to 15; finals are best of three.</p></div></li>
+        <li class="rv"><span class="n mono">04</span><div><h3>Play your draw</h3><p>Events with 3 or 4 entries play round robin. Events with 5 or more play an elimination draw. Matches are a single game to 15; semifinals are a single game to 21; finals are best of three.</p></div></li>
         <li class="rv"><span class="n mono">05</span><div><h3>Finals</h3><p>Best of three games to 15 points, for the title in each category.</p></div></li>
       </ol>
     </div>
@@ -919,6 +939,10 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
         <a class="sp-tile rv" href="/sponsors#s-polly"><img src="/img/sponsors/the-polly-fox.png" width="600" height="365" alt="The Polly Fox Bakery &amp; Bistro" loading="lazy"></a>
         <a class="sp-tile rv" href="/sponsors#s-adc"><img src="/img/sponsors/abbotsford-dental-centre.png" width="640" height="343" alt="Abbotsford Dental Centre" loading="lazy"></a>
         <a class="sp-tile rv" href="/sponsors#s-ibj"><img src="/img/sponsors/ibj-cafe.jpg" width="520" height="520" alt="IBJ Cafe Burgers &amp; Boba" loading="lazy"></a>
+        <a class="sp-tile rv" href="/sponsors#s-grover"><img src="/img/sponsors/aj-grover-88west.png" width="1024" height="294" alt="AJ Grover, 88West Realty" loading="lazy"></a>
+        <a class="sp-tile rv" href="/sponsors#s-dfsin"><img src="/img/sponsors/desjardins-dfsin.png" width="900" height="320" alt="Desjardins Financial Security Independent Network" loading="lazy"></a>
+        <a class="sp-tile rv" href="/sponsors#s-connect"><img src="/img/sponsors/connectplayers.png" width="527" height="527" alt="Connectplayers" loading="lazy"></a>
+        <a class="sp-tile rv" href="/sponsors#s-cheema"><img src="/img/sponsors/gurjant-cheema-wfg.jpg" width="746" height="800" alt="Gurjant Cheema, World Financial Group" loading="lazy"></a>
       </div>
       <div class="sp-foot rv"><a class="btn btn-line" href="/sponsors"><span>Meet our sponsors</span></a></div>
     </div>
@@ -929,7 +953,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--bone)}
       <h2 id="faq-title" class="display"><span class="h2-kick">Tournament FAQ</span>Good to <em>know.</em></h2>
       <div>
         <details><summary>Do I need to be there all day?<span class="pm" aria-hidden="true"></span></summary><div class="ans">No. Draws and start times are posted by November 20. Arrive at least 30 minutes before your first match: if you’re not on court within 10 minutes of your match being called, it’s a default.</div></details>
-        <details><summary>How many games will I play?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Events with 3 or 4 entries play round robin, and events with 5 or more play an elimination draw. Everyone in an event with three or more entries is guaranteed at least two matches. Every match is one game to 15, except finals, which are best of three games to 15 (a single game in events with 4 or fewer entries).</div></details>
+        <details><summary>How many games will I play?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Events with 3 or 4 entries play round robin, and events with 5 or more play an elimination draw. Everyone in an event with three or more entries is guaranteed at least two matches. Every match is one game to 15, except semifinals, which are one game to 21, and finals, which are best of three games to 15 (a single game in events with 4 or fewer entries).</div></details>
         <details><summary>How does doubles registration work?<span class="pm" aria-hidden="true"></span></summary><div class="ans">One partner registers the team and enters their partner’s details. The fee is per player, so pay for both or each pay your own. Both players must be entered by November 18. No partner? No problem. Enter solo and we’ll find you a partner. Pairings are posted by November 19.</div></details>
         <details><summary>What shuttles are used?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Victor NCS Max shuttles, on every court and in every match. The NCS Max is a synthetic shuttle from Victor’s New CarbonSonic range.</div></details>
         <details><summary>Are there prizes?<span class="pm" aria-hidden="true"></span></summary><div class="ans">Yes. There are prizes for the winner and runner-up in every category.</div></details>
