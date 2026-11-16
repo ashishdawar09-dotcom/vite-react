@@ -21,12 +21,13 @@
   };
 
   // ── The link key ──────────────────────────────────────────────────────
-  // It arrives after the # so it is never sent to this site's server or
-  // kept in its logs. It is then held on this phone and taken out of the
-  // address bar.
+  // A link handed over by the organizer carries it after the # (never sent
+  // to this site's server). The invite email carries it as ?k=, which
+  // survives the mail service's click redirect. Either way it is then held
+  // on this phone and taken out of the address bar at once.
   let key = null;
   function readKey() {
-    const m = /^#k=([A-Za-z0-9_-]{43})$/.exec(location.hash);
+    const m = /^#k=([A-Za-z0-9_-]{43})$/.exec(location.hash) || /^([A-Za-z0-9_-]{43})$/.exec(new URLSearchParams(location.search).get("k") || "");
     if (m) {
       key = m[1];
       try { localStorage.setItem(KEY_STORE, key); } catch { /* private mode: keep it for this visit */ }
@@ -80,7 +81,10 @@
   let drawn = ""; // the list as last drawn, so an unchanged refresh doesn't redraw (no flicker)
 
   const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  // British Columbia is UTC-7 all year from Nov 2026; a phone with old time-zone
+  // rules would be an hour out, so times are shown in that fixed zone.
+  const TZ = "Etc/GMT+7";
+  const timeOf = (iso) => new Date(iso).toLocaleTimeString("en-CA", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true }).replace(/\./g, "");
   const initials = (name) => {
     const w = name.trim().split(/\s+/);
     return ((w[0]?.[0] ?? "") + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase();
@@ -98,7 +102,7 @@
   function gateFor(r) {
     if (r.network) return showGate("No connection", "Check the Wi-Fi or mobile data on this phone, then try again.", true);
     if (r.code === "not_yet") {
-      const when = r.data?.starts_at ? new Date(r.data.starts_at).toLocaleString([], { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "game day";
+      const when = r.data?.starts_at ? new Date(r.data.starts_at).toLocaleString("en-CA", { timeZone: TZ, weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).replace(/\./g, "") : "game day";
       return showGate("Not open yet", `Your link is fine. The desk opens ${when}.`, true);
     }
     if (r.code === "revoked") return showGate("This link is switched off", "Please see the organizer.", false);
@@ -130,7 +134,7 @@
     players = r.data.players;
     consentText = r.data.consent_text;
     $("who").textContent = `${r.data.volunteer} · ${r.data.tournament.name}`;
-    $("updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
+    $("updated").textContent = `Updated ${new Date().toLocaleTimeString("en-CA", { timeZone: TZ, hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }).replace(/\./g, "")}`;
     $("gate").hidden = true;
     $("app").hidden = false;
     if (!same) render();
