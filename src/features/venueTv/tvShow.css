@@ -166,7 +166,7 @@
 .tvs-stage .spons{display:flex;flex-direction:column;justify-content:center;gap:32px;height:100%}
 .tvs-stage .spons-main{font-size:72px;line-height:72px;font-weight:600;letter-spacing:-0.02em}
 .tvs-stage .spons-main span{display:block;font-size:24px;line-height:32px;font-weight:500;color:var(--fg-3);letter-spacing:0;margin-bottom:12px}
-.tvs-stage .spons-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 32px}
+.tvs-stage .spons-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 48px}
 .tvs-stage .spons-grid p{font-size:30px;line-height:36px;font-weight:500;color:var(--fg-2)}
 .tvs-stage .prog{display:flex;flex-direction:column;justify-content:center;gap:32px;height:100%}
 .tvs-stage .prog-big{font-size:30px;line-height:36px;color:var(--fg-2)}
