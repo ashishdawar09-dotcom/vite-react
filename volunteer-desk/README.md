@@ -22,9 +22,31 @@ desk. Nothing else: no emails, ages, payments, scores, draws or deletes.
 A link works only between its `valid_from` and `valid_until`, and stops at
 once when `revoked_at` is set.
 
-## Links
+## Organizer screen
 
-Make links (prints each link once; only its hash is stored):
+`https://desk.adawar.org/organizer` (`public/organizer.html`). An organizer
+signs in with the same email code as the app, then:
+
+- invites a volunteer by name and email (the volunteer gets their link by
+  email; it is also shown once on screen to copy);
+- sees every volunteer link, whether it has been opened, and what it did;
+- switches a link off or back on, changes its hours, or sends a new link
+  (the old one stops working).
+
+It talks to the `volunteer-desk-admin` function
+(`supabase/functions/volunteer-desk-admin/`), which checks the sign-in
+against `tournament_admins` the way the app's admin functions do. Hours are
+entered and shown in BC time (UTC-7 all year), whatever the device's clock.
+
+The emailed link carries the key as `?k=` (it survives the mail service's
+click redirect); the copied link uses `#k=`. The page accepts both and takes
+the key out of the address bar at once.
+
+## Links by hand
+
+The organizer screen is the normal way. `links.mjs` still works for making a
+link without an email:
+
 
     node links.mjs --tournament <tournament id> --from "2026-11-21T07:00:00-07:00" --until "2026-11-21T22:00:00-07:00" "Priya" "Sam"
 
@@ -48,8 +70,8 @@ wording is saved with the log row.
 
 ## Deploy
 
-1. `supabase db push` (the migration above).
-2. `supabase functions deploy volunteer-desk`.
+1. `supabase db push` (the two `*_volunteer_desk*` / `*_desk_link_invites*` migrations).
+2. `supabase functions deploy volunteer-desk` and `volunteer-desk-admin`.
 3. From this folder: `npx wrangler@4 deploy`.
 
 The function allows the page's address in `DESK_ORIGIN` (default
@@ -59,6 +81,6 @@ project changes.
 
 ## Tests
 
-- `npx -y deno test supabase/functions/volunteer-desk/` (rules, no network).
+- `npx -y deno test supabase/functions/volunteer-desk/ supabase/functions/volunteer-desk-admin/` (rules, no network).
 - Server and browser runs against the scratch project: see the kit in
   `Code Claude/volunteer-desk-kit/`.

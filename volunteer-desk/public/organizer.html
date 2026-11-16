@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#06080D">
+  <title>Organizer · Check-in desk · Shuttle Storm</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/desk.css">
+</head>
+<body>
+  <!-- Sign in: the same email code organizers use for the app. -->
+  <main id="signin" class="gate" hidden>
+    <svg class="mark" viewBox="6 6 108 108" aria-hidden="true"><path d="M16 78 A46 46 0 0 1 50 15" fill="none" stroke="#829C28" stroke-width="5" stroke-linecap="round"/><path d="M104 42 A46 46 0 0 1 70 105" fill="none" stroke="#829C28" stroke-width="5" stroke-linecap="round"/><g transform="rotate(32 60 60)"><path d="M33 24 L87 24 L71 82 L49 82 Z" fill="none" stroke="#D4FF3A" stroke-width="5" stroke-linejoin="round"/><path d="M66 28 L50 56 L60 56 L53 79 L72 48 L62 48 L70 28 Z" fill="#D4FF3A"/><circle cx="60" cy="94" r="12" fill="#D4FF3A"/></g></svg>
+    <h1>Volunteer desk: organizers</h1>
+    <p id="signin-text">Sign in with your organizer email. We'll send you a code, the same as for the app.</p>
+    <form id="email-form" class="stack" novalidate>
+      <label class="field"><span>Your organizer email</span>
+        <input id="signin-email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" required>
+      </label>
+      <button id="email-send" class="btn btn-primary" type="submit">Send me a code</button>
+    </form>
+    <form id="code-form" class="stack" novalidate hidden>
+      <label class="field"><span>The code from your email</span>
+        <input id="signin-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required>
+      </label>
+      <button id="code-send" class="btn btn-primary" type="submit">Sign in</button>
+      <button id="code-back" class="link" type="button">Use a different email</button>
+    </form>
+    <p id="signin-error" class="error" role="alert" hidden></p>
+  </main>
+
+  <div id="app" hidden>
+    <header class="top">
+      <div class="top-row">
+        <svg class="mark" viewBox="6 6 108 108" aria-hidden="true"><path d="M16 78 A46 46 0 0 1 50 15" fill="none" stroke="#829C28" stroke-width="5" stroke-linecap="round"/><path d="M104 42 A46 46 0 0 1 70 105" fill="none" stroke="#829C28" stroke-width="5" stroke-linecap="round"/><g transform="rotate(32 60 60)"><path d="M33 24 L87 24 L71 82 L49 82 Z" fill="none" stroke="#D4FF3A" stroke-width="5" stroke-linejoin="round"/><path d="M66 28 L50 56 L60 56 L53 79 L72 48 L62 48 L70 28 Z" fill="#D4FF3A"/><circle cx="60" cy="94" r="12" fill="#D4FF3A"/></g></svg>
+        <div class="top-title">
+          <strong>Volunteer desk</strong>
+          <span id="who"></span>
+        </div>
+        <button id="signout" class="link" type="button">Sign out</button>
+      </div>
+      <label id="tournament-row" class="field field-inline" hidden><span>Tournament</span>
+        <select id="tournament"></select>
+      </label>
+      <p id="offline" class="offline" role="status" hidden>No connection. Changes will not save until it is back.</p>
+    </header>
+
+    <main>
+      <section class="stats" aria-label="Today at the desk">
+        <div><b id="stat-in">0</b><span id="stat-in-label">of 0 checked in</span></div>
+        <div><b id="stat-desk">0</b><span>check-ins at the desk</span></div>
+        <div><b id="stat-photos">0</b><span>photos at the desk</span></div>
+      </section>
+
+      <section class="panel" aria-labelledby="invite-title">
+        <h2 id="invite-title">Invite a volunteer</h2>
+        <p class="hint">They get an email with their own link to the check-in desk. It works only during the hours below.</p>
+        <form id="invite-form" class="stack" novalidate>
+          <label class="field"><span>Name</span>
+            <input id="inv-name" type="text" autocomplete="off" maxlength="60" required>
+          </label>
+          <label class="field"><span>Email</span>
+            <input id="inv-email" type="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+          </label>
+          <div class="row3">
+            <label class="field"><span>Day</span><input id="inv-day" type="date" required></label>
+            <label class="field"><span>From</span><input id="inv-from" type="time" required></label>
+            <label class="field"><span>Until</span><input id="inv-until" type="time" required></label>
+          </div>
+          <p id="invite-error" class="error" role="alert" hidden></p>
+          <button id="inv-send" class="btn btn-primary" type="submit">Send invite</button>
+        </form>
+        <div id="sent" class="sent" role="status" hidden>
+          <p id="sent-text"></p>
+          <p class="hint">You can also hand them this link yourself. It is shown only now.</p>
+          <div class="copyrow">
+            <input id="sent-url" type="text" readonly aria-label="The volunteer's link">
+            <button id="sent-copy" class="btn" type="button">Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="links-title">
+        <h2 id="links-title" class="section-title">Volunteers <b id="links-count"></b></h2>
+        <ul id="links" class="list"></ul>
+        <p id="links-empty" class="empty" hidden>No volunteers yet. Invite the first one above.</p>
+      </section>
+
+      <section aria-labelledby="activity-title">
+        <h2 id="activity-title" class="section-title">Latest at the desk</h2>
+        <ul id="activity" class="activity"></ul>
+        <p id="activity-empty" class="empty" hidden>Nothing yet. Check-ins and photos from the desk show here.</p>
+      </section>
+
+      <p class="foot"><span id="updated"></span></p>
+    </main>
+  </div>
+
+  <!-- Change the hours of one link. -->
+  <dialog id="hours" class="sheet" aria-labelledby="hours-name">
+    <form id="hours-form" class="stack" novalidate>
+      <h2 id="hours-name"></h2>
+      <div class="row3">
+        <label class="field"><span>Day</span><input id="hrs-day" type="date" required></label>
+        <label class="field"><span>From</span><input id="hrs-from" type="time" required></label>
+        <label class="field"><span>Until</span><input id="hrs-until" type="time" required></label>
+      </div>
+      <p id="hours-error" class="error" role="alert" hidden></p>
+      <div class="sheet-actions">
+        <button id="hrs-save" class="btn btn-primary" type="submit">Save hours</button>
+        <button id="hrs-cancel" class="btn btn-quiet" type="button">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toast-text"></span></div>
+
+  <script src="/config.js"></script>
+  <script src="/organizer.js"></script>
+</body>
+</html>
