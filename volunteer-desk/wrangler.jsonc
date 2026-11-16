@@ -1,0 +1,18 @@
+// Volunteer check-in desk → https://desk.adawar.org
+// Static assets only (no Worker code). Deploy: npx wrangler@4 deploy
+// Separate from the app: it calls one Supabase Edge Function (volunteer-desk).
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "shuttlestorm-desk",
+  "account_id": "bb2595a278569d07e28c08a4e52fd865",
+  "compatibility_date": "2026-11-15",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./public",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    { "pattern": "desk.adawar.org", "custom_domain": true }
+  ]
+}
