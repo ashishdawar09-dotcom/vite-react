@@ -163,11 +163,21 @@
 .tvs-stage .scan-t h3{font-size:48px;line-height:48px;font-weight:600;text-wrap:balance}
 .tvs-stage .scan-t p{font-size:24px;line-height:32px;color:var(--fg-2);margin-top:16px;max-width:30ch}
 .tvs-stage .scan-t .url{display:block;margin-top:24px;font-family:var(--f-time);font-size:30px;line-height:36px;color:var(--accent)}
-.tvs-stage .spons{display:flex;flex-direction:column;justify-content:center;gap:32px;height:100%}
-.tvs-stage .spons-main{font-size:72px;line-height:72px;font-weight:600;letter-spacing:-0.02em}
-.tvs-stage .spons-main span{display:block;font-size:24px;line-height:32px;font-weight:500;color:var(--fg-3);letter-spacing:0;margin-bottom:12px}
-.tvs-stage .spons-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 48px}
-.tvs-stage .spons-grid p{font-size:30px;line-height:36px;font-weight:500;color:var(--fg-2)}
+/* Sponsors list: twelve names have to fit the short centre panel of the four-court layout (412 px) as well as
+   the tall boards. The plain sizes fit the short panel and are what a browser without container units uses;
+   where container units exist the sizes follow the panel's height (cqh), up to the original large sizes. */
+.tvs-stage .spons{display:flex;flex-direction:column;justify-content:center;gap:20px;height:100%}
+.tvs-stage .spons-main{font-size:58px;line-height:58px;font-weight:600;letter-spacing:-0.02em}
+.tvs-stage .spons-main span{display:block;font-size:24px;line-height:32px;font-weight:500;color:var(--fg-3);letter-spacing:0;margin-bottom:6px}
+.tvs-stage .spons-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 48px}
+.tvs-stage .spons-grid p{font-size:25px;line-height:31px;font-weight:500;color:var(--fg-2)}
+@supports (height:1cqh){
+.tvs-stage .spons{container-type:size;gap:clamp(12px,4.9cqh,32px)}
+.tvs-stage .spons-main{font-size:clamp(40px,14cqh,72px);line-height:clamp(40px,14cqh,72px)}
+.tvs-stage .spons-main span{margin-bottom:clamp(4px,1.5cqh,12px)}
+.tvs-stage .spons-grid{gap:clamp(6px,2.9cqh,16px) 48px}
+.tvs-stage .spons-grid p{font-size:clamp(18px,6.1cqh,30px);line-height:clamp(22px,7.5cqh,36px)}
+}
 .tvs-stage .prog{display:flex;flex-direction:column;justify-content:center;gap:32px;height:100%}
 .tvs-stage .prog-big{font-size:30px;line-height:36px;color:var(--fg-2)}
 .tvs-stage .prog-big b{font-family:var(--f-num);font-size:72px;line-height:72px;font-weight:600;color:var(--fg);margin-right:12px}
