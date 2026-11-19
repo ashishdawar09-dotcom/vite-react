@@ -197,3 +197,17 @@ main { padding: 12px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-
 .activity li:first-child { border-top: 0; }
 .activity time { flex: none; width: 5.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
 .activity span { min-width: 0; overflow-wrap: anywhere; }
+
+/* ── Winners tab ──────────────────────────────────────────────────────── */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.tab { min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 600; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--volt); color: var(--volt-ink); }
+.ev { padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.ev.has { border-color: #4A4520; }
+.ev .name { margin: 0; font-size: 18px; font-weight: 650; line-height: 1.2; overflow-wrap: anywhere; }
+.ev .events { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+.ev .champs { margin: 4px 0 0; color: var(--volt); font-size: 14.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.ev-photo { margin-top: 12px; min-height: 76px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: var(--panel-2); border: 1px dashed var(--line); color: var(--muted); font-size: 14px; text-align: center; padding: 0 12px; }
+.ev.has .ev-photo { aspect-ratio: 4 / 3; border-style: solid; padding: 0; background: #000; }
+.ev-photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.card-actions.one { grid-template-columns: 1fr; }

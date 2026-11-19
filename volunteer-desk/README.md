@@ -22,6 +22,28 @@ desk. Nothing else: no emails, ages, payments, scores, draws or deletes.
 A link works only between its `valid_from` and `valid_until`, and stops at
 once when `revoked_at` is set.
 
+## Winners photos
+
+The desk page has a second tab, **Winners photos**: every event of the
+tournament, its champions once the final is confirmed, and one photo of the
+winners with their prizes (add, replace, remove). A photo may be added before
+the final is entered; it shows publicly only once the event has a champion.
+
+- Stored at `player-photos/winners/<tournament>/<event>/<time>.jpg`, one row
+  per event in `category_winner_photos` (public read, written by the
+  `volunteer-desk` function only). Migration `20261120120000_winner_photos.sql`.
+- The live app shows it under the champion card
+  (`src/features/champions/ChampionCard.tsx`) on the Knockout tab, and on the
+  Groups tab for a round-robin-only event.
+- The Shuttle Storm website's `/champions` page reads the public
+  `winners-feed` function (`supabase/functions/winners-feed/`): champion
+  names and the winners photo per event. Players' profile pictures are not in
+  that feed: they were agreed for the app and the hall TV, not the website.
+- Who won is worked out in `supabase/functions/volunteer-desk/champions.ts`,
+  following the app's results page: the confirmed Final, or for a
+  round-robin-only event the clear winner on wins (ties are left undecided
+  there; the app's own tie rules decide them).
+
 ## Organizer screen
 
 `https://desk.adawar.org/organizer` (`public/organizer.html`). An organizer
@@ -71,7 +93,7 @@ wording is saved with the log row.
 ## Deploy
 
 1. `supabase db push` (the two `*_volunteer_desk*` / `*_desk_link_invites*` migrations).
-2. `supabase functions deploy volunteer-desk` and `volunteer-desk-admin`.
+2. `supabase functions deploy volunteer-desk`, `volunteer-desk-admin` and `winners-feed`.
 3. From this folder: `npx wrangler@4 deploy`.
 
 The function allows the page's address in `DESK_ORIGIN` (default
@@ -81,6 +103,6 @@ project changes.
 
 ## Tests
 
-- `npx -y deno test supabase/functions/volunteer-desk/ supabase/functions/volunteer-desk-admin/` (rules, no network).
+- `npx -y deno test supabase/functions/volunteer-desk/ supabase/functions/volunteer-desk-admin/` (rules, including who the champion is; no network).
 - Server and browser runs against the scratch project: see the kit in
   `Code Claude/volunteer-desk-kit/`.
