@@ -1,4 +1,4 @@
-import React, { Suspense, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { lazyWithReload } from "./lib/lazyWithReload";
 import { motion } from "framer-motion"; /* NEW: makeover motion */
 import * as Sentry from "@sentry/react";
@@ -34,6 +34,7 @@ import { MatchCard as ExtractedMatchCard, type MatchCardActions, type ShownScore
 import { AppHeader } from "./components/AppHeader";
 import type { GameScore, Match, Player, Team, Tournament } from "./types";
 import { applyPlan, confirmKnockoutPlan, describeCleared, knockoutLabel, planPlaceTeam, type KnockoutPlan } from "./lib/knockout";
+import { semifinalsTo21 } from "./lib/gameRules";
 import { planUndoResult, undoRefusedText } from "./lib/resultOptions";
 import { courtTakenMessage, isCourtTaken } from "./lib/courts";
 import { groupKeyOf, groupLetter, groupStandings, groupTies, groupsAllConfirmed, isRoundRobinOnly, roundRobinPodium } from "./lib/groups";
@@ -251,6 +252,8 @@ export default function App() {
     tournamentDeltaLabel,
     liveByCourt,
   } = useTournamentDerived(current, players, teams, matches, categories, playerCategories, currentCategoryId);
+  // Semifinals are one game to 21 (src/lib/gameRules.ts): the cards show it and give them the longer time.
+  const semifinalIds = useMemo(() => semifinalsTo21(matches), [matches]);
 
   // "You're up soon" for the players of each match about to be called (admins' devices, on the day).
   const sittingOutTeam = useCallback((teamId: string) => teamSittingOut(allTeamById[teamId]), [allTeamById]);
@@ -1063,6 +1066,7 @@ export default function App() {
   const matchCardEnv: MatchCardEnv = {
     isAdmin,
     teamById,
+    semifinalIds,
     editingMatchId,
     onStartEdit: (id) => setEditingMatchId(id),
     onCancelEdit: () => setEditingMatchId(null),

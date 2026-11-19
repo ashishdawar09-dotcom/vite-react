@@ -1,5 +1,6 @@
 // Best-of-3 knockout matches (each event's "Best of 3 games from" setting;
-// Shuttle Storm plays finals best of 3 games to 15, every other match one game to 15).
+// Shuttle Storm plays finals best of 3 games to 15, semifinals one game to 21,
+// every other match one game to 15; the points and times are in src/lib/gameRules.ts).
 //
 // How a best-of-3 match is stored (see the 20261109120000_best_of_3 migration):
 // - matches.best_of = 3. Every screen asks isBestOf3(m), nothing else.
@@ -12,15 +13,11 @@
 // The one-game path (src/lib/scoring.ts finalScorePatch) is untouched.
 
 import type { BestOf3From, Category, GameScore, Match } from "../types";
+import { gameTarget, playFactor } from "./gameRules";
 import type { FinalScore } from "./scoring";
 
 export function isBestOf3(m: Pick<Match, "best_of">): boolean {
   return m.best_of === 3;
-}
-
-/** Points to win a game: 15 in a best-of-3 match, 21 in a one-game match. */
-export function gameTarget(m: Pick<Match, "best_of">): number {
-  return isBestOf3(m) ? 15 : 21;
 }
 
 /**
@@ -179,10 +176,14 @@ export function liveGameTag(m: Pick<Match, "games" | "best_of">): string {
   return `Best of 3 · Game ${currentGame(m)} · games ${wa}–${wb}`;
 }
 
-/** Minutes a match is expected to take on court: a best-of-3 match counts as two one-game matches. */
-export function playMinutes(m: Pick<Match, "best_of" | "extended_minutes">, matchMinutes: number | null | undefined): number {
+/**
+ * Minutes a match is expected to take on court, before TIME OVER: a best-of-3
+ * match counts as two one-game matches, and a one-game semifinal (to 21;
+ * `semifinal` = the match is in gameRules' semifinalsTo21) as 21/15 of one.
+ */
+export function playMinutes(m: Pick<Match, "best_of" | "extended_minutes">, matchMinutes: number | null | undefined, semifinal = false): number {
   const base = matchMinutes || 12;
-  return base * (isBestOf3(m) ? 2 : 1) + (m.extended_minutes ?? 0);
+  return Math.round(base * playFactor(m, semifinal)) + (m.extended_minutes ?? 0);
 }
 
 /** Labels for the event setting, in the order Edit Event shows them. */

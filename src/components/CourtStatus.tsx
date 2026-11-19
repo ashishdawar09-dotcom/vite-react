@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: live-court pulse */
 import type { Category, ProjectedMatch, Team, Player } from "../types";
 import { currentGame, isBestOf3 } from "../lib/bestOf3";
+import { playFactor } from "../lib/gameRules";
 import { fmtElapsed } from "../hooks/useScheduling";
 
 /**
@@ -21,6 +22,7 @@ export const CourtStatus = React.memo(function CourtStatus({
   warmingByCourt,
   categories,
   teamById,
+  semifinalIds,
 }: {
   numCourts: number;
   liveByCourt: Record<number, ProjectedMatch | undefined>;
@@ -28,6 +30,8 @@ export const CourtStatus = React.memo(function CourtStatus({
   warmingByCourt?: Record<number, ProjectedMatch | undefined>;
   categories: Category[];
   teamById: Record<string, (Team & { p1: Player; p2: Player | null }) | undefined>;
+  /** The semifinals played as one game to 21 (src/lib/gameRules.ts semifinalsTo21). */
+  semifinalIds?: ReadonlySet<string>;
 }) {
   const [now, setNow] = useState(Date.now());
   const reduceMotion = useReducedMotion(); /* NEW: motion gate for IN-PLAY pulse */
@@ -64,8 +68,8 @@ export const CourtStatus = React.memo(function CourtStatus({
           const cat = m ? catById[m.category_id] : null;
           const ta = m?.team_a_id ? teamById[m.team_a_id] : null;
           const tb = m?.team_b_id ? teamById[m.team_b_id] : null;
-          // A best-of-3 match gets two matches' time (src/lib/bestOf3.ts).
-          const matchMin = (cat?.match_minutes ?? 12) * (m && isBestOf3(m) ? 2 : 1);
+          // A best-of-3 match gets two matches' time, a semifinal to 21 gets 21/15 of one (src/lib/gameRules.ts).
+          const matchMin = Math.round((cat?.match_minutes ?? 12) * (m ? playFactor(m, !!semifinalIds?.has(m.id)) : 1));
           const elapsed = isLive && m?.started_at ? (now - new Date(m.started_at).getTime()) / 60000 : 0;
           const over = isLive && elapsed > matchMin;
           const wayOver = isLive && elapsed > matchMin + 3;

@@ -18,6 +18,23 @@ import { esc, stageName, venueClock } from "./on_deck.ts";
 
 const MIN = 60_000;
 
+/**
+ * A one-game semifinal is played to 21, not 15, so it is planned at 21/15 of
+ * the event's match length. Mirrors src/lib/gameRules.ts in the app.
+ */
+export const SEMIFINAL_TIME_FACTOR = 21 / 15;
+
+/** Minutes a live match is planned to take: double for best of 3, 21/15 for a one-game semifinal, plus any extension. */
+export function plannedMinutes(
+  m: Pick<MonMatch, "stage" | "round_idx" | "is_bronze" | "best_of" | "extended_minutes">,
+  matchMinutes: number | null | undefined,
+  lastRound: number | null | undefined,
+): number {
+  const semifinal = m.stage === "knockout" && !m.is_bronze && lastRound != null && lastRound - (m.round_idx ?? 0) === 1;
+  const factor = m.best_of === 3 ? 2 : semifinal ? SEMIFINAL_TIME_FACTOR : 1;
+  return Math.round((matchMinutes || 15) * factor) + (m.extended_minutes ?? 0);
+}
+
 export const RULES = {
   emptyCourtMin: 5,
   calledMin: 8,
@@ -127,7 +144,7 @@ export function evaluate(i: MonInput): MonResult {
     if (live) {
       const startedAt = t(live.started_at);
       const elapsed = Number.isFinite(startedAt) ? mins(now - startedAt) : 0;
-      const planned = (catById.get(live.category_id)?.match_minutes || 15) * (live.best_of === 3 ? 2 : 1) + (live.extended_minutes ?? 0);
+      const planned = plannedMinutes(live, catById.get(live.category_id)?.match_minutes, lastRound.get(live.category_id));
       courts.push(`Court ${c}: ${label(live)} · playing ${elapsed} min`);
       if (elapsed >= planned + RULES.overtimeMarginMin) {
         alerts.push({

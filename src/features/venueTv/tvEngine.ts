@@ -15,7 +15,7 @@ import { ampm, hm } from "./tvTime";
 import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
 import { buildStats, leadersReady, matchupMatches, spotlightPeople, type TvStats } from "./tvStats";
 import { leadersHTML, matchupHTML, spotlightHTML } from "./tvCards";
-import { matchPointAt, matchPointKey } from "./tvMatchPoint";
+import { GAME_TO, matchPointAt, matchPointKey } from "./tvMatchPoint";
 
 export type DesignKey = "rotation" | "pinned" | "floorhome" | "sportstv";
 export const DESIGN_ORDER: DesignKey[] = ["rotation", "pinned", "floorhome", "sportstv"];
@@ -199,7 +199,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     const side = (s: "a" | "b") => `<div class="side${lead === s ? " lead" : ""}"><div class="who">${namesHTML(m, s, mode)}</div><span class="pts" data-s="${s}"><i>${scoreOf(m, s)}</i></span></div>`;
     return `<article class="court live" data-court="${c}" data-kind="tile" data-a="${m.cur[0]}" data-b="${m.cur[1]}">
       <div class="court-top"><h3 class="court-n">Court ${c}</h3>${badge ? `<span class="badge ${badge.cls}">${badge.text}</span>` : `<span class="state"><i class="dot pulse"></i><span class="t">${elapsed(m)}</span></span>`}</div>
-      <p class="court-meta"><span class="cs">${esc(shortStage(M!, m))}</span>${m.bestOf3 ? `<span class="unit">${esc(bo3Live(m))}</span>` : ""}</p>
+      <p class="court-meta"><span class="cs">${esc(shortStage(M!, m))}</span>${m.bestOf3 ? `<span class="unit">${esc(bo3Live(m))}</span>` : m.gameTo !== GAME_TO ? `<span class="unit">To ${m.gameTo}</span>` : ""}</p>
       <div class="sides">${side("a")}${side("b")}</div></article>`;
   }
   const courtsHTML = () => Array.from({ length: N() }, (_, i) => tileHTML(i + 1)).join("");
@@ -397,7 +397,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (!m) return `<div class="feat" data-court="${c}" data-kind="feat"><div class="f-top"><span class="f-court">Court ${c}</span><span class="f-cs">Ready for the next match</span></div></div>`;
     const called = m.status === "called", lead = called ? "" : leadOf(m), badge = called ? null : pointBadge(m), solo = (M!.teams[m.a ?? ""]?.names.length ?? 2) === 1;
     const side = (s: "a" | "b") => `<div class="f-side${lead === s ? " lead" : ""}${solo ? " solo" : ""}"><div class="who">${namesHTML(m, s, "lines")}</div>${called ? "" : `<span class="pts" data-s="${s}"><i>${scoreOf(m, s)}</i></span>`}</div>`;
-    const foot = badge ? `<span class="badge big ${badge.cls}">${badge.text}</span>` : called ? `<span class="call-note">Be on court within ${callLeft(m)} min</span>` : m.bestOf3 ? `<span class="badge big soft">Best of 3 games to 15</span>` : "";
+    const foot = badge ? `<span class="badge big ${badge.cls}">${badge.text}</span>` : called ? `<span class="call-note">Be on court within ${callLeft(m)} min</span>` : m.bestOf3 ? `<span class="badge big soft">Best of 3 games to 15</span>` : m.gameTo !== GAME_TO ? `<span class="badge big soft">One game to ${m.gameTo}</span>` : "";
     return `<div class="feat${called ? " called" : ""}" data-court="${c}" data-kind="feat"${called ? "" : ` data-a="${m.cur[0]}" data-b="${m.cur[1]}"`}>
       <div class="f-top"><span class="f-court">Court ${c}</span><span class="f-cs">${esc(catStage(M!, m))}</span>${called ? `<span class="state called">Now calling</span>` : m.ending ? `<span class="state">Finished</span>` : `<span class="state"><i class="dot pulse"></i>Live <span class="t">${elapsed(m)}</span></span>`}</div>
       <div class="f-sides">${side("a")}<p class="f-vs">vs</p>${side("b")}</div><div class="f-foot">${foot}</div></div>`;

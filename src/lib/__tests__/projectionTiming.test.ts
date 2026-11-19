@@ -121,8 +121,11 @@ describe("best of 3", () => {
   it("follows each match's own format (matches.best_of), not its round", () => {
     // Event set to Quarterfinals: a quarterfinal is best of 3.
     expect(gamesFactor(ko("qf", 0, 0, { best_of: 3 }))).toBe(2);
-    // Event set to Final (or Never): a semifinal is one game.
+    // Event set to Final (or Never): a semifinal is one game. Told it is a
+    // semifinal (which takes the whole bracket), it counts 21/15: a game to 21.
     expect(gamesFactor(ko("sf", 1, 0, { best_of: 1 }))).toBe(1);
+    expect(gamesFactor(ko("sf", 1, 0, { best_of: 1 }), 2, true)).toBeCloseTo(1.4, 10);
+    expect(gamesFactor(ko("sf", 1, 0, { best_of: 3 }), 2, true)).toBe(2);
     // The bronze match follows the final.
     expect(gamesFactor(ko("bronze", 2, 1, { is_bronze: true, best_of: 3 }))).toBe(2);
     // A row from before the column existed is one game.
@@ -145,17 +148,46 @@ describe("best of 3", () => {
     expect((s.finish! - DAY_START) / MIN).toBe(56);
   });
 
-  it("projects a semifinal as one game when its event isn't best of 3 there", () => {
+  it("projects a semifinal as one game to 21 (21/15 of a game) when its event isn't best of 3 there", () => {
     const matches = [
       ko("sf1", 0, 0, { team_a_id: "k1", team_b_id: "k2", best_of: 1 }),
       ko("sf2", 0, 1, { team_a_id: "k3", team_b_id: "k4", best_of: 1 }),
       ko("final", 1, 0, { best_of: 3 }),
     ];
-    const s = projectVenue(matches, [category("a", 1)], 4, DAY_START, { timing: T });
-    // Serve at 4, 12 minutes of play: both semifinals end at 16, and the final is called then.
-    expect(at(s, "final", DAY_START)).toBe(16);
-    // The final is best of 3: it ends at 16 + 4 + 24.
-    expect((s.finish! - DAY_START) / MIN).toBe(44);
+    const s = projectVenue(matches, [category("a", 1, { match_minutes: 15 })], 4, DAY_START, { timing: T });
+    // Serve at 4, 21 minutes of play (15 × 21/15): both semifinals end at 25, and the final is called then.
+    expect(at(s, "final", DAY_START)).toBeCloseTo(25, 6);
+    // The final is best of 3: it ends at 25 + 4 + 30.
+    expect((s.finish! - DAY_START) / MIN).toBeCloseTo(59, 6);
+  });
+
+  it("gives only the semifinals the longer game: quarterfinals and a one-game final stay at one game", () => {
+    const matches = [
+      ko("qf1", 0, 0, { team_a_id: "k1", team_b_id: "k2" }),
+      ko("qf2", 0, 1, { team_a_id: "k3", team_b_id: "k4" }),
+      ko("qf3", 0, 2, { team_a_id: "k5", team_b_id: "k6" }),
+      ko("qf4", 0, 3, { team_a_id: "k7", team_b_id: "k8" }),
+      ko("sf1", 1, 0), ko("sf2", 1, 1),
+      ko("final", 2, 0),
+    ];
+    const s = projectVenue(matches, [category("a", 1, { match_minutes: 15 })], 4, DAY_START, { timing: T });
+    // Quarterfinals: serve at 4, 15 minutes, end at 19. Courts change over, semifinals called at 21.
+    expect(at(s, "sf1", DAY_START)).toBeCloseTo(21, 6);
+    // Semifinals: serve at 25, 21 minutes (15 × 21/15), end at 46. The final: serve at 50, 15 minutes.
+    expect(at(s, "final", DAY_START)).toBeCloseTo(46, 6);
+    expect((s.finish! - DAY_START) / MIN).toBeCloseTo(65, 6);
+  });
+
+  it("holds a live semifinal's court for 21/15 of a game", () => {
+    const now = DAY_START + 60 * MIN;
+    const matches = [
+      ko("sf1", 0, 0, { team_a_id: "k1", team_b_id: "k2", status: "live", court_number: 1, court_allocated_at: iso(now - 9 * MIN), started_at: iso(now - 5 * MIN) }),
+      ko("sf2", 0, 1, { team_a_id: "k3", team_b_id: "k4", confirmed: true, status: "completed", winner_id: "k3", is_walkover: true }),
+      ko("final", 1, 0, { team_a_id: "k3" }),
+    ];
+    const s = projectVenue(matches, [category("a", 1, { match_minutes: 15 })], 1, now, { timing: T });
+    // Started 5 minutes ago with 21 to play: 16 minutes left, a 2 minute changeover, then the final is called.
+    expect(at(s, "final", now)).toBeCloseTo(18, 6);
   });
 
   it("counts a played semifinal as two games when learning an event's pace", () => {
