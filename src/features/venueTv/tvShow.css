@@ -60,7 +60,6 @@
 .tvs-stage .state.free{color:var(--fg-3);font-weight:500}
 .tvs-stage .court-meta{display:flex;align-items:center;gap:12px;font-size:24px;line-height:32px;color:var(--fg-2);min-width:0}
 .tvs-stage .cs{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tvs-stage .unit{flex:none;font-size:20px;line-height:28px;color:var(--fg-3)}
 .tvs-stage .badge{flex:none;display:inline-block;padding:0 12px;border-radius:8px;background:var(--accent);color:var(--on-accent);font-size:20px;line-height:32px;font-weight:600;white-space:nowrap}
 .tvs-stage .badge.soft{background:var(--panel-2);color:var(--fg-2)}
 .tvs-stage .badge.big{font-size:24px;line-height:40px;padding:0 16px;border-radius:12px}
