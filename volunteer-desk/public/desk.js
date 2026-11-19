@@ -9,6 +9,7 @@
   const KEY_STORE = "shuttlestorm.desk.key";
   const REFRESH_MS = 20000;
   const MAX_EDGE = 1200; // same as the app's own photo page
+  const WINNERS_MAX_EDGE = 1600; // a group photo, shown larger
   const JPEG_QUALITY = 0.86;
   const MAX_UPLOAD_BYTES = 3000000;
 
@@ -79,6 +80,13 @@
   const busy = new Map(); // player id → "checkin" | "photo"
   const brokenPhotos = new Set(); // photo addresses that failed to load: show initials instead
   let drawn = ""; // the list as last drawn, so an unchanged refresh doesn't redraw (no flicker)
+  // Winners tab: one photo per event.
+  let tab = "checkin";
+  let events = [];
+  let winnersConsent = "";
+  let winnersDrawn = "";
+  let winnersLoading = false;
+  const eventBusy = new Set(); // event ids with a save or removal in flight
 
   const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   // British Columbia is UTC-7 all year from Nov 2026; a phone with old time-zone
@@ -255,17 +263,19 @@
   }
 
   // ── Photo ─────────────────────────────────────────────────────────────
-  let photoFor = null; // player id the camera was opened for
+  let photoFor = null; // player id (or, on the Winners tab, event id) the camera was opened for
+  let photoKind = "player"; // "player" | "event"
   let photoData = null; // the shrunk JPEG as a data URL
+  const eventById = (id) => events.find((e) => e.id === id);
 
-  function shrink(file) {
+  function shrink(file, maxEdge = MAX_EDGE) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("unreadable")); };
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const k = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+        const k = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
         const w = Math.max(1, Math.round(img.naturalWidth * k));
         const h = Math.max(1, Math.round(img.naturalHeight * k));
         if (!img.naturalWidth || !img.naturalHeight) return reject(new Error("unreadable"));
@@ -287,27 +297,33 @@
     });
   }
 
-  function openCamera(id) {
+  function openCamera(id, kind = "player") {
     photoFor = id;
+    photoKind = kind;
     const cam = $("camera");
+    // A player's photo is taken on the spot. A winners photo may also have been
+    // taken earlier, so the phone offers its photo library as well.
+    if (kind === "event") cam.removeAttribute("capture");
+    else cam.setAttribute("capture", "environment");
     cam.value = "";
     cam.click();
   }
 
   async function onPicked() {
     const file = $("camera").files?.[0];
-    const p = byId(photoFor);
+    const isEvent = photoKind === "event";
+    const p = isEvent ? eventById(photoFor) : byId(photoFor);
     if (!file || !p) return;
     try {
-      photoData = await shrink(file);
+      photoData = await shrink(file, isEvent ? WINNERS_MAX_EDGE : MAX_EDGE);
     } catch {
       photoData = null;
       return toast("Couldn't read that photo. Please take it again.", { bad: true });
     }
-    $("sheet-name").textContent = `Photo of ${p.name}`;
+    $("sheet-name").textContent = isEvent ? `Winners of ${p.name}` : `Photo of ${p.name}`;
     $("sheet-img").src = photoData;
     $("sheet-consent").checked = false;
-    $("sheet-consent-text").textContent = consentText;
+    $("sheet-consent-text").textContent = isEvent ? winnersConsent : consentText;
     $("sheet-save").disabled = true;
     $("sheet-save").classList.remove("busy");
     $("sheet-error").hidden = true;
@@ -321,6 +337,7 @@
   }
 
   async function savePhoto() {
+    if (photoKind === "event") return saveWinnersPhoto();
     const id = photoFor;
     const p = byId(id);
     if (!p || !photoData || !$("sheet-consent").checked || busy.has(id)) return;
@@ -358,7 +375,142 @@
     toast(`Photo removed for ${p.name}`);
   }
 
+  // ── Winners tab ───────────────────────────────────────────────────────
+  async function refreshWinners() {
+    if (!key || winnersLoading) return;
+    winnersLoading = true;
+    const seen = changes;
+    const r = await call({ action: "winners" });
+    winnersLoading = false;
+    if (!r.ok) {
+      if (["revoked", "expired", "bad_link", "not_yet"].includes(r.code)) return gateFor(r);
+      if (!events.length && tab === "winners") { $("events-empty").textContent = r.error; $("events-empty").hidden = false; }
+      return;
+    }
+    if (seen !== changes) return;
+    winnersConsent = r.data.consent_text;
+    const fresh = JSON.stringify(r.data.events);
+    const same = fresh === winnersDrawn;
+    winnersDrawn = fresh;
+    events = r.data.events;
+    if (!same) renderWinners();
+  }
+
+  function renderWinners() {
+    $("events").replaceChildren(...events.map(eventCard));
+    $("events-empty").hidden = events.length > 0;
+    if (!events.length) $("events-empty").textContent = "No events yet.";
+  }
+
+  function eventCard(e) {
+    const li = el("li", `ev${e.photo_url ? " has" : ""}`);
+    li.dataset.id = e.id;
+    li.append(el("p", "name", e.name));
+    li.append(e.champions.length
+      ? el("p", "champs", `🏆 ${e.champions.map((c) => c.name).join(" & ")}`)
+      : el("p", "events", "Final not finished yet. You can still add the photo."));
+    const frame = el("div", "ev-photo");
+    const photo = safePhoto(e.photo_url);
+    if (photo) {
+      const img = el("img");
+      img.src = photo;
+      img.alt = `Winners of ${e.name}`;
+      img.loading = "lazy";
+      img.addEventListener("error", () => { brokenPhotos.add(photo); frame.replaceChildren(el("span", "", "The photo is saved but couldn't be shown here.")); });
+      frame.append(img);
+    } else {
+      frame.append(el("span", "", e.photo_url ? "The photo is saved but couldn't be shown here." : "No winners photo yet"));
+    }
+    li.append(frame);
+    if (e.photo_url && e.photo_at) li.append(el("p", "events", `Added ${e.photo_by ? `by ${e.photo_by}, ` : ""}${timeOf(e.photo_at)}`));
+    const actions = el("div", e.photo_url ? "card-actions" : "card-actions one");
+    const isBusy = eventBusy.has(e.id);
+    const add = el("button", e.photo_url ? "btn" : "btn btn-primary", e.photo_url ? "Replace photo" : "Add winners photo");
+    add.type = "button";
+    add.dataset.act = "wphoto";
+    add.disabled = isBusy;
+    actions.append(add);
+    if (e.photo_url) {
+      const rm = el("button", "btn btn-quiet btn-danger", "Remove");
+      rm.type = "button";
+      rm.dataset.act = "wremove";
+      rm.disabled = isBusy;
+      if (isBusy) rm.classList.add("busy");
+      actions.append(rm);
+    }
+    li.append(actions);
+    return li;
+  }
+
+  const patchEvent = (id, fields) => {
+    changes += 1;
+    winnersDrawn = "";
+    events = events.map((e) => (e.id === id ? { ...e, ...fields } : e));
+  };
+
+  async function saveWinnersPhoto() {
+    const id = photoFor;
+    const e = eventById(id);
+    if (!e || !photoData || !$("sheet-consent").checked || eventBusy.has(id)) return;
+    eventBusy.add(id);
+    $("sheet-save").classList.add("busy");
+    $("sheet-save").disabled = $("sheet-retake").disabled = $("sheet-cancel").disabled = true;
+    const r = await call({ action: "winner_photo", category_id: id, image: photoData, consent: true }, 90000);
+    eventBusy.delete(id);
+    $("sheet-save").classList.remove("busy");
+    $("sheet-retake").disabled = $("sheet-cancel").disabled = false;
+    $("sheet-save").disabled = !$("sheet-consent").checked;
+    if (!r.ok) {
+      if (["revoked", "expired", "bad_link", "not_yet"].includes(r.code)) { closeSheet(); return gateFor(r); }
+      $("sheet-error").textContent = r.error;
+      $("sheet-error").hidden = false;
+      return;
+    }
+    patchEvent(id, { photo_url: r.data.photo_url, photo_by: null, photo_at: new Date().toISOString() });
+    closeSheet();
+    renderWinners();
+    toast(`Winners photo saved for ${e.name}`);
+  }
+
+  async function removeWinnersPhoto(id) {
+    const e = eventById(id);
+    if (!e || eventBusy.has(id)) return;
+    eventBusy.add(id);
+    renderWinners();
+    const r = await call({ action: "remove_winner_photo", category_id: id });
+    eventBusy.delete(id);
+    if (!r.ok) {
+      renderWinners();
+      if (["revoked", "expired", "bad_link", "not_yet"].includes(r.code)) return gateFor(r);
+      return toast(r.error, { bad: true });
+    }
+    patchEvent(id, { photo_url: null, photo_by: null, photo_at: null });
+    renderWinners();
+    toast(`Winners photo removed for ${e.name}`);
+  }
+
+  function setTab(next) {
+    tab = next;
+    $("tab-checkin").setAttribute("aria-selected", String(tab === "checkin"));
+    $("tab-winners").setAttribute("aria-selected", String(tab === "winners"));
+    $("view-checkin").hidden = $("checkin-tools").hidden = tab !== "checkin";
+    $("view-winners").hidden = tab !== "winners";
+    window.scrollTo(0, 0);
+    if (tab === "winners") { renderWinners(); void refreshWinners(); }
+  }
+
   // ── Wiring ────────────────────────────────────────────────────────────
+  $("tab-checkin").addEventListener("click", () => setTab("checkin"));
+  $("tab-winners").addEventListener("click", () => setTab("winners"));
+  $("events").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-act]");
+    const li = ev.target.closest("li.ev");
+    if (!btn || !li || btn.disabled) return;
+    const e = eventById(li.dataset.id);
+    if (!e) return;
+    if (btn.dataset.act === "wphoto") openCamera(e.id, "event");
+    else if (btn.dataset.act === "wremove" && window.confirm(`Remove the winners photo for ${e.name}? It comes off the live app and the website.`)) void removeWinnersPhoto(e.id);
+  });
   $("list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-act]");
     const li = e.target.closest("li.card");
@@ -373,9 +525,9 @@
   $("camera").addEventListener("change", () => void onPicked());
   $("sheet-consent").addEventListener("change", () => { $("sheet-save").disabled = !$("sheet-consent").checked; });
   $("sheet-save").addEventListener("click", () => void savePhoto());
-  $("sheet-retake").addEventListener("click", () => openCamera(photoFor));
+  $("sheet-retake").addEventListener("click", () => openCamera(photoFor, photoKind));
   $("sheet-cancel").addEventListener("click", closeSheet);
-  $("sheet").addEventListener("cancel", (e) => { if (busy.has(photoFor)) e.preventDefault(); else photoData = null; });
+  $("sheet").addEventListener("cancel", (e) => { if (busy.has(photoFor) || eventBusy.has(photoFor)) e.preventDefault(); else photoData = null; });
   $("toast-undo").addEventListener("click", () => {
     const undo = toastUndo;
     $("toast").hidden = true;
@@ -396,10 +548,11 @@
     showGate("Link removed", "This phone no longer has the check-in link.", false);
   });
   const setOffline = () => { $("offline").hidden = navigator.onLine; };
-  window.addEventListener("online", () => { setOffline(); void refresh(false); });
+  window.addEventListener("online", () => { setOffline(); void refresh(false); if (tab === "winners") void refreshWinners(); });
   window.addEventListener("offline", setOffline);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("app").hidden) void refresh(false); });
-  setInterval(() => { if (!document.hidden && !$("app").hidden && key) void refresh(false); }, REFRESH_MS);
+  const refreshAll = () => { void refresh(false); if (tab === "winners") void refreshWinners(); };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("app").hidden) refreshAll(); });
+  setInterval(() => { if (!document.hidden && !$("app").hidden && key) refreshAll(); }, REFRESH_MS);
 
   readKey();
   setOffline();

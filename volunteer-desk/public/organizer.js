@@ -180,7 +180,7 @@
 
   // ── Drawing ───────────────────────────────────────────────────────────
   const STATE = { active: "Working now", not_yet: "Ready", expired: "Ended", revoked: "Switched off" };
-  const ACTION = { check_in: "checked in", undo_check_in: "undid the check-in of", photo: "took a photo of", undo_photo: "removed the photo of" };
+  const ACTION = { check_in: "checked in", undo_check_in: "undid the check-in of", photo: "took a photo of", undo_photo: "removed the photo of", winner_photo: "added the winners photo for", remove_winner_photo: "removed the winners photo for" };
 
   function render() {
     const t = data.tournament;

@@ -30,6 +30,11 @@
         <div class="count" aria-live="polite"><b id="count-in">0</b><span id="count-of">of 0 in</span></div>
       </div>
       <div class="bar" aria-hidden="true"><i id="bar-fill"></i></div>
+      <div class="tabs" role="tablist" aria-label="Desk">
+        <button type="button" class="tab" id="tab-checkin" role="tab" aria-selected="true" aria-controls="view-checkin">Check-in</button>
+        <button type="button" class="tab" id="tab-winners" role="tab" aria-selected="false" aria-controls="view-winners">Winners photos</button>
+      </div>
+      <div id="checkin-tools">
       <label class="search">
         <span class="sr">Search players by name</span>
         <input id="search" type="search" inputmode="search" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Search a name…">
@@ -39,12 +44,20 @@
         <button type="button" class="chip" data-filter="nophoto" aria-pressed="false">No photo <b id="n-nophoto">0</b></button>
         <button type="button" class="chip" data-filter="all" aria-pressed="false">Everyone <b id="n-all">0</b></button>
       </div>
+      </div>
       <p id="offline" class="offline" role="status" hidden>No connection. Changes will not save until it is back.</p>
     </header>
 
     <main>
-      <ul id="list" class="list"></ul>
-      <p id="empty" class="empty" hidden></p>
+      <div id="view-checkin" role="tabpanel" aria-labelledby="tab-checkin">
+        <ul id="list" class="list"></ul>
+        <p id="empty" class="empty" hidden></p>
+      </div>
+      <div id="view-winners" role="tabpanel" aria-labelledby="tab-winners" hidden>
+        <p class="hint">One photo per event: the winners with their prizes. It shows in the live app and on the Shuttle Storm website.</p>
+        <ul id="events" class="list"></ul>
+        <p id="events-empty" class="empty" hidden></p>
+      </div>
       <p class="foot">
         <span id="updated"></span>
         <button id="forget" type="button" class="link">Remove this link from this phone</button>

@@ -10,6 +10,9 @@
 //   POST { action: "undo_check_in", key, player_id }            → clears it
 //   POST { action: "photo", key, player_id, image, consent }    → stores the photo, sets players.photo_url
 //   POST { action: "undo_photo", key, player_id }               → puts back the photo from before the desk photo
+//   POST { action: "winners", key }                              → every event, its champions (if decided) and winners photo
+//   POST { action: "winner_photo", key, category_id, image, consent } → stores that event's winners photo
+//   POST { action: "remove_winner_photo", key, category_id }     → takes it off
 //
 // Every change is written to desk_actions with the volunteer's name. The app
 // needs no change: it already reads these two player fields and follows
@@ -18,6 +21,8 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { allow, allowClient, isUuid, json } from "../_shared/http.ts";
 import { CONTENT_TYPE, decodePhotoDataUrl, imageKind, MAX_PHOTO_BYTES } from "../_shared/photos.ts";
+import { WINNERS_CONSENT_TEXT, winnersPathFromUrl, winnersPhotoPath } from "./champions.ts";
+import { loadWinners } from "./winners_data.ts";
 import {
   allowedOrigin, DEFAULT_DESK_ORIGIN, DESK_CONSENT_TEXT, type DeskLink, deskPathFromUrl, deskPhotoPath, isDeskKey, linkState,
   sha256Hex, shapePlayers,
@@ -55,7 +60,7 @@ async function handle(req: Request): Promise<Response> {
 
   const raw = await req.text();
   if (raw.length > Math.ceil(MAX_PHOTO_BYTES / 3) * 4 + 2048) return json({ success: false, error: "That photo is too large. Please take it again." }, 413);
-  let body: { action?: unknown; key?: unknown; player_id?: unknown; image?: unknown; consent?: unknown };
+  let body: { action?: unknown; key?: unknown; player_id?: unknown; category_id?: unknown; image?: unknown; consent?: unknown };
   try {
     body = JSON.parse(raw);
   } catch {
@@ -105,6 +110,66 @@ async function handle(req: Request): Promise<Response> {
       consent_text: DESK_CONSENT_TEXT,
       players: shapePlayers(players ?? [], cats ?? [], memberships ?? [], teams ?? []),
     }, 200);
+  }
+
+  // ── Winners tab: one photo of the winners per event ────────────────────
+  if (body.action === "winners") {
+    return json({ success: true, volunteer: desk.label, consent_text: WINNERS_CONSENT_TEXT, events: await loadWinners(supabase, desk.tournament_id) }, 200);
+  }
+  if (body.action === "winner_photo" || body.action === "remove_winner_photo") {
+    if (!isUuid(body.category_id)) return json({ success: false, error: "That event isn't on today's list. Please refresh." }, 404);
+    const { data: cat } = await supabase.from("categories").select("id, name")
+      .eq("id", body.category_id).eq("tournament_id", desk.tournament_id).maybeSingle();
+    if (!cat) return json({ success: false, error: "That event isn't on today's list. Please refresh." }, 404);
+    if (!(await allow(supabase, "volunteer-desk-photo", desk.id, 300, 3600))) {
+      return json({ success: false, error: "That's a lot of photos in a short time. Please try again later." }, 429);
+    }
+    const { data: current } = await supabase.from("category_winner_photos").select("photo_url").eq("category_id", cat.id).maybeSingle();
+    const oldUrl = (current?.photo_url as string | undefined) ?? null;
+    const logWinners = async (action: string, extra: Record<string, unknown>) => {
+      const { error } = await supabase.from("desk_actions").insert({
+        link_id: desk.id, volunteer: desk.label, tournament_id: desk.tournament_id,
+        category_id: cat.id, player_name: cat.name, action, ...extra,
+      });
+      if (error) console.error("desk log failed:", action, error.message);
+    };
+    const deleteOld = async () => {
+      const old = winnersPathFromUrl(oldUrl, desk.tournament_id, cat.id as string);
+      if (!old) return;
+      const { error } = await supabase.storage.from(BUCKET).remove([old]);
+      if (error) console.error("couldn't delete the old winners photo:", error.message);
+    };
+
+    if (body.action === "remove_winner_photo") {
+      if (!oldUrl) return json({ success: true, already: true, photo_url: null }, 200);
+      const { error } = await supabase.from("category_winner_photos").delete().eq("category_id", cat.id);
+      if (error) return json({ success: false, error: "Couldn't remove the photo. Please try again." }, 500);
+      await logWinners("remove_winner_photo", { prev_photo_url: oldUrl });
+      await deleteOld();
+      await supabase.from("desk_links").update({ last_used_at: now.toISOString() }).eq("id", desk.id);
+      return json({ success: true, already: false, photo_url: null }, 200);
+    }
+
+    if (body.consent !== true) return json({ success: false, error: "Please tick the box to confirm everyone in the photo agreed." }, 400);
+    const wBytes = decodePhotoDataUrl(body.image);
+    const wKind = wBytes ? imageKind(wBytes) : null;
+    if (!wBytes || !wKind) return json({ success: false, error: "That isn't a photo we can use. Please take it again." }, 400);
+    const wPath = winnersPhotoPath(desk.tournament_id, cat.id as string, wKind === "jpeg" ? "jpg" : wKind, now.getTime());
+    const wUp = await supabase.storage.from(BUCKET).upload(wPath, wBytes, { contentType: CONTENT_TYPE[wKind], cacheControl: "3600", upsert: false });
+    if (wUp.error) return json({ success: false, error: "Couldn't save the photo. Please try again." }, 500);
+    const { data: wPub } = supabase.storage.from(BUCKET).getPublicUrl(wPath);
+    const { error: saveErr } = await supabase.from("category_winner_photos").upsert({
+      category_id: cat.id, tournament_id: desk.tournament_id, photo_url: wPub.publicUrl,
+      uploaded_by: desk.label, consent_text: WINNERS_CONSENT_TEXT, updated_at: now.toISOString(),
+    }, { onConflict: "category_id" });
+    if (saveErr) {
+      await supabase.storage.from(BUCKET).remove([wPath]);
+      return json({ success: false, error: "Couldn't save the photo. Please try again." }, 500);
+    }
+    await logWinners("winner_photo", { prev_photo_url: oldUrl, new_photo_url: wPub.publicUrl, consent_text: WINNERS_CONSENT_TEXT });
+    await deleteOld();
+    await supabase.from("desk_links").update({ last_used_at: now.toISOString() }).eq("id", desk.id);
+    return json({ success: true, photo_url: wPub.publicUrl }, 200);
   }
 
   const actions = ["check_in", "undo_check_in", "photo", "undo_photo"];

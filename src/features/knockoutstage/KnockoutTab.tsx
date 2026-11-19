@@ -1,6 +1,8 @@
 import { motion, useReducedMotion } from "framer-motion"; /* NEW: bracket reveal */
 import { CategoryFilter } from "../../components/CategoryFilter";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { KnockoutSanityBanner } from "../../components/KnockoutSanityBanner";
+import { ChampionCard } from "../champions/ChampionCard";
 import type { Category, Match, TeamWithPlayers } from "../../types";
 
 /**
@@ -12,6 +14,19 @@ import type { Category, Match, TeamWithPlayers } from "../../types";
  * closes over App-level state — keeping it inside App.tsx avoids
  * threading 15+ props through every tab that uses it.
  */
+/** The plain gold banner. Still shown if the champion card ever fails to draw. */
+function PlainChampionBanner({ champion }: { champion: TeamWithPlayers }) {
+  return (
+    <div style={{ textAlign: "center", padding: 32, background: "linear-gradient(135deg,#fef3c7,#fde68a,#fef3c7)", borderRadius: 20, border: "3px solid #f59e0b", marginBottom: 28 }}>
+      <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
+      <div style={{ fontWeight: 900, fontSize: 14, color: "#b45309", textTransform: "uppercase", letterSpacing: 3 }}>Champions</div>
+      <div style={{ fontWeight: 900, fontSize: 22, color: "#78350f", marginTop: 10 }}>
+        {champion.p2 ? `${champion.p1.name} & ${champion.p2.name}` : champion.p1.name}
+      </div>
+    </div>
+  );
+}
+
 function roundName(numRounds: number, i: number, hasBronze: boolean): string {
   if (i === numRounds - 1) return hasBronze ? "🏆 Final · 🥉 3rd Place" : "🏆 Final";
   if (i === numRounds - 2) return "Semi-Final";
@@ -54,13 +69,12 @@ export function KnockoutTab({
       <CategoryFilter categories={categories} currentCategoryId={currentCategoryId} onSelect={setCurrentCategoryId} />
 
       {champion && (
-        <div style={{ textAlign: "center", padding: 32, background: "linear-gradient(135deg,#fef3c7,#fde68a,#fef3c7)", borderRadius: 20, border: "3px solid #f59e0b", marginBottom: 28 }}>
-          <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
-          <div style={{ fontWeight: 900, fontSize: 14, color: "#b45309", textTransform: "uppercase", letterSpacing: 3 }}>Champions</div>
-          <div style={{ fontWeight: 900, fontSize: 22, color: "#78350f", marginTop: 10 }}>
-            {champion.p2 ? `${champion.p1.name} & ${champion.p2.name}` : champion.p1.name}
-          </div>
-        </div>
+        <ErrorBoundary key={champion.id} fallback={<PlainChampionBanner champion={champion} />}>
+          <ChampionCard
+            champion={champion}
+            categoryName={categories.find(c => c.id === champion.category_id)?.name ?? currentCategory?.name ?? ""}
+          />
+        </ErrorBoundary>
       )}
 
       {!champion && knockoutMatches.length > 0 && (
