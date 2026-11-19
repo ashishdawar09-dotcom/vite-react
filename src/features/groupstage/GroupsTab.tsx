@@ -1,4 +1,6 @@
 import { CategoryFilter } from "../../components/CategoryFilter";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { ChampionCard } from "../champions/ChampionCard";
 import type { Category, Match, TeamWithPlayers } from "../../types";
 import { groupKeyOf, groupLetter, isRoundRobinOnly, type GroupTie } from "../../lib/groups";
 
@@ -106,19 +108,32 @@ export function GroupsTab({
           </div>
         );
       })}
-      {allGroupsDone && phase === "group" && isRoundRobinOnly(currentCategory) && (
-        <div style={{ textAlign: "center", marginTop: 24, padding: 24, background: "linear-gradient(135deg,#fef9c3,#fde68a)", borderRadius: 16, border: "2px solid #f59e0b" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: "#92400e", textTransform: "uppercase" }}>Round robin · {currentCategory?.name}</div>
-          <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#1a1a2e" }}>
-            {champion ? `🏆 Champion: ${teamName(champion)}` : "First place needs a coin toss (see the table)"}
+      {allGroupsDone && phase === "group" && isRoundRobinOnly(currentCategory) && (() => {
+        const startAnyway = isAdmin && (
+          <button onClick={onStartKnockout} style={{ ...btn("#e2e8f0", "#475569"), marginTop: 14, padding: "8px 16px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}>
+            Start a knockout anyway
+          </button>
+        );
+        // The plain gold block: a coin toss still to come, or the champion card failed to draw.
+        const plain = (
+          <div style={{ textAlign: "center", marginTop: 24, padding: 24, background: "linear-gradient(135deg,#fef9c3,#fde68a)", borderRadius: 16, border: "2px solid #f59e0b" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: "#92400e", textTransform: "uppercase" }}>Round robin · {currentCategory?.name}</div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#1a1a2e" }}>
+              {champion ? `🏆 Champion: ${teamName(champion)}` : "First place needs a coin toss (see the table)"}
+            </div>
+            {startAnyway}
           </div>
-          {isAdmin && (
-            <button onClick={onStartKnockout} style={{ ...btn("#e2e8f0", "#475569"), marginTop: 14, padding: "8px 16px", fontSize: 13, borderRadius: 10, boxShadow: "none" }}>
-              Start a knockout anyway
-            </button>
-          )}
-        </div>
-      )}
+        );
+        if (!champion) return plain;
+        return (
+          <ErrorBoundary key={champion.id} fallback={plain}>
+            <div style={{ marginTop: 24, textAlign: "center" }}>
+              <ChampionCard champion={champion} categoryName={currentCategory?.name ?? ""} />
+              {startAnyway}
+            </div>
+          </ErrorBoundary>
+        );
+      })()}
       {isAdmin && allGroupsDone && phase === "group" && !isRoundRobinOnly(currentCategory) && (
         <div style={{ textAlign: "center", marginTop: 24, padding: 28, background: "linear-gradient(135deg,#f0fdf4,#dcfce7)", borderRadius: 16, border: "2px solid #86efac" }}>
           <button onClick={onStartKnockout} style={{ ...btn("#E63946"), padding: "16px 44px", fontSize: 18, borderRadius: 14 }}>⚔️ Start Knockout Stage</button>

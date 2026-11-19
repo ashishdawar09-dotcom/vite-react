@@ -1,0 +1,116 @@
+/* Champion card ("Storm spotlight"). Every class starts with chc- so nothing
+   else in the app is touched. */
+.chc {
+  --chc-ink: #06080d;
+  --chc-volt: #d4ff3a;
+  position: relative;
+  max-width: 560px;
+  margin: 0 auto 28px;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--chc-ink);
+  border: 1px solid #1c2531;
+  color: #f3f6fb;
+  text-align: left;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+}
+.chc-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  height: clamp(230px, 62vw, 340px);
+  padding: 10px 10px 0;
+  background: radial-gradient(80% 90% at 50% 0%, #26321a 0%, var(--chc-ink) 70%);
+}
+.chc-stage.chc-solo { grid-template-columns: 1fr; padding: 10px 18% 0; }
+.chc-por {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: #111;
+  cursor: pointer;
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 0 100%);
+  transition: transform .25s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.chc-por:nth-child(2) { clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%); }
+.chc-solo .chc-por { clip-path: polygon(6% 0, 94% 0, 100% 100%, 0 100%); }
+.chc-por img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; display: block; }
+button.chc-por:hover, button.chc-por:active { transform: scale(1.03); }
+button.chc-por:focus-visible, .chc-photo:focus-visible, .chc-close:focus-visible { outline: 3px solid var(--chc-volt); outline-offset: -3px; }
+.chc-ini { display: grid; place-items: center; cursor: default; }
+.chc-ini span { font-size: clamp(56px, 18vw, 96px); font-weight: 700; color: rgba(255, 255, 255, .92); letter-spacing: .02em; padding-bottom: 28%; }
+/* a slow light passing over each portrait */
+.chc-por::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .26) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: chc-sweep 3.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.chc-por:nth-child(2)::after { animation-delay: .5s; }
+@keyframes chc-sweep { 55%, 100% { transform: translateX(120%); } }
+.chc-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; background: linear-gradient(180deg, transparent, var(--chc-ink) 88%); pointer-events: none; }
+.chc-bolt {
+  position: absolute;
+  left: 50%;
+  top: 36%;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
+  border-radius: 50%;
+  background: var(--chc-volt);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  box-shadow: 0 0 0 5px var(--chc-ink), 0 0 26px rgba(212, 255, 58, .6);
+  z-index: 2;
+  pointer-events: none;
+}
+.chc-solo .chc-bolt { left: auto; right: 12%; top: 10%; margin-left: 0; }
+.chc-text { position: relative; padding: 0 16px 16px; margin-top: -56px; pointer-events: none; }
+.chc-kicker { font-size: 12px; font-weight: 800; letter-spacing: .2em; color: var(--chc-volt); text-transform: uppercase; }
+.chc-title { font-size: clamp(44px, 14vw, 64px); line-height: .95; font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; margin-top: 2px; color: #fff; }
+.chc-title span { color: var(--chc-volt); }
+.chc-names { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.chc-names.chc-solo { grid-template-columns: 1fr; }
+.chc-names div { border-top: 3px solid var(--chc-volt); padding-top: 7px; font-size: clamp(17px, 5vw, 22px); font-weight: 600; line-height: 1.15; text-transform: uppercase; overflow-wrap: anywhere; color: #fff; }
+.chc-photo { position: relative; display: block; width: 100%; border: 0; padding: 0; margin: 0; background: #000; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.chc-photo img { display: block; width: 100%; max-height: 80vh; object-fit: contain; background: #000; }
+.chc-tag { position: absolute; left: 12px; top: 12px; background: var(--chc-volt); color: #10140a; padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.chc-photo em { position: absolute; right: 12px; bottom: 10px; font-style: normal; font-size: 12px; color: #fff; background: rgba(0, 0, 0, .6); padding: 4px 8px; border-radius: 6px; }
+
+.chc-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, .93);
+  color: #f3f6fb;
+}
+.chc-lightbox img { max-width: 100%; max-height: 76vh; border-radius: 10px; object-fit: contain; }
+.chc-lightbox p { margin: 0; font-weight: 700; text-align: center; }
+.chc-close { min-height: 44px; padding: 0 22px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .35); background: transparent; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+
+.chc-still .chc-por::after { animation: none; }
+.chc-still .chc-por { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .chc-por::after { animation: none; }
+  .chc-por { transition: none; }
+}
+@media print {
+  .chc { box-shadow: none; }
+  .chc-por::after, .chc-photo em { display: none; }
+}
