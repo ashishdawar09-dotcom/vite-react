@@ -119,6 +119,12 @@ describe("court calls", () => {
     expect(html).toContain("&lt;b&gt;Neufeld&lt;/b&gt;");   // a name is text, never markup
     expect(html).not.toContain("<b>Neufeld</b>");
   });
+  it("never prints 'Court' without its number", () => {
+    const m = model({ g2: 20_000 });
+    const html = matchupCardHTML(m, buildStats(m), { ...m.byId.g2, court: null }, false, () => true, { minutes: 10 });
+    expect(html).toContain("Now calling");
+    expect(html).not.toContain("Court");
+  });
   it("keeps the rotating match-up board as it was", () => {
     const m = model({ g2: 20_000 }), s = buildStats(m);
     const board = matchupHTML(m, s, 0, false, () => true);

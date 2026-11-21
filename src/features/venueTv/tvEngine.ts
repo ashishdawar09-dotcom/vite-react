@@ -1133,7 +1133,8 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
         if (MO) { MO.el.remove(); MO = null; }
         if (kind === "call") {
           const m = (id ? M.byId[id] : undefined) ?? M.courts.find((x): x is TvMatch => !!x && !!x.a && !!x.b && !x.ending) ?? M.queue[0];
-          return !!m && mountMoment("call", "debug", matchupCardHTML(M, stats(), m, false, photoOk, { minutes: CALL_WINDOW_MIN }), 3_600_000);
+          // A real call always has its court. A preview of a match that isn't on one yet borrows court 1, so it looks like the real thing.
+          return !!m && mountMoment("call", "debug", matchupCardHTML(M, stats(), m.court != null ? m : { ...m, court: 1 }, false, photoOk, { minutes: CALL_WINDOW_MIN }), 3_600_000);
         }
         const c = (id ? M.catById[id] : undefined) ?? decided(M)[0];
         return !!c && !!c.champion && mountMoment("champ", "debug", championCardHTML(M, stats(), c, photoOk, winnerPhotos[c.id] ?? null, false), 3_600_000);

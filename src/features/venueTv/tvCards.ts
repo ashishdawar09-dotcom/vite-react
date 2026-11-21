@@ -162,7 +162,7 @@ export function matchupHTML(model: TvModel, stats: TvStats, idx: number, enter: 
  */
 export function matchupCardHTML(model: TvModel, stats: TvStats, m: TvMatch, enter: boolean, ok: PhotoOk, call?: { minutes: number }): string {
   const first = model.queue[0]?.id === m.id;
-  const chip = m.status === "called" || call ? `Now calling · Court ${m.court ?? ""}` : first ? "Up next" : "Coming up";
+  const chip = m.status === "called" || call ? (m.court != null ? `Now calling · Court ${m.court}` : "Now calling") : first ? "Up next" : "Coming up";
   const time = call ? `Be on court within ${call.minutes} min` : m.status === "called" ? "" : m.eta != null ? `about ${hm(m.eta)} ${ampm(m.eta)}` : "";
   const ta: TeamStats | undefined = m.a ? stats.teams[m.a] : undefined;
   const tb: TeamStats | undefined = m.b ? stats.teams[m.b] : undefined;
