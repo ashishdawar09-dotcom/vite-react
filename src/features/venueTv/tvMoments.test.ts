@@ -5,7 +5,7 @@ import { buildStats } from "./tvStats";
 import { championCardHTML, matchupCardHTML, matchupHTML } from "./tvCards";
 import {
   CALL_FRESH_MS, CALL_MOMENT_MS, CHAMP_MOMENT_MS, MAX_MOMENTS, callMoment, callStillOn, champMoment, champStillOn, decided,
-  newCalls, newChampions, nextHighlight, queueMoment, type Moment,
+  CALL_MOMENTS_ON, callsToShow, newCalls, newChampions, nextHighlight, queueMoment, type Moment,
 } from "./tvMoments";
 import { winnerPhotosByEvent } from "../champions/winnerPhoto";
 
@@ -97,6 +97,13 @@ describe("court calls", () => {
     expect(newCalls(called, called, NOW)).toEqual([]);                    // the same feed again
     expect(newCalls(called, model({ g2: "live" }), NOW)).toEqual([]);     // it went on: not a new call
     expect(newCalls(before, before, NOW)).toEqual([]);
+  });
+  it("gives a call no cut-in while court-call cards are switched off, and one each when they are on", () => {
+    const before = model(), called = model({ g2: 20_000 });
+    expect(CALL_MOMENTS_ON).toBe(false);
+    expect(callsToShow(before, called, NOW)).toEqual([]);
+    expect(callsToShow(before, called, NOW, true).map(m => m.id)).toEqual(["g2"]);
+    expect(callsToShow(called, called, NOW, true)).toEqual([]);
   });
   it("leaves out a call that is old news (the TV was asleep or has just reconnected)", () => {
     expect(newCalls(model(), model({ g2: CALL_FRESH_MS + 5_000 }), NOW)).toEqual([]);

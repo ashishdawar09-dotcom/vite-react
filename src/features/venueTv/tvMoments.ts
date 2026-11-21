@@ -37,6 +37,16 @@ export function newCalls(prev: TvModel, next: TvModel, now: number): TvMatch[] {
     .sort((x, y) => (x.calledAt ?? 0) - (y.calledAt ?? 0));
 }
 
+/**
+ * Court-call cut-ins are switched OFF (race day, Nov 21 2026). The desk calls several courts at the same time, and one
+ * card per match, one after another, kept the board away too long. A call still shows the way it always has: the court
+ * tile, the announcement line and the scores bar. The champions cards are not affected.
+ */
+export const CALL_MOMENTS_ON = false as boolean;
+
+/** The calls that get a cut-in: none while CALL_MOMENTS_ON is off. */
+export const callsToShow = (prev: TvModel, next: TvModel, now: number, on = CALL_MOMENTS_ON): TvMatch[] => (on ? newCalls(prev, next, now) : []);
+
 /** Events decided since the previous feed update. An event the previous feed didn't know isn't news. */
 export function newChampions(prev: TvModel, next: TvModel): TvCategory[] {
   return next.categories.filter(c => c.finished && !!c.champion && prev.catById[c.id] !== undefined && !prev.catById[c.id].finished);

@@ -15,7 +15,7 @@ import { ampm, hm } from "./tvTime";
 import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
 import { buildStats, leadersReady, matchupMatches, spotlightPeople, type TvStats } from "./tvStats";
 import { championCardHTML, leadersHTML, matchupCardHTML, matchupHTML, spotlightHTML } from "./tvCards";
-import { callMoment, callStillOn, champMoment, champStillOn, decided, newCalls, newChampions, nextHighlight, queueMoment, HIGHLIGHT_EVERY_MS, type Moment } from "./tvMoments";
+import { callMoment, callStillOn, callsToShow, champMoment, champStillOn, decided, newChampions, nextHighlight, queueMoment, HIGHLIGHT_EVERY_MS, type Moment } from "./tvMoments";
 import { GAME_TO, matchPointAt, matchPointKey } from "./tvMatchPoint";
 
 export type DesignKey = "rotation" | "pinned" | "floorhome" | "sportstv";
@@ -1045,8 +1045,9 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       const mp = matchPointAt(m) ? matchPointKey(m) : null;
       if (mp && !ANN.mp.has(mp)) { ANN.mp.add(mp); filmYield(); annForce(matchPointItem(model, m)); cutTo(m.court!, m); }
     }
-    // A new court call and newly decided champions each get a moment over the middle of the screen (tvMoments.ts).
-    for (const m of newCalls(prev, model, now())) if (queueMoment(MQ, momentSeen, callMoment(m))) filmYield();
+    // Newly decided champions get a moment over the middle of the screen (tvMoments.ts). So would a new court call,
+    // but those cut-ins are switched off (CALL_MOMENTS_ON): callsToShow is empty.
+    for (const m of callsToShow(prev, model, now())) if (queueMoment(MQ, momentSeen, callMoment(m))) filmYield();
     for (const c of newChampions(prev, model)) if (queueMoment(MQ, momentSeen, champMoment(c.id, "won"))) filmYield();
     // Desk posts marked full screen take over once, when they are new.
     for (const d of model.messages) {
