@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "bash",
+      "args": [
+        ".claude/hooks/playwright-mcp.sh"
+      ]
+    },
+    "21st": {
+      "type": "http",
+      "url": "https://21st.dev/api/mcp",
+      "headersHelper": "k=$TWENTY_FIRST_API_KEY; [ -z \"$k\" ] && k=$(security find-generic-password -s twentyfirst-api-key -w 2>/dev/null); [ -n \"$k\" ] && printf '{\"x-api-key\":\"%s\"}' \"$k\""
+    }
+  }
+}
