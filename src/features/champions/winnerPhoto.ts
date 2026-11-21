@@ -46,3 +46,29 @@ export async function fetchWinnerPhoto(categoryId: string, signal?: AbortSignal)
   const rows = (await resp.json()) as { photo_url?: unknown }[];
   return safePhotoUrl(Array.isArray(rows) ? rows[0]?.photo_url : null);
 }
+
+/**
+ * The winners photos of several events in one read, keyed by event (the venue
+ * TV asks for every decided event at once). Events without a photo are left out.
+ */
+export async function fetchWinnerPhotos(categoryIds: string[], signal?: AbortSignal): Promise<Record<string, string>> {
+  const ids = [...new Set(categoryIds.filter(id => UUID.test(id)))];
+  if (!ids.length || !SUPABASE_URL || !PUBLISHABLE_KEY) return {};
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/category_winner_photos?select=category_id,photo_url&category_id=in.(${ids.join(",")})`,
+    { headers: { apikey: PUBLISHABLE_KEY, Accept: "application/json" }, signal, cache: "no-store" },
+  );
+  if (!resp.ok) throw new Error(`winners photos read failed: ${resp.status}`);
+  return winnerPhotosByEvent(await resp.json());
+}
+
+/** Rows of category_winner_photos as a map by event, keeping only photos held in this project's own storage. */
+export function winnerPhotosByEvent(rows: unknown, base: string = SUPABASE_URL): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!Array.isArray(rows)) return out;
+  for (const r of rows as { category_id?: unknown; photo_url?: unknown }[]) {
+    const url = safePhotoUrl(r?.photo_url, base);
+    if (url && typeof r.category_id === "string" && UUID.test(r.category_id)) out[r.category_id] = url;
+  }
+  return out;
+}

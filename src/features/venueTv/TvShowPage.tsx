@@ -6,6 +6,7 @@ import { buildTvModel, type TvSnapshot } from "./tvModel";
 import { createTvShow, type DesignKey, type TvShow } from "./tvEngine";
 import { startTvFeed } from "./tvFeed";
 import { clockSkewMs } from "./tvTime";
+import { fetchWinnerPhotos } from "../champions/winnerPhoto";
 
 /**
  * Venue TV show, /t/:slug/tv. Hands off: open it once on the hall TV and it
@@ -84,6 +85,8 @@ export function TvShowPage() {
   const stageRef = useRef<HTMLDivElement>(null);
   const showRef = useRef<TvShow | null>(null);
   const skewRef = useRef(0);
+  /** Events that have their champions: the only ones a winners photo is asked for. */
+  const decidedRef = useRef<string[]>([]);
   const [idle, setIdle] = useState(false);
   const [fullscreen, setFullscreen] = useState(() => typeof document !== "undefined" && !!document.fullscreenElement);
 
@@ -130,7 +133,33 @@ export function TvShowPage() {
       if (options.debug) (window as unknown as { __tvshow?: TvShow["debug"] }).__tvshow = showRef.current.debug;
     }
     showRef.current.update(model);
+    decidedRef.current = model.categories.filter(c => c.finished).map(c => c.id);
   }, [snap, feed.receivedAt, tick, options, siteUrl, qrSvg]);
+
+  // Winners photos for the champions cards (uploaded at the volunteer desk). A slow read of its own,
+  // apart from the score feed, and only once an event is decided. If it fails, or never answers, the
+  // cards simply show the champions' own pictures and the scores are not affected.
+  useEffect(() => {
+    if (!tournamentId) return;
+    let stopped = false;
+    let busySince = 0;
+    const load = async () => {
+      const ids = decidedRef.current;
+      if (!ids.length || !showRef.current || document.hidden) return;
+      if (busySince && Date.now() - busySince < 60_000) return;
+      busySince = Date.now();
+      try {
+        const photos = await fetchWinnerPhotos(ids, AbortSignal.timeout(12_000));
+        if (!stopped) showRef.current?.setWinnerPhotos(photos);
+      } catch {
+        // Tried again on the next round.
+      } finally {
+        busySince = 0;
+      }
+    };
+    const id = setInterval(() => { void load(); }, 45_000);
+    return () => { stopped = true; clearInterval(id); };
+  }, [tournamentId]);
   useEffect(() => () => { showRef.current?.destroy(); showRef.current = null; }, []);
 
   // Scale the 1920x1080 stage to the screen, with a tiny shift every few minutes.

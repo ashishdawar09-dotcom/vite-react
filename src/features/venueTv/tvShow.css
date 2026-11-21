@@ -734,5 +734,40 @@
 .tvs-stage .ld-dots i{width:12px;height:12px;border-radius:50%;background:var(--line-2)}
 .tvs-stage .ld-dots i.on{background:var(--accent)}
 /* A board that turns fades in place (a slide would push the whole board out of its frame for a moment). */
-.tvs-stage .sp.fade-in,.tvs-stage .mu.fade-in,.tvs-stage .ld.fade-in{animation:tvs-fade .5s var(--ease) both}
-@media (prefers-reduced-motion: reduce){.tvs-stage .sp.fade-in,.tvs-stage .mu.fade-in,.tvs-stage .ld.fade-in{animation:none}}
+.tvs-stage .sp.fade-in,.tvs-stage .mu.fade-in,.tvs-stage .ld.fade-in,.tvs-stage .chm.fade-in{animation:tvs-fade .5s var(--ease) both}
+@media (prefers-reduced-motion: reduce){.tvs-stage .sp.fade-in,.tvs-stage .mu.fade-in,.tvs-stage .ld.fade-in,.tvs-stage .chm.fade-in{animation:none}}
+
+/* ---------- moments (tvMoments.ts): a court call or a champions card over the middle of any design.
+   Same box as a full-screen desk post, so the announcement line and the live scores stay in view. ---------- */
+.tvs-stage .moment{position:absolute;left:40px;right:40px;top:124px;bottom:116px;z-index:5;border-radius:16px;overflow:hidden;background:var(--bg)}
+.tvs-stage .moment .tv{padding:0}
+.tvs-stage .moment.in{animation:tvs-toIn .7s var(--ease) both}
+.tvs-stage .moment.out{animation:tvs-toOut .45s var(--ease) both}
+.tvs-stage .mo-bar{position:absolute;left:0;right:0;bottom:0;height:6px;background:rgba(var(--fg-rgb),.10)}
+.tvs-stage .mo-bar i{display:block;height:100%;background:var(--accent);transform-origin:left center}
+@media (prefers-reduced-motion: reduce){.tvs-stage .moment.in,.tvs-stage .moment.out{animation:none}}
+
+/* champions card */
+.tvs-stage .chm{position:relative;height:100%;overflow:hidden;border-radius:16px;background:var(--deep)}
+.tvs-stage .chm-bg{position:absolute;inset:0;background:radial-gradient(940px 660px at 50% 46%,rgba(var(--accent-rgb),.24),rgba(var(--accent-rgb),0) 66%),linear-gradient(180deg,rgba(var(--accent-rgb),.06) 0%,rgba(0,0,0,0) 55%)}
+.tvs-stage .chm-cup{position:absolute;left:560px;top:70px;width:720px;height:720px;color:rgba(var(--accent-rgb),.07)}
+.tvs-stage .chm-cup svg{display:block;width:100%;height:100%}
+.tvs-stage .chm .sp-chip svg{width:26px;height:26px;margin-right:12px;flex:none}
+.tvs-stage .chm-head{position:absolute;left:40px;right:40px;top:34px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.tvs-stage .chm-event{max-width:100%;font-family:var(--f-disp);font-weight:600;font-size:56px;line-height:64px;text-transform:uppercase;color:var(--fg);white-space:nowrap}
+.tvs-stage .chm-pair{position:absolute;left:0;right:0;top:186px;display:flex;gap:28px;justify-content:center}
+.tvs-stage .chm-how{position:absolute;left:40px;right:40px;top:734px;display:flex;align-items:center;justify-content:center;gap:18px;font-size:28px;line-height:44px;color:var(--fg-2);white-space:nowrap}
+.tvs-stage .chm-how > b{font-family:var(--f-disp);font-weight:600;font-size:40px;line-height:44px;color:var(--accent);text-transform:uppercase}
+.tvs-stage .chm-rec{display:inline-flex;align-items:center;gap:12px;height:44px;padding:0 18px;border-radius:10px;background:rgba(var(--fg-rgb),.06);font-size:24px;line-height:32px;color:var(--fg-2)}
+.tvs-stage .chm-rec b{font-family:var(--f-disp);font-weight:600;font-size:30px;line-height:32px;color:var(--fg)}
+/* with the winners photo: the photo on the left (whole, never cropped), the names on the right */
+.tvs-stage .chm.photo .chm-cup{left:1120px;top:120px;width:600px;height:600px}
+.tvs-stage .chm-shot{position:absolute;left:48px;top:48px;width:1040px;height:744px;border-radius:16px;overflow:hidden;background:var(--panel-2)}
+.tvs-stage .chm-blur{position:absolute;inset:-48px;background-size:cover;background-position:center;filter:blur(36px) brightness(.5)}
+.tvs-stage .chm-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+.tvs-stage .chm-side{position:absolute;left:1136px;right:48px;top:48px;bottom:48px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:18px;min-width:0}
+.tvs-stage .chm-side .chm-event{font-family:var(--f-mono);font-weight:500;font-size:26px;line-height:34px;letter-spacing:.14em;color:var(--fg-2);white-space:normal}
+.tvs-stage .chm-names{display:flex;flex-direction:column;gap:6px;min-width:0;max-width:100%}
+.tvs-stage .chm-nm{font-family:var(--f-disp);font-weight:700;line-height:1.04;text-transform:uppercase;color:var(--accent);white-space:nowrap}
+.tvs-stage .chm-side .chm-how{position:static;flex-wrap:wrap;justify-content:flex-start;gap:10px 18px;white-space:normal;font-size:26px;line-height:36px}
+.tvs-stage .chm-side .chm-how > b{font-size:34px;line-height:38px}
