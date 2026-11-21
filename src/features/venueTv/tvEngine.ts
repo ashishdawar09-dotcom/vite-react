@@ -14,7 +14,8 @@ import { catStage, shortPersonName, shortStage, shortTeamName, sideLabel, sideNa
 import { ampm, hm } from "./tvTime";
 import { createTvFilm, filmAllowed, FILM_SRC } from "./tvFilm";
 import { buildStats, leadersReady, matchupMatches, spotlightPeople, type TvStats } from "./tvStats";
-import { leadersHTML, matchupHTML, spotlightHTML } from "./tvCards";
+import { championCardHTML, leadersHTML, matchupCardHTML, matchupHTML, spotlightHTML } from "./tvCards";
+import { callMoment, callStillOn, champMoment, champStillOn, decided, newCalls, newChampions, nextHighlight, queueMoment, HIGHLIGHT_EVERY_MS, type Moment } from "./tvMoments";
 import { GAME_TO, matchPointAt, matchPointKey } from "./tvMatchPoint";
 
 export type DesignKey = "rotation" | "pinned" | "floorhome" | "sportstv";
@@ -36,6 +37,8 @@ export type TvShowOptions = {
 
 export type TvShow = {
   update(model: TvModel): void;
+  /** Winners photos by event (uploaded at the volunteer desk), for the champions cards. A new one gets its own moment. */
+  setWinnerPhotos(photos: Record<string, string>): void;
   destroy(): void;
   /** Test hooks (used with ?debug=1). */
   debug: {
@@ -48,6 +51,11 @@ export type TvShow = {
     /** Play the film now (true if it started). */
     film(): boolean;
     filmStop(): void;
+    /** Show a moment now and hold it (tests and screenshots): a court call for a match, or an event's champions. */
+    moment(kind: "call" | "champ", id?: string): boolean;
+    momentEnd(): void;
+    /** Set the winners photos by event, as the page's own read would. */
+    winners(photos: Record<string, string>): void;
     check(): string[][];
   };
 };
@@ -136,7 +144,14 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
    * Runs after every render, when Floor home shows its court map again (hidden boxes
    * measure 0) and when fonts load.
    */
-  function fit(root: ParentNode) { fitBrackets(root); fitText(root); }
+  /** A champion's name on the winners-photo card that is still wider than its column is scaled down to fit (never back up). */
+  function fitNames(root: ParentNode) {
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>(".chm-nm"))) {
+      const w = el.clientWidth, need = el.scrollWidth, px = parseFloat(el.style.fontSize);
+      if (w > 0 && need > w + 1 && px > 0) el.style.fontSize = Math.max(24, Math.floor(px * w / need)) + "px";
+    }
+  }
+  function fit(root: ParentNode) { fitBrackets(root); fitText(root); fitNames(root); }
   const fontSet = (document as Document & { fonts?: FontFaceSet }).fonts;
   const onFontsLoaded = () => { if (!destroyed) fit(stageEl); };
   fontSet?.addEventListener?.("loadingdone", onFontsLoaded);
@@ -150,6 +165,9 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     }
     return ST.s!;
   }
+  /** Winners photos by event, from the volunteer desk (set by the page, read slowly and apart from the score feed). */
+  let winnerPhotos: Record<string, string> = {};
+  let winnerPhotosKnown = false;
   /** A photo that failed to load is dropped, so the card shows initials instead of a broken image. */
   const badPhotos = new Set<string>();
   const photoOk = (url: string) => !badPhotos.has(url);
@@ -160,6 +178,12 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     for (const p of spotlightPeople(s)) if (p.person.photo) urls.push(p.person.photo);
     for (const p of s.ranking.slice(0, 5)) if (p.person.photo) urls.push(p.person.photo);
     for (const m of matchupMatches(M)) for (const t of [m.a, m.b]) for (const id of M.teams[t ?? ""]?.pids ?? []) { const u = M.people[id]?.photo; if (u) urls.push(u); }
+    // Court calls and champions cards (tvMoments.ts): everyone on a court, each event's champions, the winners photos.
+    for (const m of M.courts) for (const t of [m?.a, m?.b]) for (const id of M.teams[t ?? ""]?.pids ?? []) { const u = M.people[id]?.photo; if (u) urls.push(u); }
+    for (const c of decided(M)) {
+      for (const id of M.teams[c.champion ?? ""]?.pids ?? []) { const u = M.people[id]?.photo; if (u) urls.push(u); }
+      if (winnerPhotos[c.id]) urls.push(winnerPhotos[c.id]);
+    }
     for (const u of urls) {
       if (preloaded.has(u)) continue;
       preloaded.add(u);
@@ -753,6 +777,59 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (p >= 1) endTakeover();
   }
 
+  /* ---------- moments: a court call or a champions card over the middle of any design (tvMoments.ts) ---------- */
+  const MQ: Moment[] = [];
+  const momentSeen = new Set<string>();
+  let MO: null | { el: HTMLElement; start: number; dur: number; id: string } = null;
+  let highlight: { at: number; cat: string | null } = { at: Date.now(), cat: null };
+  function momentBody(mo: Moment): string {
+    if (!M) return "";
+    if (mo.kind === "call") return callStillOn(M, mo.matchId) ? matchupCardHTML(M, stats(), M.byId[mo.matchId], false, photoOk, { minutes: CALL_WINDOW_MIN }) : "";
+    return champStillOn(M, mo.catId) ? championCardHTML(M, stats(), M.catById[mo.catId], photoOk, winnerPhotos[mo.catId] ?? null, false) : "";
+  }
+  function mountMoment(kind: string, id: string, body: string, dur: number): boolean {
+    const host = $(".show:not(.leaving)"); if (!host || !body) return false;
+    $$(".moment", host).forEach(x => x.remove());
+    host.insertAdjacentHTML("beforeend", `<section class="moment mo-${esc(kind)}"><div class="tv v-card"><section>${body}</section></div><div class="mo-bar"><i></i></div></section>`);
+    const el = host.lastElementChild as HTMLElement;
+    MO = { el, start: Date.now(), dur, id };
+    fit(el);
+    if (!instant && !RM.matches) el.classList.add("in");
+    return true;
+  }
+  function endMoment() {
+    if (!MO) return;
+    const el = MO.el; MO = null;
+    // The board underneath carries on from here instead of jumping ahead.
+    SC.start = Date.now(); lastRot = {};
+    if (instant || RM.matches) { el.remove(); return; }
+    el.classList.remove("in"); el.classList.add("out"); window.setTimeout(() => el.remove(), 460);
+  }
+  /** One moment at a time; a full-screen desk post, the film and a design hand-over all come first. */
+  function momentTick(t: number) {
+    if (MO) {
+      if (!MO.el.isConnected) { MO = null; return; }
+      const p = clamp((t - MO.start) / MO.dur, 0, 1), bar = $(".mo-bar i", MO.el);
+      if (bar) bar.style.transform = `scaleX(${(1 - p).toFixed(3)})`;
+      if (p >= 1) endMoment();
+      return;
+    }
+    if (TO || !M || $(".show.leaving")) return;
+    // The day's highlights: once events are decided, a champions card comes back every few minutes.
+    if (!MQ.length && !film?.playing() && t - highlight.at >= HIGHLIGHT_EVERY_MS) {
+      highlight.at = t;
+      const c = nextHighlight(M, highlight.cat);
+      if (c) MQ.push(champMoment(c.id, "highlight", String(t)));
+    }
+    if (film?.playing()) return;
+    while (MQ.length) {
+      const mo = MQ.shift()!;
+      if (!mountMoment(mo.kind, mo.id, momentBody(mo), mo.dur)) continue;
+      if (mo.kind === "champ") highlight = { at: t, cat: mo.catId };
+      break;
+    }
+  }
+
   /* ---------- rendering ---------- */
   const order = opts.design ? [opts.design] : DESIGN_ORDER;
   let di = 0;
@@ -891,7 +968,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     if (!M) return;
     TK.carry = tkCapture();
     if (TK.anim) { TK.anim.cancel(); TK.anim = null; }
-    TK.sig = ""; TK.w = 0; TK.track = null; TO = null; morphing = false; curView = null;
+    TK.sig = ""; TK.w = 0; TK.track = null; TO = null; MO = null; morphing = false; curView = null;
     stageEl.dataset.courts = String(layoutCourts());
     stageEl.dataset.show = show;
     stageEl.innerHTML = SHOWS[show].layout();
@@ -938,7 +1015,7 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     else if (k === "ld") renderPart("leaders", true);
   }
   function rotate(t: number) {
-    if (film?.playing()) return;
+    if (film?.playing() || MO) return;
     if (t - SC.start >= curScene().dur) {
       if (order.length > 1 && t - designStart >= opts.eachMs) nextDesign();
       else advanceScene();
@@ -968,6 +1045,9 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       const mp = matchPointAt(m) ? matchPointKey(m) : null;
       if (mp && !ANN.mp.has(mp)) { ANN.mp.add(mp); filmYield(); annForce(matchPointItem(model, m)); cutTo(m.court!, m); }
     }
+    // A new court call and newly decided champions each get a moment over the middle of the screen (tvMoments.ts).
+    for (const m of newCalls(prev, model, now())) if (queueMoment(MQ, momentSeen, callMoment(m))) filmYield();
+    for (const c of newChampions(prev, model)) if (queueMoment(MQ, momentSeen, champMoment(c.id, "won"))) filmYield();
     // Desk posts marked full screen take over once, when they are new.
     for (const d of model.messages) {
       if (takeoverSeen.has(d.id)) continue;
@@ -1004,13 +1084,27 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
     rotate(t);
     if (t - lastFull >= 20_000) refreshParts();
     takeoverTick();
+    momentTick(t);
     progressTick();
     $$("[data-clock]").forEach(el => { el.innerHTML = clockHTML(); });
     $$("[data-sync]").forEach(el => { el.innerHTML = syncHTML(); });
   }, 250);
 
+  function setWinnerPhotos(photos: Record<string, string>) {
+    if (destroyed) return;
+    const fresh = Object.keys(photos).filter(id => photos[id] !== winnerPhotos[id]);
+    const first = !winnerPhotosKnown;
+    winnerPhotosKnown = true;
+    winnerPhotos = { ...photos };
+    if (!M) return;
+    preloadPhotos();
+    // A photo that arrives while the TV is running gets its own moment; the ones already there join the highlights.
+    if (!first) for (const id of fresh) if (champStillOn(M, id)) queueMoment(MQ, momentSeen, champMoment(id, "photo", photos[id]));
+  }
+
   return {
     update,
+    setWinnerPhotos,
     destroy() {
       destroyed = true;
       window.clearInterval(timer);
@@ -1034,9 +1128,21 @@ export function createTvShow(stageEl: HTMLElement, opts: TvShowOptions): TvShow 
       setInstant(v: boolean) { instant = v; },
       film: () => !!film && film.play(afterFilm),
       filmStop: () => { film?.stop(); },
+      moment(kind: "call" | "champ", id?: string) {
+        if (!M) return false;
+        if (MO) { MO.el.remove(); MO = null; }
+        if (kind === "call") {
+          const m = (id ? M.byId[id] : undefined) ?? M.courts.find((x): x is TvMatch => !!x && !!x.a && !!x.b && !x.ending) ?? M.queue[0];
+          return !!m && mountMoment("call", "debug", matchupCardHTML(M, stats(), m, false, photoOk, { minutes: CALL_WINDOW_MIN }), 3_600_000);
+        }
+        const c = (id ? M.catById[id] : undefined) ?? decided(M)[0];
+        return !!c && !!c.champion && mountMoment("champ", "debug", championCardHTML(M, stats(), c, photoOk, winnerPhotos[c.id] ?? null, false), 3_600_000);
+      },
+      momentEnd() { if (MO) { MO.el.remove(); MO = null; } },
+      winners(photos: Record<string, string>) { setWinnerPhotos(photos); },
       check() {
         const R0 = stageEl.getBoundingClientRect(), out: string[][] = [];
-        const BOX = ".scene,.panel,.court,.chip,.mcourt,.board,.feature,.bd-hero,.ann,.st,.takeover,.d-row,.q-row,.cl-row,.b-match,.res,.pl,.call-item,.ch-champ,.cl-mini,.channel,.hall,.fh-court,.sh-h,.ti,.sp,.sp-main,.sp-chips,.sp-ev,.sp-st,.sp-next,.sp-tag,.mu,.mu-head,.mu-side,.mu-pl,.mu-rec,.mu-r,.ld,.ld-hero,.ld-mid,.ld-row,.ld-er";
+        const BOX = ".scene,.panel,.court,.chip,.mcourt,.board,.feature,.bd-hero,.ann,.st,.takeover,.moment,.mu,.chm,.chm-side,.chm-shot,.chm-how,.d-row,.q-row,.cl-row,.b-match,.res,.pl,.call-item,.ch-champ,.cl-mini,.channel,.hall,.fh-court,.sh-h,.ti,.sp,.sp-main,.sp-chips,.sp-ev,.sp-st,.sp-next,.sp-tag,.mu,.mu-head,.mu-side,.mu-pl,.mu-rec,.mu-r,.ld,.ld-hero,.ld-mid,.ld-row,.ld-er";
         const desc = (el: Element) => el.tagName.toLowerCase() + (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).join(".") : "");
         for (const el of Array.from(stageEl.querySelectorAll("*"))) {
           if (el.closest(".scene.out,.art,.mc-lines,.qr,.deco")) continue;

@@ -6,7 +6,7 @@
 // through esc(), and the only numbers placed in style attributes are ones
 // worked out here.
 
-import type { TvMatch, TvModel, TvPerson, TvTeam } from "./tvModel";
+import type { TvCategory, TvMatch, TvModel, TvPerson, TvTeam } from "./tvModel";
 import { championOf, leadersReady, matchupMatches, nextFor, spotlightPeople, type PersonStats, type TeamStats, type TvStats } from "./tvStats";
 import { catStage, teamName } from "./tvNames";
 import { ampm, hm } from "./tvTime";
@@ -153,10 +153,17 @@ function nextBarHTML(model: TvModel, p: TvPerson, champ: string | null): string 
 export function matchupHTML(model: TvModel, stats: TvStats, idx: number, enter: boolean, ok: PhotoOk): string {
   const list = matchupMatches(model);
   if (!list.length) return `<div class="mu empty"><p class="muted">The next match-up shows here once matches are waiting.</p></div>`;
-  const m = list[((idx % list.length) + list.length) % list.length];
+  return matchupCardHTML(model, stats, list[((idx % list.length) + list.length) % list.length], enter, ok);
+}
+
+/**
+ * One match as a match-up card. `call` is the court-call moment (tvMoments.ts):
+ * the card says which court and how many minutes the players have to reach it.
+ */
+export function matchupCardHTML(model: TvModel, stats: TvStats, m: TvMatch, enter: boolean, ok: PhotoOk, call?: { minutes: number }): string {
   const first = model.queue[0]?.id === m.id;
-  const chip = m.status === "called" ? `Now calling · Court ${m.court ?? ""}` : first ? "Up next" : "Coming up";
-  const time = m.status === "called" ? "" : m.eta != null ? `about ${hm(m.eta)} ${ampm(m.eta)}` : "";
+  const chip = m.status === "called" || call ? `Now calling · Court ${m.court ?? ""}` : first ? "Up next" : "Coming up";
+  const time = call ? `Be on court within ${call.minutes} min` : m.status === "called" ? "" : m.eta != null ? `about ${hm(m.eta)} ${ampm(m.eta)}` : "";
   const ta: TeamStats | undefined = m.a ? stats.teams[m.a] : undefined;
   const tb: TeamStats | undefined = m.b ? stats.teams[m.b] : undefined;
 
@@ -165,7 +172,7 @@ export function matchupHTML(model: TvModel, stats: TvStats, idx: number, enter: 
     const pls = ps.length ? ps : [{ id: "", name: teamName(model, m[s], "full"), photo: null, teamIds: [] } as TvPerson];
     const cards = pls.map(p => {
       const [fn, ln] = splitName(p.name), ph = photoHTML(p.id ? p : undefined, ok);
-      return `<div class="mu-pl"><div class="mu-fr${ph.cls}">${ph.html}<i class="mu-fade"></i></div><i class="mu-bar"></i><p class="mu-fn">${fn ? esc(fn) : "&nbsp;"}</p><p class="mu-ln" style="font-size:${fitPx(ln.toUpperCase(), 54, 330)}px">${esc(ln)}</p></div>`;
+      return `<div class="mu-pl"><div class="mu-fr${ph.cls}">${ph.html}<i class="mu-fade"></i></div><i class="mu-bar"></i><p class="mu-fn">${fn ? esc(fn) : "&nbsp;"}</p><p class="mu-ln" style="font-size:${fitPx(ln.toUpperCase(), 54, 330, 0.72)}px">${esc(ln)}</p></div>`;
     }).join("");
     const rec = !t || !t.played ? `<div class="mu-rec">First match</div>`
       : `<div class="mu-rec"><b>${t.won}–${t.lost}</b>${m.kind === "group" ? "in the group" : "so far"}<b>${fmtDiff(t.diff)}</b>points</div>`;
@@ -184,6 +191,52 @@ export function matchupHTML(model: TvModel, stats: TvStats, idx: number, enter: 
     <div class="mu-head"><div class="mu-row"><span class="sp-chip solid">${esc(chip)}</span>${time ? `<span class="mu-time">${esc(time)}</span>` : ""}</div><p class="mu-event">${esc(catStage(model, m))}</p></div>
     ${side("a", ta)}<p class="mu-vs">VS</p>${side("b", tb)}
     ${h2h}
+  </div>`;
+}
+
+/* ---------- champions (tvMoments.ts) ---------- */
+
+/** A link is only put in a style attribute when it is plain enough to need no escaping there. */
+const plainUrl = (u: string) => /^https:\/\/[A-Za-z0-9._~:/%+-]+$/.test(u);
+
+/**
+ * An event's champions, full width: their own pictures and names, how they
+ * won it, and their record on the day. With the winners photo a volunteer
+ * uploaded at the desk, the photo takes the left and the names the right.
+ */
+export function championCardHTML(model: TvModel, stats: TvStats, cat: TvCategory, ok: PhotoOk, winnersPhoto: string | null, enter = true): string {
+  const team = model.teams[cat.champion ?? ""];
+  if (!team) return "";
+  const ps = members(model, team);
+  const pls = ps.length ? ps : [{ id: "", name: teamName(model, team.id, "full"), photo: null, teamIds: [] } as TvPerson];
+  const title = pls.length > 1 ? "Champions" : "Champion";
+  const ts: TeamStats | undefined = stats.teams[team.id];
+  const how = cat.finalScore ? `Won the final ${cat.finalScore[0]}–${cat.finalScore[1]}` : cat.roundRobinOnly ? "Won the round robin" : "";
+  const against = cat.runnerUp && model.teams[cat.runnerUp] ? teamName(model, cat.runnerUp, "fit", 34) : "";
+  const rec = ts && ts.played ? `<span class="chm-rec"><b>${ts.won}–${ts.lost}</b>today<b>${fmtDiff(ts.diff)}</b>points</span>` : "";
+  const howLine = how || against || rec
+    ? `<p class="chm-how">${how ? `<b>${esc(how)}</b>` : ""}${against ? `<span>${how ? "against" : "ahead of"} ${esc(against)}</span>` : ""}${rec}</p>` : "";
+  const chip = `<span class="sp-chip solid">${CUP}${title}</span>`;
+  const deco = `<div class="deco"><div class="chm-bg"></div><span class="chm-cup">${CUP}</span><i class="sp-streak one"></i><i class="sp-streak two"></i></div>`;
+  const photo = winnersPhoto && ok(winnersPhoto) ? winnersPhoto : null;
+
+  if (photo) {
+    const names = pls.map(p => `<p class="chm-nm" style="font-size:${fitPx(p.name.toUpperCase(), 84, 630)}px">${esc(p.name)}</p>`).join("");
+    const back = plainUrl(photo) ? `<div class="deco"><i class="chm-blur" style="background-image:url(${photo})"></i></div>` : "";
+    return `<div class="chm photo${enter ? " fade-in" : ""}">${deco}
+      <div class="chm-shot">${back}<img src="${esc(photo)}" alt="" decoding="async"></div>
+      <div class="chm-side">${chip}<p class="chm-event">${esc(cat.name)}</p><div class="chm-names">${names}</div>${howLine}</div>
+    </div>`;
+  }
+
+  const cards = pls.map(p => {
+    const [fn, ln] = splitName(p.name), ph = photoHTML(p.id ? p : undefined, ok);
+    return `<div class="mu-pl"><div class="mu-fr${ph.cls}">${ph.html}<i class="mu-fade"></i></div><i class="mu-bar"></i><p class="mu-fn">${fn ? esc(fn) : "&nbsp;"}</p><p class="mu-ln" style="font-size:${fitPx(ln.toUpperCase(), 54, 330, 0.72)}px">${esc(ln)}</p></div>`;
+  }).join("");
+  return `<div class="chm${enter ? " fade-in" : ""}">${deco}
+    <div class="chm-head">${chip}<p class="chm-event">${esc(cat.name)}</p></div>
+    <div class="chm-pair">${cards}</div>
+    ${howLine}
   </div>`;
 }
 
